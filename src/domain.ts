@@ -1,0 +1,65 @@
+import {isCoordinate,sameCoordinate,type Coordinate} from './geo.ts';
+export type Language = 'ar' | 'en';
+export type RideType = 'classic' | 'comfort' | 'yellow' | 'vip' | 'ladies-classic' | 'ladies-comfort';
+export type TripStatus = 'requested' | 'accepted' | 'arrived' | 'riding' | 'completed' | 'cancelled';
+export const categories: {id: RideType; ar: string; en: string; description: [string, string]; verified: boolean}[] = [
+  {id:'classic',ar:'كلاسيك فوري',en:'Classic · Now',description:['خيار اقتصادي للمشاوير اليومية','A low-cost choice for daily rides'],verified:true},
+  {id:'comfort',ar:'كومفورت مكيفة فوري',en:'Comfort AC · Now',description:['سيارات حديثة ومكيفة','Modern cars with air conditioning'],verified:true},
+  {id:'yellow',ar:'تكسي عمومي أصفر',en:'Yellow taxi',description:['تكسي عمومي للتنقل داخل المدينة','Public taxis for city trips'],verified:true},
+  {id:'vip',ar:'قمة الرفاهية',en:'VIP',description:['سيارات فاخرة للأعمال والمناسبات','Luxury cars for work and special events'],verified:true},
+  {id:'ladies-classic',ar:'يالله سيدات كلاسيك',en:'Yalla Ladies Classic',description:['تفاصيل الفئة قيد التحقق','Category details are being checked'],verified:false},
+  {id:'ladies-comfort',ar:'يالله سيدات كومفورت',en:'Yalla Ladies Comfort',description:['تفاصيل الفئة قيد التحقق','Category details are being checked'],verified:false},
+];
+export const regions = [
+  ['دمشق','Damascus'],['ريف دمشق','Rif Dimashq'],['حلب','Aleppo'],['حمص','Homs'],['حماة','Hama'],['اللاذقية','Latakia'],['طرطوس','Tartus'],['إدلب','Idlib'],['درعا','Daraa'],['السويداء','As-Suwayda'],['القنيطرة','Quneitra'],['دير الزور','Deir ez-Zor'],['الرقة','Raqqa'],['الحسكة','Al-Hasakah'],
+];
+export interface TripDraft {pickup:string;destination:string;region:number;intercity:boolean;category:RideType;pickupPoint?:Coordinate;destinationPoint?:Coordinate}
+export interface Trip extends TripDraft {id:string;createdAt:string;status:TripStatus;fare:null;pin:string;rating?:number;feedback?:string;cancelReason?:'passenger'|'driver';updatedAt:string}
+export interface AppState {version:1;language:Language;trips:Trip[];driver:{approved:boolean;online:boolean};activeTripId:string|null}
+export const initialState:AppState={version:1,language:'ar',trips:[],driver:{approved:false,online:false},activeTripId:null};
+export const isActive=(trip:Trip)=>!['completed','cancelled'].includes(trip.status);
+export function validateDraft(draft:TripDraft):string|null {
+  if(!draft.pickup.trim()||!draft.destination.trim())return 'addresses';
+  if(draft.pickup.trim().toLocaleLowerCase()===draft.destination.trim().toLocaleLowerCase())return 'same';
+  if(draft.pickup.length>200||draft.destination.length>200)return 'length';
+  if(!categories.some(c=>c.id===draft.category)||!Number.isInteger(draft.region)||!regions[draft.region]||typeof draft.intercity!=='boolean')return 'invalid';
+  if(draft.pickupPoint!==undefined&&!isCoordinate(draft.pickupPoint)||draft.destinationPoint!==undefined&&!isCoordinate(draft.destinationPoint))return 'coordinates';
+  if(draft.pickupPoint&&draft.destinationPoint&&sameCoordinate(draft.pickupPoint,draft.destinationPoint))return 'same';
+  return null;
+}
+export type Action = {type:'language';language:Language}|{type:'approve';approved:boolean}|{type:'online'}|{type:'create';draft:TripDraft;id:string;now:string;pin:string}|{type:'transition';id:string;to:TripStatus;actor:'passenger'|'driver';now:string;pin?:string}|{type:'rate';id:string;rating:number;feedback:string};
+export function reduce(state:AppState,action:Action):AppState {
+  if(action.type==='language')return {...state,language:action.language};
+  if(action.type==='approve')return {...state,driver:{approved:action.approved,online:action.approved&&state.driver.online}};
+  if(action.type==='online')return state.driver.approved?{...state,driver:{...state.driver,online:!state.driver.online}}:state;
+  if(action.type==='create') {
+    if(validateDraft(action.draft)||!/^\d{4}$/.test(action.pin)||state.trips.some(t=>isActive(t)||t.id===action.id))return state;
+    const trip:Trip={...action.draft,pickupPoint:action.draft.pickupPoint?{...action.draft.pickupPoint}:undefined,destinationPoint:action.draft.destinationPoint?{...action.draft.destinationPoint}:undefined,pickup:action.draft.pickup.trim(),destination:action.draft.destination.trim(),id:action.id,createdAt:action.now,updatedAt:action.now,status:'requested',fare:null,pin:action.pin};
+    return {...state,trips:[trip,...state.trips],activeTripId:trip.id};
+  }
+  const trip=state.trips.find(t=>t.id===action.id);if(!trip)return state;
+  if(action.type==='rate') {
+    if(trip.status!=='completed'||trip.rating!==undefined||!Number.isInteger(action.rating)||action.rating<1||action.rating>5)return state;
+    return {...state,trips:state.trips.map(t=>t.id===trip.id?{...t,rating:action.rating,feedback:action.feedback.trim().slice(0,500)}:t)};
+  }
+  const transitions:Partial<Record<TripStatus,TripStatus>>={requested:'accepted',accepted:'arrived',arrived:'riding',riding:'completed'};
+  const cancel=action.to==='cancelled'&&['requested','accepted','arrived'].includes(trip.status)&&(action.actor==='passenger'||(action.actor==='driver'&&state.driver.approved&&state.driver.online&&trip.status==='requested'));
+  const advance=action.actor==='driver'&&state.driver.approved&&transitions[trip.status]===action.to&&(trip.status!=='requested'||state.driver.online)&&(action.to!=='riding'||action.pin===trip.pin);
+  if(!cancel&&!advance)return state;
+  return {...state,trips:state.trips.map(t=>t.id===trip.id?{...t,status:action.to,updatedAt:action.now,...(cancel?{cancelReason:action.actor}:{})}:t),activeTripId:['completed','cancelled'].includes(action.to)?null:trip.id};
+}
+export function restoreState(raw:unknown):AppState|null {
+  if(typeof raw!=='object'||raw===null)return null;
+  const s=raw as AppState;
+  if(s.version!==1||!['ar','en'].includes(s.language)||!Array.isArray(s.trips)||typeof s.driver?.approved!=='boolean')return null;
+  const statuses=['requested','accepted','arrived','riding','completed','cancelled'];
+  const seen=new Set<string>();
+  for(const trip of s.trips){
+    if(!trip||typeof trip.pickup!=='string'||typeof trip.destination!=='string'||validateDraft(trip)||typeof trip.id!=='string'||!trip.id||seen.has(trip.id)||!statuses.includes(trip.status)||trip.fare!==null||typeof trip.pin!=='string'||!/^\d{4}$/.test(trip.pin)||!Number.isFinite(Date.parse(trip.createdAt))||!Number.isFinite(Date.parse(trip.updatedAt)))return null;
+    if(trip.rating!==undefined&&(trip.status!=='completed'||!Number.isInteger(trip.rating)||trip.rating<1||trip.rating>5))return null;
+    if(trip.feedback!==undefined&&(typeof trip.feedback!=='string'||trip.feedback.length>500))return null;
+    seen.add(trip.id);
+  }
+  const active=s.trips.filter(isActive);if(active.length>1)return null;
+  return {...s,driver:{approved:s.driver.approved,online:false},activeTripId:active[0]?.id??null};
+}
