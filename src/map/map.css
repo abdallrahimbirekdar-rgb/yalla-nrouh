@@ -1,0 +1,6 @@
+.yn-location-map{border:1px solid #ffffff38;isolation:isolate;font-family:Arial,sans-serif;touch-action:none}
+.yn-location-map .ol-attribution{font-size:10px;background:#fffef4ed;color:#152b50;max-width:100%;right:0;bottom:0;border-radius:0}
+.yn-location-map .ol-attribution a{color:#2444a8}
+.yn-location-map .ol-zoom{background:#fff8ee;box-shadow:0 6px 24px #152c5040;border-radius:12px;padding:4px;top:12px;left:12px}
+.yn-location-map .ol-zoom button{width:34px;height:34px;color:#17376c;font-size:22px;background:transparent}
+.yn-location-map:focus-visible{outline:3px solid #ffab8b;outline-offset:-3px}
