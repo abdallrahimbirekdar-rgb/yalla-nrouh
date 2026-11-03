@@ -1,6 +1,9 @@
 const {spawnSync}=require('node:child_process');
-const {copyFileSync,writeFileSync}=require('node:fs');
+const {copyFileSync,writeFileSync,readFileSync}=require('node:fs');
 const result=spawnSync(process.execPath,['node_modules/expo/bin/cli','export','--platform','web','--output-dir','dist-pages'],{stdio:'inherit',env:{...process.env,YALLA_WEB_BASE_PATH:'/yalla-nrouh'}});
 if(result.status!==0)process.exit(result.status??1);
+const html=readFileSync('dist-pages/index.html','utf8');
+const banner=readFileSync('scripts/android-download.html','utf8');
+writeFileSync('dist-pages/index.html',html.replace('<body>','<body>'+banner));
 copyFileSync('dist-pages/index.html','dist-pages/404.html');
 writeFileSync('dist-pages/.nojekyll','');
