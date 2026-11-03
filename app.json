@@ -4,12 +4,12 @@
     "slug": "yalla-nrouh",
     "version": "0.3.0",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
+    "icon": "./assets/app-icon-approved.png",
     "userInterfaceStyle": "dark",
     "splash": {
-      "image": "./assets/splash-icon.png",
+      "image": "./assets/logo-approved.png",
       "resizeMode": "contain",
-      "backgroundColor": "#0b0e1b"
+      "backgroundColor": "#fffaf5"
     },
     "ios": {
       "supportsTablet": true,
@@ -17,16 +17,15 @@
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#19162e",
-        "foregroundImage": "./assets/android-icon-foreground.png",
-        "backgroundImage": "./assets/android-icon-background.png",
-        "monochromeImage": "./assets/android-icon-monochrome.png"
+        "backgroundColor": "#fffaf5",
+        "foregroundImage": "./assets/adaptive-approved.png",
+        "monochromeImage": "./assets/monochrome-approved.png"
       },
       "package": "com.yallanrouh.demo",
       "versionCode": 3
     },
     "web": {
-      "favicon": "./assets/favicon.png",
+      "favicon": "./assets/favicon-approved.png",
       "output": "single"
     },
     "plugins": [

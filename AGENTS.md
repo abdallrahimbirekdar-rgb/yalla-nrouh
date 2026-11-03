@@ -39,3 +39,7 @@ Docs: https://docs.expo.dev/eas/index.md
 - If `ios/` and `android/` directories do not exist, they are generated (Continuous Native Generation). Never create or edit them by hand — configure native behavior in `app.json` and config plugins.
 - Expo Go only includes its bundled native modules. After adding a library with native code, the app needs a development build: `npx expo run:ios|android` locally, or `eas build --profile development`.
 - Prefer recommended Expo modules over third-party libraries, and check your available skills before adding dependencies. Docs: https://docs.expo.dev/versions/latest/index.md
+
+## Approved brand identity
+
+The owner selected logo proposal 1 on 2026-11-03: navy taxi, coral road/arrow, Arabic wordmark «يلا نروح». Use `assets/logo-approved.png` as the canonical artwork. Keep this complete logo (including the Arabic name) in all future application icons, splash artwork, website branding, and platform icon variants. App configuration points to the approved derived icons; preserve these paths when building future releases. Do not substitute the old navigation-arrow mark. Native icon changes require a new binary; an existing APK does not update automatically.
