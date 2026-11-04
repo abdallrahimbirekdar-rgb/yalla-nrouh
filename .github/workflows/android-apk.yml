@@ -4,6 +4,12 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      require_google_maps:
+        description: 'Require Google Maps SDK key (fail build instead of OSM fallback)'
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -45,6 +51,10 @@ jobs:
         run: |
           set -euo pipefail
           if [[ -z "${GOOGLE_MAPS_ANDROID_API_KEY:-}" ]]; then
+            if [[ "${{ github.event_name }}" == "workflow_dispatch" && "${{ inputs.require_google_maps }}" == "true" ]]; then
+              echo "::error title=Missing Google Maps key::Add GOOGLE_MAPS_ANDROID_API_KEY in GitHub repository Actions secrets, then rerun this workflow."
+              exit 1
+            fi
             echo "::warning title=Google Maps not configured::Missing GOOGLE_MAPS_ANDROID_API_KEY repository secret. APK will use the OSM map fallback."
             echo "### Google Maps: not enabled (OSM fallback)" >> "$GITHUB_STEP_SUMMARY"
           else
