@@ -1,3 +1,6 @@
+## 0.6.5 — Closer current-location view
+- Zoom the home current-location camera to street/building level (19) on Android and web, including the My current location button.
+
 ## 0.6.4 — Start at the current location
 - Centre the home Google map on a fresh foreground position after permission is granted, on web and Android.
 - Add My current location to re-centre, with a blue location marker and clear permission/GPS/timeout states.

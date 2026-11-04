@@ -19,7 +19,7 @@ export default function MapContent({point,onChange,compact=false,route,readOnly=
  useEffect(()=>{
    if(ready&&route&&route.length>1)ref.current?.fitToCoordinates(route,{edgePadding:{top:30,left:30,right:30,bottom:30},animated:false});
  },[route,ready]);
- useEffect(()=>{if(ready&&cameraTarget)ref.current?.setCamera({center:cameraTarget.point,zoom:16})},[ready,cameraTarget]);
+ useEffect(()=>{if(ready&&cameraTarget)ref.current?.setCamera({center:cameraTarget.point,zoom:19})},[ready,cameraTarget]);
  if(!configured)return <View style={{flex:compact?1:undefined,minHeight:260,padding:24,justifyContent:'center',backgroundColor:colors.surface}}><Label>{t('خريطة Google غير متاحة حاليًا. يمكنك إدخال العنوان يدويًا.','Google Maps is not available right now. You can enter an address by hand.')}</Label></View>;
  return <View style={{height:compact?'100%':340,borderRadius:compact?0:16,overflow:'hidden',backgroundColor:colors.surface}}>
   <MapView
@@ -36,7 +36,7 @@ export default function MapContent({point,onChange,compact=false,route,readOnly=
     rotateEnabled={!lean}
     liteMode={readOnly&&lean}
     userInterfaceStyle={dark?'dark':'light'}
-    initialRegion={{latitude:cameraTarget?.point.latitude??point?.latitude??33.5138,longitude:cameraTarget?.point.longitude??point?.longitude??36.2765,latitudeDelta:cameraTarget?0.01:lean?0.06:0.035,longitudeDelta:cameraTarget?0.01:lean?0.06:0.035}}
+    initialRegion={{latitude:cameraTarget?.point.latitude??point?.latitude??33.5138,longitude:cameraTarget?.point.longitude??point?.longitude??36.2765,latitudeDelta:cameraTarget?0.0015:lean?0.06:0.035,longitudeDelta:cameraTarget?0.0015:lean?0.06:0.035}}
     onMapReady={()=>setReady(true)}
     onMapLoaded={()=>{setTilesLoaded(true);setSlow(false)}}
     onPress={event=>{if(!readOnly)onChange(event.nativeEvent.coordinate)}}
