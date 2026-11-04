@@ -49,12 +49,12 @@ export default function SiteShell(){
      void (async()=>{
       let delivered=false;
       const send=(point:{latitude:number;longitude:number}|null,error?:string,fix?:{accuracy:number|null;time:number})=>{
-       if(!alive.current||!web.current||AppState.currentState==='background'||AppState.currentState==='inactive')return;
+       if(!alive.current||!web.current||AppState.currentState==='background')return;
        web.current.injectJavaScript(locationScript(message.id,point,error,fix));
        if(point)delivered=true;
       };
       try{
-       if(AppState.currentState==='background'||AppState.currentState==='inactive'){send(null,'position');return}
+       if(AppState.currentState==='background'){send(null,'position');return}
        let permission=await Location.getForegroundPermissionsAsync();
        if(!permission.granted&&message.askPermission)permission=await Location.requestForegroundPermissionsAsync();
        if(!permission.granted){send(null,'permission');return}
