@@ -2,13 +2,24 @@ import React,{useEffect,useState} from 'react';
 import {Linking,Platform,View} from 'react-native';
 import * as Location from 'expo-location';
 import {announceWebPosition,webLocationGranted} from './web-position';
-import {siteCurrentPosition} from './site-bridge';
+import {isNativeWebView,siteCurrentPosition} from './site-bridge';
 import {Button,Label,Panel,useText} from './ui';
 export default function PermissionsPanel(){
  const t=useText();const [status,setStatus]=useState<'unknown'|'granted'|'denied'>('unknown'),[busy,setBusy]=useState(false),[services,setServices]=useState<boolean|null>(null),[message,setMessage]=useState('');
  useEffect(()=>{
   let alive=true;
   if(Platform.OS==='web'){
+   if(isNativeWebView()){
+    // In the installed app Android owns permission. Do not misreport the
+    // browser origin's separate permission as the Android permission state.
+    const host=window as Window&{__YALLA_NATIVE_LOCATION_GRANTED__?:boolean};
+    if(host.__YALLA_NATIVE_LOCATION_GRANTED__===true)setStatus('granted');
+    const update=(event:Event)=>{
+     if(alive)setStatus((event as CustomEvent).detail?.granted===true?'granted':'unknown');
+    };
+    host.addEventListener('yalla:native-location-permission',update);
+    return()=>{alive=false;host.removeEventListener('yalla:native-location-permission',update)};
+   }
    void webLocationGranted().then(granted=>{if(alive)setStatus(granted?'granted':'unknown')}).catch(()=>{});
   }else{
    void Promise.all([Location.getForegroundPermissionsAsync(),Location.hasServicesEnabledAsync()]).then(([permission,on])=>{if(alive){setStatus(permission.granted?'granted':permission.status==='denied'?'denied':'unknown');setServices(on)}}).catch(()=>{});
@@ -20,7 +31,7 @@ export default function PermissionsPanel(){
   try{
    if(Platform.OS==='web'){
     const point=await siteCurrentPosition(true);
-    setStatus('granted');setServices(true);announceWebPosition(point);
+    setStatus('granted');setServices(true);if(!isNativeWebView())announceWebPosition(point);
     setMessage(t('تم تحديد موقعك. عند العودة إلى الخريطة ستظهر علامة موقعك الحالي.','Location found. Your position will appear on the map.'));
    }else{
     const permission=await Location.requestForegroundPermissionsAsync();
