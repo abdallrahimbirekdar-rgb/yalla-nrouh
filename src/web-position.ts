@@ -39,5 +39,7 @@ export function getWebPosition(timeout=15000):Promise<Coordinate>{
  });
 }
 export function announceWebPosition(point:Coordinate){
+ if(!isCoordinate(point))return;
+ recentFix={point,at:Date.now()};
  if(typeof window!=='undefined')window.dispatchEvent(new CustomEvent('yalla:location-ready',{detail:point}));
 }
