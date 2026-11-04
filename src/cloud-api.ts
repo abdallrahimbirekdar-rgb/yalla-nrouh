@@ -10,7 +10,8 @@ const API_KEY='sb_publishable_0l-T6t_dTDt1OedSTIpLNA_uruCvJ8C';
 
 export interface CloudRide {
   id:string; passenger_id:string;driver_id:string|null;pickup:string;destination:string;
-  category:string;region:number;status:'requested'|'accepted'|'arrived'|'riding'|'completed'|'cancelled';
+  category:string;region:number;pickup_lat:number;pickup_lng:number;destination_lat:number;destination_lng:number;
+  status:'requested'|'accepted'|'arrived'|'riding'|'completed'|'cancelled';
   created_at:string;updated_at:string;
 }
 export interface CloudDriver {user_id:string;region:number;category:string;approved:boolean;online:boolean;last_seen_at:string|null}
@@ -63,7 +64,7 @@ export async function cloudWhoAmI(token:string):Promise<{id:string;email?:string
 }
 export async function cloudMyRides(token:string):Promise<CloudRide[]>{
   requireToken(token);
-  return call('/rest/v1/rides?select=id,passenger_id,driver_id,pickup,destination,category,region,status,created_at,updated_at&order=created_at.desc&limit=30','GET',token);
+  return call('/rest/v1/rides?select=id,passenger_id,driver_id,pickup,destination,pickup_lat,pickup_lng,destination_lat,destination_lng,category,region,status,created_at,updated_at&order=created_at.desc&limit=30','GET',token);
 }
 export async function cloudMyDriver(token:string):Promise<CloudDriver|null>{
   requireToken(token);
