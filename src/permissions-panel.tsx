@@ -1,7 +1,8 @@
 import React,{useEffect,useState} from 'react';
 import {Linking,Platform,View} from 'react-native';
 import * as Location from 'expo-location';
-import {announceWebPosition,getWebPosition,webLocationGranted} from './web-position';
+import {announceWebPosition,webLocationGranted} from './web-position';
+import {siteCurrentPosition} from './site-bridge.web';
 import {Button,Label,Panel,useText} from './ui';
 export default function PermissionsPanel(){
  const t=useText();const [status,setStatus]=useState<'unknown'|'granted'|'denied'>('unknown'),[busy,setBusy]=useState(false),[services,setServices]=useState<boolean|null>(null),[message,setMessage]=useState('');
@@ -18,7 +19,7 @@ export default function PermissionsPanel(){
   setBusy(true);setMessage('');
   try{
    if(Platform.OS==='web'){
-    const point=await getWebPosition();
+    const point=await siteCurrentPosition(true);
     setStatus('granted');setServices(true);announceWebPosition(point);
     setMessage(t('تم تحديد موقعك. عند العودة إلى الخريطة ستظهر علامة موقعك الحالي.','Location found. Your position will appear on the map.'));
    }else{
