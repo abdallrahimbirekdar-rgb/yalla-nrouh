@@ -16,6 +16,7 @@ export async function loadSiteState(storage:Pick<Storage,'getItem'|'setItem'>,ke
   if(value?.id!==id||typeof value.locationGranted!=='boolean')return;
   cleanup();
   host.__YALLA_NATIVE_LOCATION_GRANTED__=value.locationGranted;
+  host.dispatchEvent(new CustomEvent('yalla:native-location-permission',{detail:{granted:value.locationGranted}}));
  };
  const request=()=>{try{bridge.postMessage(JSON.stringify({type:'bootstrap',id,needsSavedState:false,version}))}catch{/* Web data remains usable. */}};
  const cleanup=()=>{clearInterval(retry);clearTimeout(timeout);host.removeEventListener('yalla:native-bootstrap',finish)};
