@@ -4,10 +4,10 @@ export type SiteWindow=Window&{ReactNativeWebView?:{postMessage:(message:string)
 // The website owns its local data. Never block a launch or save while trying
 // to import older APK data; the owner chose to start without that migration.
 // Keep the native handshake only for optional foreground location status.
-let nativePositionListenerInstalled=false;
+const nativePositionHosts=new WeakSet<SiteWindow>();
 function listenNativePosition(host:SiteWindow){
- if(nativePositionListenerInstalled)return;
- nativePositionListenerInstalled=true;
+ if(nativePositionHosts.has(host))return;
+ nativePositionHosts.add(host);
  host.addEventListener('yalla:native-position',event=>{
   const point=(event as CustomEvent).detail?.point;
   if(isCoordinate(point))announceWebPosition(point);
