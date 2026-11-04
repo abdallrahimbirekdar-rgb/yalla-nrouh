@@ -25,21 +25,23 @@ const adapter={
 export type CameraTarget={point:Coordinate;revision:number};
 export function useCurrentPosition(enabled:boolean){
  const [camera,setCamera]=useState<CameraTarget>();const [busy,setBusy]=useState(false),[failure,setFailure]=useState<PositionFailure|null>(null);
- const generation=useRef(0),alive=useRef(true),running=useRef(false),located=useRef(false),manual=useRef(false);
+ const generation=useRef(0),alive=useRef(true),running=useRef<number|null>(null),located=useRef(false),manual=useRef(false);
  const locate=useCallback(async(ask=false)=>{
-  if(running.current)return;
-  const id=++generation.current;running.current=true;setBusy(true);setFailure(null);
+  // Never discard a deliberate tap because an automatic GPS request is still
+  // pending. A newer request supersedes the older one without sharing results.
+  if(!ask&&running.current!==null)return;
+  const id=++generation.current;running.current=id;setBusy(true);setFailure(null);
   try{
    const point=Platform.OS==='web'?await siteCurrentPosition(ask):await currentPosition(adapter,ask);
    if(alive.current&&id===generation.current){located.current=true;setCamera({point,revision:id})}
   }catch(error){
    if(alive.current&&id===generation.current)setFailure(error instanceof PositionError?error.code:'position');
   }finally{
-   running.current=false;
-   if(alive.current)setBusy(false);
+   if(running.current===id)running.current=null;
+   if(alive.current&&id===generation.current)setBusy(false);
   }
  },[]);
- const chooseManually=useCallback(()=>{manual.current=true;generation.current++},[]);
+ const chooseManually=useCallback(()=>{manual.current=true;generation.current++;running.current=null;setBusy(false)},[]);
  const locateOnTap=useCallback(()=>{manual.current=false;return locate(true)},[locate]);
  useEffect(()=>{alive.current=true;generation.current++;return()=>{alive.current=false}},[]);
  useEffect(()=>{
@@ -50,7 +52,7 @@ export function useCurrentPosition(enabled:boolean){
   const start=(onResume=false)=>{
    if(!active||manual.current||!onResume&&located.current)return;
    if(onResume&&Date.now()-lastResumeAt<1800)return;
-   if(running.current){
+   if(running.current!==null){
     if(delayed)clearTimeout(delayed);
     delayed=setTimeout(()=>{delayed=undefined;start(onResume)},350);
     return;
@@ -65,7 +67,7 @@ export function useCurrentPosition(enabled:boolean){
   }else start(false);
   const subscription=AppState.addEventListener('change',value=>{if(value==='active')start(true)});
   if(Platform.OS!=='web')return()=>{active=false;subscription.remove();if(delayed)clearTimeout(delayed)};
-  const onNativeGrant=(event:Event)=>{if((event as CustomEvent).detail?.granted===true)start(false)};
+  const onNativeGrant=(event:Event)=>{if((event as CustomEvent).detail?.granted===true)start(true)};
   const onWebFix=(event:Event)=>{
    const point=(event as CustomEvent).detail;
    if(!isCoordinate(point)||manual.current)return;
