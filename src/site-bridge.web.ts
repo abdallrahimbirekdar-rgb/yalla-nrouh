@@ -1,5 +1,5 @@
 import {isCoordinate,type Coordinate} from './geo.ts';
-import {announceWebPosition,getWebPosition,refineWebPosition,webLocationGranted} from './web-position.ts';
+import {announceWebPosition,getWebPosition,webLocationGranted} from './web-position.ts';
 import {PositionError} from './current-position.ts';
 export type SiteWindow=Window&{ReactNativeWebView?:{postMessage:(message:string)=>void};__YALLA_NATIVE_LOCATION_GRANTED__?:boolean};
 // The website owns its local data. Never block a launch or save while trying
@@ -36,7 +36,7 @@ export function nativeCurrentPosition(askPermission:boolean,signal?:AbortSignal)
   };
   const cleanup=()=>{clearTimeout(timer);window.removeEventListener('yalla:native-position',finish);signal?.removeEventListener('abort',abort)};
   const abort=()=>{cleanup();resolve({point:null,error:'unsupported'})};
-  const timer=setTimeout(()=>{cleanup();resolve({point:null,error:'unsupported'})},11000);
+  const timer=setTimeout(()=>{cleanup();resolve({point:null,error:'timeout'})},11000);
   window.addEventListener('yalla:native-position',finish);
   if(signal?.aborted){abort();return}
   signal?.addEventListener('abort',abort,{once:true});
@@ -51,45 +51,19 @@ export function nativeCurrentPosition(askPermission:boolean,signal?:AbortSignal)
  */
 export async function siteCurrentPosition(askPermission:boolean):Promise<Coordinate>{
  if(isNativeWebView()){
-  // Run the permitted browser location and Android bridge concurrently:
-  // sequential high-accuracy GPS retries previously delayed map centring.
-  const controller=new AbortController();
-  const native=nativeCurrentPosition(askPermission,controller.signal).then(result=>{
-   if(result.point)return result.point;
-   throw new PositionError(result.error==='unsupported'?'position':result.error??'position');
-  });
-  try{
-   const webAllowed=await webLocationGranted();
-   if(webAllowed){
-    let webFailure:PositionError|null=null;
-    const browser=getWebPosition(6500).then(point=>{refineWebPosition();return point},error=>{
-     webFailure=error instanceof PositionError?error:new PositionError('position');
-     throw webFailure;
-    });
-    try{return await Promise.any([native,browser])}
-    catch{
-     const nativeFailure=await native.catch(failure=>failure);
-     if(nativeFailure instanceof PositionError&&nativeFailure.code!=='position')throw nativeFailure;
-     throw webFailure??new PositionError('position');
-    }
-   }
-   try{return await native}
-   catch(error){
-    // Only a user tap may request new browser permission; do not show prompts
-    // on automatic launch when neither origin nor Android has permission.
-    if(askPermission){
-     const point=await getWebPosition(6500);
-     refineWebPosition();
-     return point;
-    }
-    throw error instanceof PositionError?error:new PositionError('position');
-   }
-  }finally{controller.abort()}
+  // The installed app has ONE location permission and ONE GPS provider:
+  // Android Expo Location via the typed WebView bridge. Never fall back to
+  // navigator.geolocation here: that creates a second WebView-origin prompt.
+  const result=await nativeCurrentPosition(askPermission);
+  if(result.point)return result.point;
+  throw new PositionError(
+   result.error==='permission'||result.error==='services'||result.error==='timeout'
+    ?result.error:'position'
+  );
  }
+ // Ordinary browsers still use their own permission once.
  if(!askPermission&&!await webLocationGranted())throw new PositionError('permission');
- const point=await getWebPosition(6500);
- refineWebPosition();
- return point;
+ return getWebPosition(6500);
 }
 export const siteMigrationPending=()=>false;
 export async function loadSiteState(storage:Pick<Storage,'getItem'|'setItem'>,key:string):Promise<string|null>{
