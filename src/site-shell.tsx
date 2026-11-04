@@ -49,7 +49,7 @@ export default function SiteShell(){
      void (async()=>{
       let delivered=false;
       const send=(point:{latitude:number;longitude:number}|null,error?:string)=>{
-       if(alive.current&&web.current)web.current.injectJavaScript(locationScript(message.id,point,error));
+       if(alive.current&&web.current&&AppState.currentState!=='background'&&AppState.currentState!=='inactive')web.current.injectJavaScript(locationScript(message.id,point,error));
        if(point)delivered=true;
       };
       try{
@@ -58,18 +58,35 @@ export default function SiteShell(){
        if(!permission.granted&&message.askPermission)permission=await Location.requestForegroundPermissionsAsync();
        if(!permission.granted){send(null,'permission');return}
        if(!await Location.hasServicesEnabledAsync()){send(null,'services');return}
-       // A very recent fix paints the map immediately; a fresh fix follows.
-       const cached=await Location.getLastKnownPositionAsync({maxAge:30000,requiredAccuracy:300}).catch(()=>null);
+       // Show a recent reasonably accurate fix immediately. High-accuracy
+       // satellite locks can take a long time indoors, so never block the map
+       // on one. Follow up with a bounded balanced fix, then improve accuracy.
+       const cached=await Location.getLastKnownPositionAsync({maxAge:60000,requiredAccuracy:250}).catch(()=>null);
        if(cached)send({latitude:cached.coords.latitude,longitude:cached.coords.longitude});
        let timeout:ReturnType<typeof setTimeout>|undefined;
+       let fresh:Location.LocationObject|null=null;
        try{
-        const fresh=await Promise.race([
-         Location.getCurrentPositionAsync({accuracy:Location.Accuracy.High,mayShowUserSettingsDialog:false}),
-         new Promise<never>((_,reject)=>{timeout=setTimeout(()=>reject(Error('timeout')),12000)}),
+        fresh=await Promise.race([
+         Location.getCurrentPositionAsync({accuracy:Location.Accuracy.Balanced,mayShowUserSettingsDialog:false}),
+         new Promise<never>((_,reject)=>{timeout=setTimeout(()=>reject(Error('timeout')),7500)}),
         ]);
         send({latitude:fresh.coords.latitude,longitude:fresh.coords.longitude});
        }catch{if(!delivered)send(null,'timeout')}
        finally{if(timeout)clearTimeout(timeout)}
+       // Only refine an already displayed position, never make the passenger
+       // wait for a high-accuracy fix before first map display.
+       if(delivered&&(fresh?.coords.accuracy??cached?.coords.accuracy??Infinity)>65){
+        let refineTimeout:ReturnType<typeof setTimeout>|undefined;
+        try{
+         const precise=await Promise.race([
+          Location.getCurrentPositionAsync({accuracy:Location.Accuracy.High,mayShowUserSettingsDialog:false}),
+          new Promise<never>((_,reject)=>{refineTimeout=setTimeout(()=>reject(Error('timeout')),9500)}),
+         ]);
+         if(precise.coords.accuracy===null||fresh?.coords.accuracy===null||!fresh||precise.coords.accuracy<=fresh.coords.accuracy)
+          send({latitude:precise.coords.latitude,longitude:precise.coords.longitude});
+        }catch{/* Keep the first valid position available. */}
+        finally{if(refineTimeout)clearTimeout(refineTimeout)}
+       }
       }catch{if(!delivered)send(null,'position')}
      })();
      return;
