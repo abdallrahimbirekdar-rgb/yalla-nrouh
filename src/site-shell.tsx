@@ -53,7 +53,7 @@ export default function SiteShell(){
        if(point)delivered=true;
       };
       try{
-       if(AppState.currentState!=='active'&&AppState.currentState!==null){send(null,'position');return}
+       if(AppState.currentState==='background'||AppState.currentState==='inactive'){send(null,'position');return}
        let permission=await Location.getForegroundPermissionsAsync();
        if(!permission.granted&&message.askPermission)permission=await Location.requestForegroundPermissionsAsync();
        if(!permission.granted){send(null,'permission');return}
