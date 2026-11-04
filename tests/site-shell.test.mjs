@@ -19,6 +19,8 @@ test('native bridge accepts only bounded typed messages, not arbitrary commands'
 });
 test('GPS bridge accepts only typed permission requests with bounded IDs',()=>{
  assert.deepEqual(readShellMessage('{"type":"location","id":"gps-1","askPermission":false}'),{type:'location',id:'gps-1',askPermission:false});
+ assert.deepEqual(readShellMessage('{"type":"location","id":"gps-2","askPermission":false,"track":true}'),{type:'location',id:'gps-2',askPermission:false,track:true});
+ assert.equal(readShellMessage('{"type":"location","id":"gps-2","askPermission":false,"track":"true"}'),null);
  assert.equal(readShellMessage('{"type":"location","id":"gps-1","askPermission":"yes"}'),null);
  assert.equal(readShellMessage('{"type":"location","id":"<script>","askPermission":true}'),null);
 });
@@ -29,6 +31,10 @@ test('GPS response is serialized safely and invalid coordinates are removed',()=
  assert.equal(payload.id,'gps-1');assert.equal(payload.point.latitude,51.48);assert.equal(payload.point.longitude,7.21);
  vm.runInNewContext(locationScript('gps-2',{latitude:120,longitude:200}),context);
  assert.equal(payload.point,null);
+ vm.runInNewContext(locationScript('gps-3',{latitude:51.48,longitude:7.21},undefined,{accuracy:18,time:1790000000000}),context);
+ assert.deepEqual(JSON.parse(JSON.stringify(payload.fix)),{accuracy:18,time:1790000000000});
+ vm.runInNewContext(locationScript('gps-4',{latitude:51.48,longitude:7.21},undefined,{accuracy:-1,time:1790000000000}),context);
+ assert.equal(payload.fix,undefined);
 });
 test('saved data is injected as data and cannot execute JavaScript',()=>{
  const text='</script>"});globalThis.pwned=true;//';let detail;
