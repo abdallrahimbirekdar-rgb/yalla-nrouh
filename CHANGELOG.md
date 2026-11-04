@@ -1,3 +1,8 @@
+## 0.8.1 — startup recovery
+- Back up malformed saved data before recovering readable settings and drafts; surface a recovery notice instead of a permanent startup error.
+- Retry the Android website bootstrap and keep existing web data usable if the bridge is delayed. Protect first migration from writes after timeout.
+- Preserve storage I/O failures as retryable errors without overwriting unread data.
+
 ## 0.8.0 — Android opens the live website
 - Switch Android's home screen to the published website in a WebView, matching the Sooq Daraya update model. Install this transition APK once; ordinary website changes then appear on a fresh app open or safe Refresh page action.
 - Keep the closer current-location zoom, native foreground location permission, local notifications, Android back navigation and external map/phone links.

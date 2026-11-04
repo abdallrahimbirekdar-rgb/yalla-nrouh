@@ -2,17 +2,18 @@ import React,{createContext,useContext,useEffect,useReducer,useRef,useState} fro
 import {AppState as DeviceState,Platform} from 'react-native';
 import * as Location from 'expo-location';
 import {type Action,type AppState,initialState,reduce,type TripDraft} from './domain';
-import {load,save} from './storage';
+import {load,save,getLoadNotice} from './storage';
 import {createLatestWriter,emptyDraft,readSaved} from './persistence';
 import {GPS_DISTANCE_M,GPS_INTERVAL_MS} from './meter';
 import {useConnection,type Connection} from './connectivity';
 import {notifyLocal} from './alerts';
 type InternalAction=Action|{type:'hydrate';state:AppState};
-type AppContext={state:AppState;dispatch:React.Dispatch<Action>;draft:TripDraft;setDraft:React.Dispatch<React.SetStateAction<TripDraft>>;ready:boolean;loadError:boolean;saveError:boolean;alertError:boolean;retry:()=>void;retrySave:()=>void;connection:Connection;trackingId:string|null;trackingError:boolean;startTracking:(id:string)=>Promise<void>;stopTracking:()=>void;foreground:boolean};
+type AppContext={state:AppState;dispatch:React.Dispatch<Action>;draft:TripDraft;setDraft:React.Dispatch<React.SetStateAction<TripDraft>>;ready:boolean;loadError:boolean;recoveryNotice:boolean;saveError:boolean;alertError:boolean;retry:()=>void;retrySave:()=>void;connection:Connection;trackingId:string|null;trackingError:boolean;startTracking:(id:string)=>Promise<void>;stopTracking:()=>void;foreground:boolean};
 const Context=createContext<AppContext|null>(null);
 export function AppProvider({children}:{children:React.ReactNode}){
  const [state,dispatch]=useReducer((s:AppState,a:InternalAction)=>a.type==='hydrate'?a.state:reduce(s,a),initialState);
  const [ready,setReady]=useState(false),[loadError,setLoadError]=useState(false),[saveError,setSaveError]=useState(false),[alertError,setAlertError]=useState(false),[attempt,setAttempt]=useState(0);
+ const [recoveryNotice,setRecoveryNotice]=useState(false);
  const [draft,setDraft]=useState<TripDraft>({...emptyDraft});
  const [trackingId,setTrackingId]=useState<string|null>(null),[trackingError,setTrackingError]=useState(false),[foreground,setForeground]=useState(DeviceState.currentState==='active'||DeviceState.currentState===null);
  const connection=useConnection();const latest=useRef({state,draft});latest.current={state,draft};
@@ -20,7 +21,7 @@ export function AppProvider({children}:{children:React.ReactNode}){
  if(!writer.current)writer.current=createLatestWriter(save,ok=>{if(mounted.current)setSaveError(!ok)});
  const startGeneration=useRef(0);
  useEffect(()=>{mounted.current=true;return()=>{mounted.current=false;}},[]);
- useEffect(()=>{let alive=true;setLoadError(false);load().then(raw=>{if(!alive)return;const saved=readSaved(raw);dispatch({type:'hydrate',state:saved.state});setDraft(saved.draft);setReady(true);}).catch(()=>{if(alive)setLoadError(true)});return()=>{alive=false}},[attempt]);
+ useEffect(()=>{let alive=true;setLoadError(false);load().then(raw=>{if(!alive)return;const saved=readSaved(raw);setRecoveryNotice(getLoadNotice());dispatch({type:'hydrate',state:saved.state});setDraft(saved.draft);setReady(true);}).catch(()=>{if(alive)setLoadError(true)});return()=>{alive=false}},[attempt]);
  useEffect(()=>{if(ready)void writer.current?.enqueue(JSON.stringify({storageVersion:2,state,draft}));},[state,draft,ready]);
  useEffect(()=>{const listener=DeviceState.addEventListener('change',value=>{setForeground(value==='active');if(value!=='active'&&ready){void writer.current?.enqueue(JSON.stringify({storageVersion:2,...latest.current}));}});return()=>listener.remove();},[ready]);
  useEffect(()=>{
@@ -44,6 +45,6 @@ export function AppProvider({children}:{children:React.ReactNode}){
   const messages={accepted:['السائق في طريقه إليك','Driver is on the way'],arrived:['وصلت السيارة','Car has arrived'],completed:['اكتملت الرحلة','Ride completed'],cancelled:['أُلغيت الرحلة','Ride cancelled']} as const;
   for(const trip of state.trips){if(previous[trip.id]&&previous[trip.id]!==trip.status&&trip.status in messages){const message=messages[trip.status as keyof typeof messages][state.language==='ar'?0:1];void notifyLocal(state.language==='ar'?'يلا نروح — تجربة محلية':'Yalla Nrouh — local demo',message).then(()=>setAlertError(false)).catch(()=>setAlertError(true));}}
  },[state.trips,state.preferences.notifications,state.language,ready]);
- return <Context.Provider value={{state,dispatch,draft,setDraft,ready,loadError,saveError,alertError,retry:()=>setAttempt(a=>a+1),retrySave:()=>{void writer.current?.retry()},connection,trackingId,trackingError,startTracking,stopTracking,foreground}}>{children}</Context.Provider>;
+ return <Context.Provider value={{state,dispatch,draft,setDraft,ready,loadError,recoveryNotice,saveError,alertError,retry:()=>setAttempt(a=>a+1),retrySave:()=>{void writer.current?.retry()},connection,trackingId,trackingError,startTracking,stopTracking,foreground}}>{children}</Context.Provider>;
 }
 export function useApp(){const value=useContext(Context);if(!value)throw Error('AppProvider missing');return value;}

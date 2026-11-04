@@ -2,10 +2,10 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import vm from 'node:vm';
 import {initialState} from '../src/domain.ts';
-import {emptyDraft} from '../src/persistence.ts';
+import {loadRecoverable,readSaved,emptyDraft} from '../src/persistence.ts';
 const oldState=JSON.stringify({storageVersion:2,state:initialState,draft:emptyDraft});
 import {isSiteUrl,externalLink,readShellMessage,bootstrapScript} from '../src/site-shell-policy.ts';
-import {loadSiteState,nativeAction} from '../src/site-bridge.web.ts';
+import {loadSiteState,nativeAction,siteMigrationPending} from '../src/site-bridge.web.ts';
 test('only the exact HTTPS site origin and project path stay inside the app',()=>{
  assert.equal(isSiteUrl('https://abdallrahimbirekdar-rgb.github.io/yalla-nrouh/?app=android'),true);
  assert.equal(isSiteUrl('https://abdallrahimbirekdar-rgb.github.io/yalla-nrouh/driver'),true);
@@ -41,7 +41,36 @@ test('notification actions wait for their matching response',()=>withBrowser(asy
  assert.equal(await nativeAction('alerts-enable'),false);
 }));
 
-test('invalid migrated data never replaces an empty website store',()=>withBrowser(async(host,storage)=>{
+test('invalid migrated data never replaces an empty website store',()=>withBrowser(async(host,storage,values)=>{
  host.ReactNativeWebView={postMessage:raw=>{const message=JSON.parse(raw);queueMicrotask(()=>host.dispatchEvent(new CustomEvent('yalla:native-bootstrap',{detail:{id:message.id,savedState:'invalid-data',locationGranted:false}})))}};
- await assert.rejects(loadSiteState(storage,'state'));assert.equal(storage.getItem('state'),null);
+ assert.equal(await loadSiteState(storage,'state'),null);assert.equal(storage.getItem('state'),null);assert.equal([...values.values()].includes('invalid-data'),true);
 }));
+
+test('a dropped first bootstrap message is retried and old data is imported',t=>withBrowser(async(host,storage)=>{
+ t.mock.timers.enable({apis:['setTimeout','setInterval']});let requests=0;
+ host.ReactNativeWebView={postMessage:raw=>{const message=JSON.parse(raw);if(++requests===1)return;host.dispatchEvent(new CustomEvent('yalla:native-bootstrap',{detail:{id:message.id,savedState:oldState,locationGranted:true}}))}};
+ const result=loadSiteState(storage,'state');t.mock.timers.tick(1000);
+ assert.equal(await result,oldState);assert.equal(requests,2);assert.equal(siteMigrationPending(),false);
+}));
+test('unavailable native migration does not block opening but prevents overwriting native data',t=>withBrowser(async(host,storage)=>{
+ t.mock.timers.enable({apis:['setTimeout','setInterval']});host.ReactNativeWebView={postMessage:()=>{}};
+ const result=loadSiteState(storage,'state');t.mock.timers.tick(15000);
+ assert.equal(await result,null);assert.equal(siteMigrationPending(),true);assert.equal(storage.getItem('state'),null);
+}));
+test('existing website data is usable even when the native bridge never responds',t=>withBrowser(async(host,storage)=>{
+ t.mock.timers.enable({apis:['setTimeout','setInterval']});storage.setItem('state',oldState);host.ReactNativeWebView={postMessage:()=>{}};
+ const result=loadSiteState(storage,'state');t.mock.timers.tick(3000);
+ assert.equal(await result,oldState);assert.equal(siteMigrationPending(),false);
+}));
+test('malformed saved data is backed up unchanged before a readable replacement is stored',async()=>{
+ const broken=JSON.stringify({storageVersion:2,state:{...initialState,trips:[{oldFormat:true}]},draft:{...emptyDraft,pickup:'Old pickup'}});
+ const data=new Map([['state',broken]]);const writes=[];
+ const result=await loadRecoverable(k=>data.get(k)??null,(k,v)=>{writes.push(k);data.set(k,v)},'state');
+ assert.equal(result.recovered,true);assert.match(writes[0],/^state-recovery-/);assert.equal(data.get(writes[0]),broken);assert.equal(writes[1],'state');
+ assert.equal(readSaved(result.raw).draft.pickup,'Old pickup');assert.deepEqual(readSaved(result.raw).state.trips,[]);
+});
+test('valid data is not rewritten and failed backup or reads never erase the original',async()=>{
+ const writes=[];const result=await loadRecoverable(()=>oldState,(k,v)=>writes.push([k,v]),'state');assert.equal(result.raw,oldState);assert.equal(result.recovered,false);assert.equal(writes.length,0);
+ await assert.rejects(loadRecoverable(()=>{throw Error('disk read failed')},()=>writes.push('unexpected'),'state'));assert.equal(writes.length,0);
+ await assert.rejects(loadRecoverable(()=>'{broken',()=>{throw Error('backup failed')},'state'));
+});

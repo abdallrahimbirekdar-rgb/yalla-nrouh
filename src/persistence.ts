@@ -23,3 +23,23 @@ export function createLatestWriter(write:(value:string)=>Promise<unknown>,report
  }
  return {enqueue(value:string){latest=value;pending=value;return drain();},retry(){if(latest!==undefined)pending=latest;return drain();},flush:drain};
 }
+
+// Only recover malformed payloads after a durable, byte-for-byte backup exists.
+// Storage I/O failures still propagate: never overwrite a store we cannot read.
+export async function loadRecoverable(get:(key:string)=>Promise<string|null>|string|null,set:(key:string,value:string)=>Promise<unknown>|unknown,key:string):Promise<{raw:string|null;recovered:boolean}> {
+ const raw=await get(key);
+ try{readSaved(raw);return {raw,recovered:false}}catch{}
+ const backupKey=key+'-recovery-'+Date.now()+'-'+Math.random().toString(36).slice(2);
+ await set(backupKey,raw!);
+ const value=JSON.parse(JSON.stringify({storageVersion:2,state:initialState,draft:emptyDraft}));
+ // Keep independently valid settings and the draft, even if an old trip is invalid.
+ try{const old=JSON.parse(raw!);const state=old?.storageVersion===2?old.state:old;
+  const candidate=restoreState({...state,trips:[],activeTripId:null});
+  if(candidate)value.state=candidate;
+  if(old?.storageVersion===2)value.draft=restoreDraft(old.draft);
+ }catch{}
+ const repaired=JSON.stringify(value);
+ // Persist only after the backup succeeds. Keep the backup until manually reviewed.
+ await set(key,repaired);
+ return {raw:repaired,recovered:true};
+}

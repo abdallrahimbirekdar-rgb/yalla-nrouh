@@ -23,3 +23,10 @@ A fresh website document needs connectivity. Previously saved local data is not 
 6. Resume during a ride/draft; confirm refresh is not forced. Test loss/recovery of internet and app background/foreground GPS gaps.
 
 Repository checks cannot substitute for this physical-device acceptance. Do not claim these device checks passed unless actually performed.
+
+
+## Startup recovery (0.8.1)
+- Invalid saved JSON/schema is archived byte-for-byte under a unique `yalla-nrouh-demo-v1-recovery-*` key before creating readable settings/draft data. A failed read or backup does not overwrite anything. The app shows a recovery notice; unreadable trip records remain in the backup.
+- Native bootstrap requests retry once per second. Existing website storage remains usable if the host never responds. A first migration that times out opens the map but blocks saving until the user reopens the page to retry, with a specific notice. The original SQLite store remains untouched by the web page.
+- Invalid data supplied by an older native host is backed up under a `-native-recovery-*` website key before being skipped.
+- Physical acceptance: install over 0.8.0, confirm startup and location; verify older malformed data no longer causes a permanent startup error. This cannot be verified on the user's phone remotely.
