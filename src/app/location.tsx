@@ -32,7 +32,7 @@ export default function LocationPicker(){
   }
   function confirm(){if(!point)return;setDraft(previous=>({...previous,...(pickup?{pickup:label.trim()||formatCoordinate(point),pickupPoint:point}:{destination:label.trim()||formatCoordinate(point),destinationPoint:point})}));router.replace({pathname:'/',params:{booking:'1'}})}
   return <Page title={pickup?t('حدد نقطة الانطلاق','Choose pickup location'):t('حدد الوجهة','Choose destination')}>
-    <Field label={pickup?t('عنوان الانطلاق','Pickup address'):t('عنوان الوصول','Destination address')} value={label} onChangeText={value=>{setLabel(value);setQuery(value);setResults([])}} maxLength={200} placeholder={t('المدينة، الشارع أو اسم المكان','City, street or place')}/>
+    <Field label={pickup?t('عنوان الانطلاق','Pickup address'):t('عنوان الوصول','Destination address')} value={label} onChangeText={value=>{setLabel(value);setQuery(value);setResults([]);setPoint(null);setLatitude('');setLongitude('')}} maxLength={200} placeholder={t('المدينة، الشارع أو اسم المكان','City, street or place')}/>
     <Button secondary icon="map-outline" title={t(mapVisible?'إخفاء الخريطة':'تحديد نقطة على الخريطة',mapVisible?'Hide map':'Choose a point on the map')} onPress={()=>setMapVisible(!mapVisible)}/>
     {mapVisible&&<MapCanvas point={point} onChange={choose}/>}
     {point&&<Panel><Label>{t('الموقع المختار','Selected location')}</Label><Label muted>{formatCoordinate(point)}</Label><Field label={t('وصف المكان','Location label')} value={label} onChangeText={setLabel} maxLength={200}/><Button icon="checkmark-circle-outline" title={t('تأكيد الموقع','Confirm location')} onPress={confirm} disabled={Boolean(busy)}/></Panel>}
