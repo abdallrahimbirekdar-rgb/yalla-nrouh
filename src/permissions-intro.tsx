@@ -1,7 +1,7 @@
 import React,{useState} from 'react';
 import {Modal,Platform,View} from 'react-native';
 import {announceWebPosition} from './web-position';
-import {siteCurrentPosition} from './site-bridge.web';
+import {siteCurrentPosition} from './site-bridge';
 import * as Location from 'expo-location';
 import {useApp} from './context';
 import {Button,Label,useText,useTheme,styles} from './ui';
