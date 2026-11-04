@@ -36,7 +36,7 @@ export default function PermissionsPanel(){
   {services===false&&<Label>{t('خدمة GPS متوقفة؛ فعّل الموقع من إعدادات الهاتف.','GPS is off. Turn on location in phone settings.')}</Label>}
   <Button secondary disabled={busy} title={t('تحديد موقعي الآن','Find my location now')} onPress={()=>{void request()}}/>
   {Platform.OS==='web'&&<View style={{gap:6}}><Label muted>{t('إذا لم يعمل الزر: افتح إعدادات الهاتف ← التطبيقات ← يلا نروح ← الأذونات ← الموقع، ثم اختر «السماح أثناء استخدام التطبيق» و«الموقع الدقيق». شغّل الموقع (GPS) أيضًا.','If location does not work: Phone Settings → Apps → Yalla Nrouh → Permissions → Location. Allow while using the app and precise location. Also turn on GPS.')}</Label></View>}
-  {status==='denied'&&Platform.OS!=='web'&&<Button secondary title={t('فتح إعدادات الأذونات','Open permission settings')} onPress={()=>{void Linking.openSettings().catch(()=>setMessage(t('افتح إعدادات التطبيق يدويًا.','Open app settings on your phone.')))}/>}
+  {status==='denied'&&Platform.OS!=='web'&&<Button secondary title={t('فتح إعدادات الأذونات','Open permission settings')} onPress={()=>{void Linking.openSettings().catch(()=>setMessage(t('افتح إعدادات التطبيق يدويًا.','Open app settings on your phone.')))}}/>}
   {message!==''&&<View accessibilityRole="alert"><Label>{message}</Label></View>}
  </Panel>;
 }
