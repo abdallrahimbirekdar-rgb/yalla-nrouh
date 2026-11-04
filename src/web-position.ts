@@ -18,13 +18,20 @@ export async function webLocationGranted():Promise<boolean>{
 
 // Use the browser's geolocation API inside the live WebView so site fixes
 // do not depend on old native JavaScript bundled into an installed APK.
+// A position just approved in the permission screen is kept only in memory.
+// This avoids losing the first GPS fix while the booking screen mounts.
+let recentFix:{point:Coordinate;at:number}|null=null;
+export function recentWebPosition(maxAgeMs=12000):Coordinate|null{
+ return recentFix&&Date.now()-recentFix.at<=maxAgeMs?recentFix.point:null;
+}
+
 export function getWebPosition(timeout=15000):Promise<Coordinate>{
  if(typeof navigator==='undefined'||!navigator.geolocation)return Promise.reject(new PositionError('position'));
  return new Promise((resolve,reject)=>{
   navigator.geolocation.getCurrentPosition(
    result=>{
     const point={latitude:result.coords.latitude,longitude:result.coords.longitude};
-    if(isCoordinate(point))resolve(point);else reject(new PositionError('position'));
+    if(isCoordinate(point)){recentFix={point,at:Date.now()};resolve(point)}else reject(new PositionError('position'));
    },
    error=>reject(new PositionError(error.code===1?'permission':error.code===3?'timeout':'position')),
    {enableHighAccuracy:true,maximumAge:0,timeout}
