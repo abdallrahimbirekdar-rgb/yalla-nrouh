@@ -1,3 +1,4 @@
+import {newMeter,pauseMeter,recordFix,validMeter,validTariff,type Fix,type Meter,type Tariff} from './meter.ts';
 import {isCoordinate,sameCoordinate,type Coordinate} from './geo.ts';
 export type Language = 'ar' | 'en';
 export type RideType = 'classic' | 'comfort' | 'yellow' | 'vip' | 'ladies-classic' | 'ladies-comfort';
@@ -14,9 +15,11 @@ export const regions = [
   ['دمشق','Damascus'],['ريف دمشق','Rif Dimashq'],['حلب','Aleppo'],['حمص','Homs'],['حماة','Hama'],['اللاذقية','Latakia'],['طرطوس','Tartus'],['إدلب','Idlib'],['درعا','Daraa'],['السويداء','As-Suwayda'],['القنيطرة','Quneitra'],['دير الزور','Deir ez-Zor'],['الرقة','Raqqa'],['الحسكة','Al-Hasakah'],
 ];
 export interface TripDraft {pickup:string;destination:string;region:number;intercity:boolean;category:RideType;pickupPoint?:Coordinate;destinationPoint?:Coordinate}
-export interface Trip extends TripDraft {id:string;createdAt:string;status:TripStatus;fare:null;pin:string;rating?:number;feedback?:string;cancelReason?:'passenger'|'driver';updatedAt:string}
-export interface AppState {version:1;language:Language;trips:Trip[];driver:{approved:boolean;online:boolean};activeTripId:string|null}
-export const initialState:AppState={version:1,language:'ar',trips:[],driver:{approved:false,online:false},activeTripId:null};
+export interface Trip extends TripDraft {id:string;createdAt:string;status:TripStatus;fare:null;pin:string;rating?:number;feedback?:string;cancelReason?:'passenger'|'driver';updatedAt:string;meter?:Meter}
+export interface Preferences {theme:'system'|'light'|'dark';dataSaver:boolean;notifications:boolean;smsNumber:string}
+export const defaultPreferences:Preferences={theme:'system',dataSaver:true,notifications:false,smsNumber:''};
+export interface AppState {preferences:Preferences;tariff:Tariff|null;version:1;language:Language;trips:Trip[];driver:{approved:boolean;online:boolean};activeTripId:string|null}
+export const initialState:AppState={preferences:defaultPreferences,tariff:null,version:1,language:'ar',trips:[],driver:{approved:false,online:false},activeTripId:null};
 export const isActive=(trip:Trip)=>!['completed','cancelled'].includes(trip.status);
 export function validateDraft(draft:TripDraft):string|null {
   if(!draft.pickup.trim()||!draft.destination.trim())return 'addresses';
@@ -27,8 +30,10 @@ export function validateDraft(draft:TripDraft):string|null {
   if(draft.pickupPoint&&draft.destinationPoint&&sameCoordinate(draft.pickupPoint,draft.destinationPoint))return 'same';
   return null;
 }
-export type Action = {type:'language';language:Language}|{type:'approve';approved:boolean}|{type:'online'}|{type:'create';draft:TripDraft;id:string;now:string;pin:string}|{type:'transition';id:string;to:TripStatus;actor:'passenger'|'driver';now:string;pin?:string}|{type:'rate';id:string;rating:number;feedback:string};
+export type Action = {type:'preferences';preferences:Partial<Preferences>}|{type:'tariff';tariff:Tariff}|{type:'fix';id:string;fix:Fix;now:number}|{type:'pauseTracking';id:string}|{type:'language';language:Language}|{type:'approve';approved:boolean}|{type:'online'}|{type:'create';draft:TripDraft;id:string;now:string;pin:string}|{type:'transition';id:string;to:TripStatus;actor:'passenger'|'driver';now:string;pin?:string}|{type:'rate';id:string;rating:number;feedback:string};
 export function reduce(state:AppState,action:Action):AppState {
+  if(action.type==='preferences'){const p={...state.preferences,...action.preferences};if(!['system','light','dark'].includes(p.theme)||typeof p.dataSaver!=='boolean'||typeof p.notifications!=='boolean'||typeof p.smsNumber!=='string'||p.smsNumber!==''&&!/^\+?\d{7,15}$/.test(p.smsNumber))return state;return {...state,preferences:p};}
+  if(action.type==='tariff')return validTariff(action.tariff)?{...state,tariff:{...action.tariff}}:state;
   if(action.type==='language')return {...state,language:action.language};
   if(action.type==='approve')return {...state,driver:{approved:action.approved,online:action.approved&&state.driver.online}};
   if(action.type==='online')return state.driver.approved?{...state,driver:{...state.driver,online:!state.driver.online}}:state;
@@ -38,6 +43,7 @@ export function reduce(state:AppState,action:Action):AppState {
     return {...state,trips:[trip,...state.trips],activeTripId:trip.id};
   }
   const trip=state.trips.find(t=>t.id===action.id);if(!trip)return state;
+  if(action.type==='fix'||action.type==='pauseTracking'){if(trip.status!=='riding'||!trip.meter)return state;const meter=action.type==='fix'?recordFix(trip.meter,action.fix,action.now):pauseMeter(trip.meter);return meter===trip.meter?state:{...state,trips:state.trips.map(t=>t.id===trip.id?{...t,meter}:t)};}
   if(action.type==='rate') {
     if(trip.status!=='completed'||trip.rating!==undefined||!Number.isInteger(action.rating)||action.rating<1||action.rating>5)return state;
     return {...state,trips:state.trips.map(t=>t.id===trip.id?{...t,rating:action.rating,feedback:action.feedback.trim().slice(0,500)}:t)};
@@ -45,8 +51,9 @@ export function reduce(state:AppState,action:Action):AppState {
   const transitions:Partial<Record<TripStatus,TripStatus>>={requested:'accepted',accepted:'arrived',arrived:'riding',riding:'completed'};
   const cancel=action.to==='cancelled'&&['requested','accepted','arrived'].includes(trip.status)&&(action.actor==='passenger'||(action.actor==='driver'&&state.driver.approved&&state.driver.online&&trip.status==='requested'));
   const advance=action.actor==='driver'&&state.driver.approved&&transitions[trip.status]===action.to&&(trip.status!=='requested'||state.driver.online)&&(action.to!=='riding'||action.pin===trip.pin);
-  if(!cancel&&!advance)return state;
-  return {...state,trips:state.trips.map(t=>t.id===trip.id?{...t,status:action.to,updatedAt:action.now,...(cancel?{cancelReason:action.actor}:{})}:t),activeTripId:['completed','cancelled'].includes(action.to)?null:trip.id};
+  if(!cancel&&!advance||!Number.isFinite(Date.parse(action.now)))return state;
+  const meter=action.to==='riding'?newMeter(Date.parse(action.now),state.tariff):action.to==='completed'&&trip.meter?{...trip.meter,endedAt:Math.max(trip.meter.startedAt,Date.parse(action.now)),incomplete:trip.meter.incomplete||!trip.meter.lastFix||Date.parse(action.now)-trip.meter.lastFix.time>45000}:trip.meter;
+  return {...state,trips:state.trips.map(t=>t.id===trip.id?{...t,status:action.to,updatedAt:action.now,...(meter?{meter}:{}),...(cancel?{cancelReason:action.actor}:{})}:t),activeTripId:['completed','cancelled'].includes(action.to)?null:trip.id};
 }
 export function restoreState(raw:unknown):AppState|null {
   if(typeof raw!=='object'||raw===null)return null;
@@ -58,8 +65,11 @@ export function restoreState(raw:unknown):AppState|null {
     if(!trip||typeof trip.pickup!=='string'||typeof trip.destination!=='string'||validateDraft(trip)||typeof trip.id!=='string'||!trip.id||seen.has(trip.id)||!statuses.includes(trip.status)||trip.fare!==null||typeof trip.pin!=='string'||!/^\d{4}$/.test(trip.pin)||!Number.isFinite(Date.parse(trip.createdAt))||!Number.isFinite(Date.parse(trip.updatedAt)))return null;
     if(trip.rating!==undefined&&(trip.status!=='completed'||!Number.isInteger(trip.rating)||trip.rating<1||trip.rating>5))return null;
     if(trip.feedback!==undefined&&(typeof trip.feedback!=='string'||trip.feedback.length>500))return null;
+    if(trip.meter!==undefined&&!validMeter(trip.meter))return null;
     seen.add(trip.id);
   }
   const active=s.trips.filter(isActive);if(active.length>1)return null;
-  return {...s,driver:{approved:s.driver.approved,online:false},activeTripId:active[0]?.id??null};
+  const preferences={...defaultPreferences,...s.preferences};
+  if(!['system','light','dark'].includes(preferences.theme)||typeof preferences.dataSaver!=='boolean'||typeof preferences.notifications!=='boolean'||typeof preferences.smsNumber!=='string'||preferences.smsNumber!==''&&!/^\+?\d{7,15}$/.test(preferences.smsNumber)||s.tariff!==undefined&&s.tariff!==null&&!validTariff(s.tariff))return null;
+  return {...s,preferences,tariff:s.tariff??null,trips:s.trips.map(t=>t.status==='riding'&&t.meter?{...t,meter:pauseMeter(t.meter)}:t),driver:{approved:s.driver.approved,online:false},activeTripId:active[0]?.id??null};
 }

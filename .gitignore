@@ -44,3 +44,6 @@ yarn-error.*
 
 # GitHub Pages export
 dist-pages/
+
+# Rebuilt by postinstall from the pinned Leaflet package
+src/map/leaflet-bundle.generated.ts

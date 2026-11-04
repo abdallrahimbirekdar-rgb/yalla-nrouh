@@ -1,3 +1,5 @@
+import MeterView from '../../meter-view';
+import SmsFallback from '../../sms-fallback';
 import React,{useState} from 'react';
 import {Share,View} from 'react-native';
 import {router,useLocalSearchParams} from 'expo-router';
@@ -8,7 +10,7 @@ export default function TripScreen(){const {id}=useLocalSearchParams<{id:string}
   if(!trip)return <Page title={t('الرحلة غير موجودة','Ride not found')}><Button title={t('العودة','Back')} onPress={()=>router.replace('/')}/></Page>;
   const active=!['completed','cancelled'].includes(trip.status);
   async function share(){if(!trip)return;setShareError(false);try{await Share.share({message:t('رحلة تجريبية في يلا نروح — ليست متابعة مباشرة','Yalla Nrouh demo ride — not live tracking')+'\n'+trip.pickup+' → '+trip.destination+'\n'+trip.id})}catch{setShareError(true)}}
-  return <Page title={t('تفاصيل الرحلة','Ride details')}><Status status={trip.status}/><TripDate trip={trip}/><Summary trip={trip}/>
+  return <Page title={t('تفاصيل الرحلة','Ride details')}><Status status={trip.status}/><TripDate trip={trip}/><Summary trip={trip}/><MeterView trip={trip}/><SmsFallback trip={trip}/>
     {['accepted','arrived','riding'].includes(trip.status)&&<Panel><Label>{t('ملف سائق تجريبي','Demo driver profile')}</Label><Label muted>{t('السيارة والهوية ستظهران بعد ربط حسابات السائقين.','Car and driver details will appear when driver accounts are connected.')}</Label></Panel>}
     {['accepted','arrived'].includes(trip.status)&&<Panel><Label>{t('رمز بدء الرحلة','Ride start PIN')}</Label><Label large>{trip.pin}</Label><Label muted>{t('أعطِ الرمز للسائق بعد التأكد من بيانات السيارة.','Give the PIN to the driver after checking the car details.')}</Label></Panel>}
     {active&&<Button title={t('فتح شاشة السائق التجريبية','Open demo driver screen')} onPress={()=>router.push('/driver')}/>}

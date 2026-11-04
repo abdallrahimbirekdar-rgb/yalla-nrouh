@@ -6,3 +6,5 @@
 .yn-location-map:focus-visible{outline:3px solid #ffab8b;outline-offset:-3px}
 
 .yn-location-map .ol-zoom{top:auto;bottom:30px;left:14px;box-shadow:0 2px 8px #0002;background:white}
+
+.yn-dark-map .ol-layer:first-child{filter:brightness(.65) saturate(.7)}

@@ -1,0 +1,11 @@
+import React,{useState} from 'react';
+import {Platform} from 'react-native';
+import * as SMS from 'expo-sms';
+import {type Trip} from './domain';
+import {useApp} from './context';
+import {Button,Label,Panel,useText} from './ui';
+export default function SmsFallback({trip}:{trip:Trip}){const {state}=useApp();const t=useText();const [open,setOpen]=useState(false),[message,setMessage]=useState(''),[busy,setBusy]=useState(false);const body=t('يلا نروح — طلب تجريبي غير مؤكد','Yalla Nrouh — unconfirmed demo request')+'\n'+trip.id+'\n'+t('من: ','From: ')+trip.pickup+'\n'+t('إلى: ','To: ')+trip.destination;
+ async function compose(){if(!state.preferences.smsNumber)return;setBusy(true);try{if(!await SMS.isAvailableAsync()){setMessage(t('الرسائل النصية غير متاحة على هذا الجهاز.','SMS is not available on this device.'));return;}const result=await SMS.sendSMSAsync(state.preferences.smsNumber,body);setMessage(result.result==='cancelled'?t('أُغلقت الرسالة دون تأكيد الإرسال.','Message closed without sending.'):t('راجع تطبيق الرسائل لمعرفة حالة الإرسال. هذا لا يعني قبول الحجز.','Check the SMS app for the send status. This does not mean the ride was accepted.'));}catch{setMessage(t('تعذر فتح الرسائل. تحقق من تطبيق الرسائل والشريحة.','Could not open SMS. Check your SMS app and SIM.'));}finally{setBusy(false);}}
+ if(Platform.OS==='web')return null;
+ return <Panel><Button secondary icon="chatbubble-outline" title={t('خيار الرسائل عند انقطاع الإنترنت','SMS option when internet is off')} onPress={()=>setOpen(!open)}/>{open&&<><Label muted>{t('رقم الاستقبال','Recipient')}: {state.preferences.smsNumber||t('لم يُحدد — يمكن ضبطه في الإدارة التجريبية','Not set — add it in demo admin')}</Label><Label>{body}</Label><Label muted>{t('يفتح تطبيق الرسائل لتراجع النص وتضغط إرسال بنفسك. قد تفرض شركة الاتصال رسومًا. لا يوجد استقبال أو تأكيد حجز تلقائي.','Opens your SMS app so you can check and send the text. Your phone company may charge for SMS. There is no automatic reply or booking confirmation.')}</Label><Button secondary disabled={busy||!state.preferences.smsNumber} title={t('فتح الرسائل للمراجعة والإرسال','Open SMS to check and send')} onPress={compose}/>{message!==''&&<Label>{message}</Label>}</>}</Panel>;
+}

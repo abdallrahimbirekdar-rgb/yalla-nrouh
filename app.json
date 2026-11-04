@@ -2,10 +2,10 @@
   "expo": {
     "name": "يلا نروح",
     "slug": "yalla-nrouh",
-    "version": "0.4.0",
+    "version": "0.5.0",
     "orientation": "portrait",
     "icon": "./assets/app-icon-approved.png",
-    "userInterfaceStyle": "light",
+    "userInterfaceStyle": "automatic",
     "splash": {
       "image": "./assets/logo-approved.png",
       "resizeMode": "contain",
@@ -22,7 +22,13 @@
         "monochromeImage": "./assets/monochrome-approved.png"
       },
       "package": "com.yallanrouh.demo",
-      "versionCode": 4
+      "versionCode": 5,
+      "blockedPermissions": [
+        "android.permission.ACCESS_BACKGROUND_LOCATION",
+        "android.permission.READ_SMS",
+        "android.permission.RECEIVE_SMS",
+        "android.permission.SEND_SMS"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon-approved.png",
@@ -32,7 +38,23 @@
       "expo-router",
       "expo-sqlite",
       "expo-font",
-      "expo-system-ui"
+      "expo-system-ui",
+      "expo-notifications",
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "minSdkVersion": 24,
+            "enableMinifyInReleaseBuilds": true,
+            "enableShrinkResourcesInReleaseBuilds": true,
+            "useLegacyPackaging": true,
+            "buildArchs": [
+              "arm64-v8a",
+              "armeabi-v7a"
+            ]
+          }
+        }
+      ]
     ],
     "scheme": "yallanrouh",
     "backgroundColor": "#ffffff"

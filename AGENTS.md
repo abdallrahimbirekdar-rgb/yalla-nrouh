@@ -48,3 +48,6 @@ For dark website headers, use `assets/logo-header-dark.png` (ivory/coral transpa
 
 ## Simple booking interface
 The owner requested a map-first white interface inspired by their Yalla Go screenshots on 2026-11-04. Keep the home screen to a map, compact approved logo, menu and bottom booking action. Put ride categories and region choices in booking/options, and driver/history/admin in the menu. Avoid gradients, large promotional cards and persistent bottom navigation. Use the approved navy/coral logo for the white interface.
+
+## Low connectivity (0.5.0)
+Data saver defaults on; keep map mounting explicit in this mode. Respect saved drafts and prior storage migrations. Keep cash as the only connected payment method. GPS is opt-in, foreground only, 10 seconds / 20 metres; never bridge a recording gap into a billable distance. Keep local fare snapshots immutable after ride start. Theme can be system/light/dark. SMS is a manual composer with no delivery/booking confirmation; local alerts only reflect events known to this device. There is no production booking/sync backend. Read docs/LOW_CONNECTIVITY.md before adding transport or payment behavior. Do not bulk-prefetch OSM tiles.

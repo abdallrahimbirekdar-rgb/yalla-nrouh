@@ -9,10 +9,10 @@ test('native map bridge rejects invalid coordinates and unrelated messages',()=>
 test('map tap and marker drag both send selected coordinates to the native form',()=>{
  const events={},sent=[];let markerPosition;const markerEvents={};
  const map={setView(){return this},on(name,handler){events[name]=handler},getBounds(){return {contains:()=>true}}};
- const marker={addTo(){return this},on(name,handler){markerEvents[name]=handler},setLatLng(point){markerPosition=point},getLatLng(){return {lat:34,lng:37}}};
+ const marker={addTo(){return this},on(name,handler){markerEvents[name]=handler},setLatLng(point){markerPosition=point},getLatLng(){return {wrap:()=>({lat:34,lng:37})}}};
  const context={L:{map:()=>map,divIcon:()=>({}),tileLayer:()=>({addTo(){}}),marker:point=>{markerPosition=point;return marker}},window:{ReactNativeWebView:{postMessage:value=>sent.push(JSON.parse(value))}}};
- const script=mapHtml(null,true).match(/<script>([\s\S]*?)<\/script>/)[1];vm.runInNewContext(script,context);
- events.click({latlng:{lat:33.5,lng:36.2}});assert.deepEqual(sent[0],{type:'point',point:{latitude:33.5,longitude:36.2}});
+ const script=Array.from(mapHtml(null,true).matchAll(/<script>([\s\S]*?)<\/script>/g)).at(-1)[1];vm.runInNewContext(script,context);
+ events.click({latlng:{wrap:()=>({lat:33.5,lng:36.2})}});assert.deepEqual(sent[0],{type:'point',point:{latitude:33.5,longitude:36.2}});
  markerEvents.dragend();assert.deepEqual(sent[1],{type:'point',point:{latitude:34,longitude:37}});
  context.window.updatePoint({latitude:35,longitude:38});assert.deepEqual(Array.from(markerPosition),[35,38]);assert.equal(sent.length,2);
 });

@@ -1,14 +1,12 @@
-import React from 'react';
-import {Platform,View} from 'react-native';
-import MapView,{Marker} from 'react-native-maps';
-import Constants from 'expo-constants';
-import {type Coordinate} from '../geo';
-import {useText} from '../ui';
-import KeylessMap from './KeylessMap';
-export default function MapCanvas({point,onChange,compact=false}:{point:Coordinate|null;onChange:(point:Coordinate)=>void;compact?:boolean}){
-  const t=useText();
-  if(Platform.OS==='android'&&!Constants.expoConfig?.extra?.androidMapsConfigured)return <KeylessMap point={point} onChange={onChange} compact={compact}/>;
-  return <View style={{height:compact?'100%':300,borderRadius:compact?0:18,overflow:'hidden'}}><MapView style={{flex:1}} region={{latitude:point?.latitude??33.5138,longitude:point?.longitude??36.2765,latitudeDelta:0.035,longitudeDelta:0.035}} onPress={event=>onChange(event.nativeEvent.coordinate)} accessibilityLabel={t('خريطة اختيار الموقع','Choose a location on the map')}>
-    {point&&<Marker coordinate={point} draggable onDragEnd={event=>onChange(event.nativeEvent.coordinate)} title={t('الموقع المحدد','Selected location')}/>}
-  </MapView></View>;
+import React,{useState} from 'react';
+import {View} from 'react-native';
+import {type Coordinate,formatCoordinate} from '../geo';
+import {useApp} from '../context';
+import {Button,Icon,Label,useText,useTheme} from '../ui';
+import MapContent from './MapContent';
+export default function MapCanvas(props:{point:Coordinate|null;onChange:(point:Coordinate)=>void;compact?:boolean}){
+ const {state,ready}=useApp();const {colors}=useTheme();const t=useText();const [requested,setRequested]=useState(false);
+ const enabled=ready&&(requested||!state.preferences.dataSaver);
+ if(!enabled)return <View style={{flex:props.compact?1:undefined,minHeight:props.compact?260:200,justifyContent:'center',alignItems:'center',padding:24,gap:14,backgroundColor:colors.surface}}><Icon name="map-outline" size={40} color={colors.purple}/><Label>{t('توفير البيانات','Data saver')}</Label>{props.point&&<Label muted>{formatCoordinate(props.point)}</Label>}<Button secondary icon="map-outline" title={t('تحميل الخريطة','Load map')} disabled={!ready} onPress={()=>setRequested(true)}/><Label muted>{t('يمكنك إدخال العنوان دون تحميل الخريطة.','You can enter an address without loading the map.')}</Label></View>;
+ return <MapContent {...props}/>;
 }
