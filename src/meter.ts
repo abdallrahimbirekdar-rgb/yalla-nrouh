@@ -6,6 +6,18 @@ export interface Tariff {
  /** Previous demo rates only; never applied to new-format fares. */
  minimum?:number;
 }
+/** Suggested starting prices in NEW Syrian pounds (100 old SYP = 1 new SYP).
+ * Configurable by demo admin. These are owner-requested test values,
+ * not a government fare schedule or a live foreign-exchange quote.
+ * Example: 5 km + 10 minutes => 50 + 5×60 + 10×10 = 450 new SYP.
+ */
+export const suggestedNewSypTariff:Readonly<Tariff>=Object.freeze({
+ base:50,
+ perKm:60,
+ perMinute:10,
+ peakMultiplier:1,
+ updatedAt:'2026-11-04T00:00:00.000Z',
+});
 export interface Fix extends Coordinate {time:number;accuracy:number}
 export interface Meter {startedAt:number;endedAt?:number;meters:number;points:Fix[];lastFix?:Fix;incomplete:boolean;tariff:Tariff|null}
 export const GPS_INTERVAL_MS=10000;
