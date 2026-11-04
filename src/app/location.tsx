@@ -1,6 +1,7 @@
 import React,{useEffect,useRef,useState} from 'react';
 import {ActivityIndicator,Platform,View} from 'react-native';
-import {getWebPosition,announceWebPosition} from '../web-position';
+import {announceWebPosition} from '../web-position';
+import {siteCurrentPosition} from '../site-bridge.web';
 import {router,useLocalSearchParams} from 'expo-router';
 import * as Location from 'expo-location';
 import MapCanvas from '../map/MapCanvas';
@@ -22,7 +23,7 @@ export default function LocationPicker(){
   async function currentLocation(){
     if(busy)return;const id=++task.current;setBusy('gps');setMessage('');
     const active=()=>alive.current&&task.current===id;let gpsTimer:ReturnType<typeof setTimeout>|undefined;
-    try{if(Platform.OS==='web'){const point=await getWebPosition();if(active()){choose(point);announceWebPosition(point)}return}
+    try{if(Platform.OS==='web'){const point=await siteCurrentPosition(true);if(active()){choose(point);announceWebPosition(point)}return}
     const permission=await Location.requestForegroundPermissionsAsync();if(!active())return;if(permission.status!=='granted'){setMessage(t('إذن الموقع مرفوض. يمكنك اختيار النقطة أو إدخال الإحداثيات يدويًا.','Location access was denied. Select a point or enter coordinates.'));return}
       if(!await Location.hasServicesEnabledAsync()){if(active())setMessage(t('خدمة الموقع متوقفة. فعّلها أو أدخل الإحداثيات.','Location services are off. Turn them on or enter coordinates.'));return}
       const position=await Promise.race([Location.getCurrentPositionAsync({accuracy:Location.Accuracy.Balanced}),new Promise<never>((_,reject)=>{gpsTimer=setTimeout(()=>reject(Error('timeout')),15000)})]);if(active())choose({latitude:position.coords.latitude,longitude:position.coords.longitude});
