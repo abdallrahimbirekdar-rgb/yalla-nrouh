@@ -2,7 +2,7 @@ import React,{useEffect,useState} from 'react';
 import {Linking,Platform,View} from 'react-native';
 import * as Location from 'expo-location';
 import {announceWebPosition,webLocationGranted} from './web-position';
-import {siteCurrentPosition} from './site-bridge.web';
+import {siteCurrentPosition} from './site-bridge';
 import {Button,Label,Panel,useText} from './ui';
 export default function PermissionsPanel(){
  const t=useText();const [status,setStatus]=useState<'unknown'|'granted'|'denied'>('unknown'),[busy,setBusy]=useState(false),[services,setServices]=useState<boolean|null>(null),[message,setMessage]=useState('');
