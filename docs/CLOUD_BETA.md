@@ -33,7 +33,9 @@ You can then sign into Server rides beta with that admin account and review the 
 
 ## Known limits
 
-- This is an **opt-in manual-refresh beta**, not real-time customer dispatch. Availability heartbeats only while the beta screen is open in the foreground.
+- This is an **opt-in foreground-polling beta**, not real-time customer dispatch. The screen refreshes approximately every 20 seconds, or every 60 seconds in data-saver mode, while open in the foreground. Data is never synchronized in the background. Availability heartbeats occur only while the beta screen is open.
+- The driver can open Google Maps navigation to the pickup point after accepting, and to the passenger destination once the ride is started. This uses external Google Maps navigation, not an embedded navigation SDK.
+- Choosing departure/arrival on the map returns to the cloud beta screen with the coordinates intact. The start PIN appears beside its own ride only.
 - Missing: automatic assignment, persistent login/refresh, push messages, background GPS, fare quotes from a trusted routing backend, actual price rules, payments, driver documents, customer support, final deployment verification, privacy and account-deletion flows.
 - Google Maps external navigation can open without a Google key, but embedding Google's maps and calculating roads with Google Routes needs separately configured credentials, billing and quotas.
 - Do not run this as a real taxi service or store real customers' location data before privacy, retention, security and field testing are complete.
