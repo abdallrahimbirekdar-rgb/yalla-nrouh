@@ -1,6 +1,7 @@
 import {isCoordinate,type Coordinate} from './geo.ts';
 import {announceWebPosition,getWebPosition,webLocationGranted} from './web-position.ts';
 import {PositionError} from './current-position.ts';
+import type {Fix} from './meter.ts';
 export type SiteWindow=Window&{ReactNativeWebView?:{postMessage:(message:string)=>void};__YALLA_NATIVE_LOCATION_GRANTED__?:boolean};
 // The website owns its local data. Never block a launch or save while trying
 // to import older APK data; the owner chose to start without that migration.
@@ -15,11 +16,11 @@ function listenNativePosition(host:SiteWindow){
   if((event as CustomEvent).detail?.id===latestNativeGpsId&&isCoordinate(point))announceWebPosition(point);
  });
 }
-export type NativePositionResult={point:Coordinate|null;error:'permission'|'services'|'position'|'timeout'|'unsupported'|null};
+export type NativePositionResult={point:Coordinate|null;error:'permission'|'services'|'position'|'timeout'|'unsupported'|null;fix?:Fix};
 export function isNativeWebView():boolean{
  return typeof window!=='undefined'&&Boolean((window as SiteWindow).ReactNativeWebView);
 }
-export function nativeCurrentPosition(askPermission:boolean,signal?:AbortSignal):Promise<NativePositionResult>{
+export function nativeCurrentPosition(askPermission:boolean,signal?:AbortSignal,track=false):Promise<NativePositionResult>{
  const bridge=typeof window!=='undefined'?(window as SiteWindow).ReactNativeWebView:undefined;
  if(!bridge)return Promise.resolve({point:null,error:'unsupported'});
  listenNativePosition(window as SiteWindow);
@@ -31,8 +32,10 @@ export function nativeCurrentPosition(askPermission:boolean,signal?:AbortSignal)
    if(detail?.id!==id)return;
    const point=isCoordinate(detail.point)?detail.point:null;
    const error=point?null:['permission','services','position','timeout'].includes(detail.error)?detail.error as NativePositionResult['error']:'position';
+   const rawFix=detail.fix;
+   const fix=point&&rawFix&&Number.isFinite(rawFix.accuracy)&&rawFix.accuracy>=0&&Number.isFinite(rawFix.time)&&rawFix.time>0?{...point,accuracy:rawFix.accuracy,time:rawFix.time} as Fix:undefined;
    cleanup();
-   resolve({point,error});
+   resolve({point,error,...(fix?{fix}:{})});
   };
   const cleanup=()=>{clearTimeout(timer);window.removeEventListener('yalla:native-position',finish);signal?.removeEventListener('abort',abort)};
   const abort=()=>{cleanup();resolve({point:null,error:'unsupported'})};
@@ -40,7 +43,7 @@ export function nativeCurrentPosition(askPermission:boolean,signal?:AbortSignal)
   window.addEventListener('yalla:native-position',finish);
   if(signal?.aborted){abort();return}
   signal?.addEventListener('abort',abort,{once:true});
-  try{bridge.postMessage(JSON.stringify({type:'location',id,askPermission}))}
+  try{bridge.postMessage(JSON.stringify({type:'location',id,askPermission,...(track?{track:true}:{})}))}
   catch{cleanup();resolve({point:null,error:'unsupported'})}
  });
 }
@@ -64,6 +67,17 @@ export async function siteCurrentPosition(askPermission:boolean):Promise<Coordin
  // Ordinary browsers still use their own permission once.
  if(!askPermission&&!await webLocationGranted())throw new PositionError('permission');
  return getWebPosition(6500);
+}
+// Driver metering needs the actual native GPS timestamp and accuracy.
+// Invalid/inaccurate fixes are NOT counted as traveled distance.
+export async function siteCurrentFix(askPermission:boolean):Promise<Fix>{
+ if(!isNativeWebView())throw new PositionError('position');
+ const result=await nativeCurrentPosition(askPermission,undefined,true);
+ if(result.fix&&result.fix.accuracy<=50)return result.fix;
+ throw new PositionError(
+  result.error==='permission'||result.error==='services'||result.error==='timeout'
+   ?result.error:'position'
+ );
 }
 export const siteMigrationPending=()=>false;
 export async function loadSiteState(storage:Pick<Storage,'getItem'|'setItem'>,key:string):Promise<string|null>{
