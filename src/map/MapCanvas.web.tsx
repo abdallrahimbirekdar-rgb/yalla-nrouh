@@ -20,7 +20,7 @@ import './map.css';
 import {isCoordinate,type Coordinate} from '../geo';
 import {Button,Label,useText} from '../ui';
 
-export default function MapCanvas({point,onChange}:{point:Coordinate|null;onChange:(point:Coordinate)=>void}){
+export default function MapCanvas({point,onChange,compact=false}:{point:Coordinate|null;onChange:(point:Coordinate)=>void;compact?:boolean}){
   const t=useText();const host=useRef<HTMLDivElement>(null);const map=useRef<OlMap|null>(null);const feature=useRef<Feature<Point>|null>(null);
   const choose=useRef(onChange);choose.current=onChange;const current=useRef(point);current.current=point;
   const [error,setError]=useState(false),[attempt,setAttempt]=useState(0),[ready,setReady]=useState(false);
@@ -43,11 +43,11 @@ export default function MapCanvas({point,onChange}:{point:Coordinate|null;onChan
     const coordinate=fromLonLat([point.longitude,point.latitude]);pin.setGeometry(new Point(coordinate));
     if(!containsCoordinate(instance.getView().calculateExtent(instance.getSize()),coordinate))instance.getView().setCenter(coordinate);
   },[point,ready]);
-  return <View style={{gap:10}}>
-    <Label>{t('اضغط على الخريطة لاختيار الموقع، أو اسحب العلامة لتعديله.','Tap the map to choose a location, or drag the pin to adjust it.')}</Label>
-    {React.createElement('div',{ref:host,className:'yn-location-map',role:'region',tabIndex:0,'aria-label':t('خريطة اختيار الموقع','Choose a location on the map'),style:{height:360,width:'100%',borderRadius:24,overflow:'hidden',background:'#e9e3dc',zIndex:0}})}
-    <Button secondary icon="locate-outline" title={t('اختيار مركز الخريطة','Select map center')} disabled={!ready} onPress={()=>{const p=map.current?.getView().getCenter();if(p){const [longitude,latitude]=toLonLat(p);if(isCoordinate({latitude,longitude}))choose.current({latitude,longitude})}}}/>
+  return <View style={compact?{flex:1}:{gap:10}}>
+    {!compact&&<Label>{t('اضغط على الخريطة لاختيار الموقع، أو اسحب العلامة لتعديله.','Tap the map to choose a location, or drag the pin to adjust it.')}</Label>}
+    {React.createElement('div',{ref:host,className:'yn-location-map',role:'region',tabIndex:0,'aria-label':t('خريطة اختيار الموقع','Choose a location on the map'),style:{height:compact?'100%':360,minHeight:compact?260:360,width:'100%',borderRadius:compact?0:16,overflow:'hidden',background:'#e9e3dc',zIndex:0}})}
+    {!compact&&<Button secondary icon="locate-outline" title={t('اختيار مركز الخريطة','Select map center')} disabled={!ready} onPress={()=>{const p=map.current?.getView().getCenter();if(p){const [longitude,latitude]=toLonLat(p);if(isCoordinate({latitude,longitude}))choose.current({latitude,longitude})}}}/>}
     {error&&<View accessibilityRole="alert"><Label>{t('تعذر تحميل تفاصيل الخريطة. تحقق من الإنترنت أو استخدم الإحداثيات أدناه.','Map details could not load. Check your connection or use coordinates below.')}</Label><Button secondary title={t('إعادة تحميل الخريطة','Reload map')} onPress={()=>setAttempt(n=>n+1)}/></View>}
-    <Label muted>{t('OpenFreeMap / OpenStreetMap • اسحب للتنقل واستعمل + و − للتكبير.','OpenFreeMap / OpenStreetMap • Drag to move and use + and − to zoom.')}</Label>
+    {!compact&&<Label muted>{t('OpenFreeMap / OpenStreetMap • اسحب للتنقل واستعمل + و − للتكبير.','OpenFreeMap / OpenStreetMap • Drag to move and use + and − to zoom.')}</Label>}
   </View>;
 }

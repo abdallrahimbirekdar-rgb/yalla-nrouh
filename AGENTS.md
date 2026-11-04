@@ -45,3 +45,6 @@ Docs: https://docs.expo.dev/eas/index.md
 The owner selected logo proposal 1 on 2026-11-03: navy taxi, coral road/arrow, Arabic wordmark «يلا نروح». Use `assets/logo-approved.png` as the canonical artwork. Keep this complete logo (including the Arabic name) in all future application icons, splash artwork, website branding, and platform icon variants. App configuration points to the approved derived icons; preserve these paths when building future releases. Do not substitute the old navigation-arrow mark. Native icon changes require a new binary; an existing APK does not update automatically.
 
 For dark website headers, use `assets/logo-header-dark.png` (ivory/coral transparent version of the same approved logo), compact 108×60 display, without a white card. Keep header branding proportional to nearby controls.
+
+## Simple booking interface
+The owner requested a map-first white interface inspired by their Yalla Go screenshots on 2026-11-04. Keep the home screen to a map, compact approved logo, menu and bottom booking action. Put ride categories and region choices in booking/options, and driver/history/admin in the menu. Avoid gradients, large promotional cards and persistent bottom navigation. Use the approved navy/coral logo for the white interface.

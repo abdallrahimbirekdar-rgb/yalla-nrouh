@@ -11,6 +11,7 @@ const placesClient=createPlacesClient(process.env.EXPO_PUBLIC_API_URL);
 export default function LocationPicker(){
   const {target}=useLocalSearchParams<{target:string}>();const pickup=target==='pickup';const {draft,setDraft,state}=useApp();const t=useText();
   const original=pickup?draft.pickupPoint:draft.destinationPoint;
+  const [mapVisible,setMapVisible]=useState(false);
   const [point,setPoint]=useState<Coordinate|null>(original??null),[label,setLabel]=useState(pickup?draft.pickup:draft.destination),[query,setQuery]=useState(''),[results,setResults]=useState<Place[]>([]);
   const [latitude,setLatitude]=useState(original?String(original.latitude):''),[longitude,setLongitude]=useState(original?String(original.longitude):''),[message,setMessage]=useState(''),[busy,setBusy]=useState<'gps'|'search'|null>(null),[manual,setManual]=useState(false);
   const request=useRef<AbortController|null>(null);const alive=useRef(true);const task=useRef(0);
@@ -29,11 +30,12 @@ export default function LocationPicker(){
     try{const places=await placesClient.search(query,state.language,draft.region,request.current.signal);if(alive.current&&task.current===id){setResults(places);if(!places.length)setMessage(t('لم نعثر على نتائج. عدّل البحث أو حدد النقطة يدويًا.','No results. Change the search or select a point.'))}}
     catch(error){if(!alive.current||task.current!==id)return;setMessage(error instanceof ServiceError&&error.code==='not_configured'?t('البحث بالعنوان يحتاج ربط خدمة الأماكن. يمكنك استخدام الخريطة أو الموقع الحالي أو الإحداثيات.','Address search needs a connected places service. Use the map, your location or coordinates.'):t('تعذر البحث الآن. أعد المحاولة أو حدد الموقع يدويًا.','Search failed. Try again or enter the location.'))}finally{if(alive.current&&task.current===id)setBusy(null)}
   }
-  function confirm(){if(!point)return;setDraft(previous=>({...previous,...(pickup?{pickup:label.trim()||formatCoordinate(point),pickupPoint:point}:{destination:label.trim()||formatCoordinate(point),destinationPoint:point})}));router.replace('/')}
+  function confirm(){if(!point)return;setDraft(previous=>({...previous,...(pickup?{pickup:label.trim()||formatCoordinate(point),pickupPoint:point}:{destination:label.trim()||formatCoordinate(point),destinationPoint:point})}));router.replace({pathname:'/',params:{booking:'1'}})}
   return <Page title={pickup?t('حدد نقطة الانطلاق','Choose pickup location'):t('حدد الوجهة','Choose destination')}>
-    <MapCanvas point={point} onChange={choose}/>
+    <Field label={pickup?t('عنوان الانطلاق','Pickup address'):t('عنوان الوصول','Destination address')} value={label} onChangeText={value=>{setLabel(value);setQuery(value);setResults([])}} maxLength={200} placeholder={t('المدينة، الشارع أو اسم المكان','City, street or place')}/>
+    <Button secondary icon="map-outline" title={t(mapVisible?'إخفاء الخريطة':'تحديد نقطة على الخريطة',mapVisible?'Hide map':'Choose a point on the map')} onPress={()=>setMapVisible(!mapVisible)}/>
+    {mapVisible&&<MapCanvas point={point} onChange={choose}/>}
     {point&&<Panel><Label>{t('الموقع المختار','Selected location')}</Label><Label muted>{formatCoordinate(point)}</Label><Field label={t('وصف المكان','Location label')} value={label} onChangeText={setLabel} maxLength={200}/><Button icon="checkmark-circle-outline" title={t('تأكيد الموقع','Confirm location')} onPress={confirm} disabled={Boolean(busy)}/></Panel>}
-    <Field label={t('ابحث عن عنوان','Search for an address')} value={query} editable={!busy} onChangeText={value=>{setQuery(value);setResults([])}} maxLength={200} placeholder={t('المدينة والشارع أو اسم المكان','City, street or place name')}/>
     <Button secondary title={t('بحث عن المكان','Search places')} onPress={search} disabled={Boolean(busy)||query.trim().length<3}/>
     {results.map(place=><Button key={place.id} secondary title={place.label} onPress={()=>{choose(place.coordinate,place.label);setResults([])}}/>)}
     <Button title={t('استخدام موقعي الحالي','Use my current location')} onPress={currentLocation} disabled={Boolean(busy)}/>
@@ -42,6 +44,6 @@ export default function LocationPicker(){
     {manual&&<Panel><Label>{t('إدخال الإحداثيات يدويًا','Enter coordinates')}</Label><Field label={t('خط العرض','Latitude')} value={latitude} editable={!busy} onChangeText={value=>{setLatitude(value);setPoint(null)}} keyboardType="numbers-and-punctuation" maxLength={24}/><Field label={t('خط الطول','Longitude')} value={longitude} editable={!busy} onChangeText={value=>{setLongitude(value);setPoint(null)}} keyboardType="numbers-and-punctuation" maxLength={24}/><Button secondary title={t('تطبيق الإحداثيات','Apply coordinates')} disabled={Boolean(busy)} onPress={()=>{const next=parseCoordinate(latitude,longitude);if(next)choose(next);else setMessage(t('أدخل إحداثيات صالحة. خط العرض بين ‎-90 و90، والطول بين ‎-180 و180.','Enter valid coordinates. Latitude: -90 to 90. Longitude: -180 to 180.'))}}/></Panel>}
     {message!==''&&<View accessibilityRole="alert"><Label>{message}</Label></View>}
     <Label muted>{t('يُطلب إذن الموقع عند الضغط فقط. البحث بالعنوان يرسل عبارة البحث إلى الخدمة المرتبطة.','Location access is requested only when you tap. Address search sends the search text to the connected service.')}</Label>
-    {!point&&<Label muted>{t('اختر نقطة على الخريطة أولًا لتأكيدها.','Choose a point on the map to confirm it.')}</Label>}<Button secondary title={t('العودة دون حفظ','Back without saving')} onPress={()=>router.replace('/')}/>
+    {!point&&<Button title={t('استخدام هذا العنوان','Use this address')} disabled={!label.trim()||Boolean(busy)} onPress={()=>{setDraft(previous=>({...previous,...(pickup?{pickup:label.trim(),pickupPoint:undefined}:{destination:label.trim(),destinationPoint:undefined})}));router.replace({pathname:'/',params:{booking:'1'}})}}/>}<Button secondary title={t('العودة دون حفظ','Back without saving')} onPress={()=>router.replace({pathname:'/',params:{booking:'1'}})}/>
   </Page>
 }
