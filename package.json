@@ -11,7 +11,7 @@
     "typecheck": "tsc --noEmit",
     "test": "node --experimental-strip-types --test tests/*.test.mjs",
     "export:all": "expo export --platform all",
-    "postinstall": "node scripts/patch-gradle-resolver.cjs && node scripts/bundle-map.cjs"
+    "postinstall": "node scripts/patch-gradle-resolver.cjs && node scripts/bundle-map.cjs && node scripts/trim-symbol-font-loader.cjs"
   },
   "dependencies": {
     "@expo-google-fonts/cairo": "^0.4.2",

@@ -7,7 +7,7 @@
 - Wall-clock trip duration survives restarts. Rates are entered by the demo administrator and snapshotted at ride start. The local estimate is explicitly not an official fare, particularly when GPS coverage is incomplete. No default fares are invented.
 - Light, dark and system themes, with reduced animation. Local status notifications require explicit permission and only reflect state changes already known to this device.
 - SMS opens the phone's normal composer with a visible demo message and a configured recipient. The user reviews and sends it. Sending does not change booking status or imply acceptance. No READ_SMS, RECEIVE_SMS, SEND_SMS or background location permissions are requested.
-- Native build removes Google Maps, unused gradient and vector style libraries, imports only used Cairo fonts, enables release minification/resource shrinking, sets Android min SDK 24 and produces separate ARM64 and ARM32 builds. APK sizes must be measured after release builds; minimum OS is a build target, not a claim of physical-device testing.
+- Native build removes Google Maps, unused gradient and vector style libraries, imports only used Cairo fonts and avoids the unused filled Material-font barrel via the standard Expo font hook, enables release minification/resource shrinking, sets Android min SDK 24 and produces separate ARM64 and ARM32 builds. APK sizes must be measured after release builds; minimum OS is a build target, not a claim of physical-device testing.
 
 ## Services still required for live use
 This remains a single-device demo. There is no authenticated booking server, driver identity, real dispatch, shared pricing or real-time transport. No queued demo request is silently promoted to a real request when internet returns.
