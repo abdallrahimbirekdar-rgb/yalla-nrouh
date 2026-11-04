@@ -91,3 +91,32 @@ test('driver release uses the assigned-ride RPC, not unrestricted table writes',
    return reply(true);
  },async()=>assert.equal(await cloudReleaseRide(token,id),true));
 });
+
+test('saved places belong to the signed-in account and survive a new login',async()=>{
+ const {cloudSavedPlaces,cloudSavePlaces}=await import('../src/cloud-api.ts');
+ const places=[{id:'home',label:'Home',coordinate:{latitude:51.48,longitude:7.21}}];
+ let stored=[];
+ await withFetch(async(url,options)=>{
+  assert.match(url,/\/auth\/v1\/user$/);
+  assert.equal(options.headers.Authorization,'Bearer '+token);
+  if(options.method==='PUT'){
+   const payload=JSON.parse(options.body);
+   assert.deepEqual(Object.keys(payload.data),['yalla_saved_places']);
+   stored=payload.data.yalla_saved_places;
+  }
+  return reply({id:'user-one',user_metadata:{other_setting:true,yalla_saved_places:stored}});
+ },async()=>{
+  assert.deepEqual(await cloudSavedPlaces(token),[]);
+  assert.deepEqual(await cloudSavePlaces(token,places),places);
+  cloudSignOut();
+  assert.deepEqual(await cloudSavedPlaces(token),places);
+  assert.deepEqual(await cloudSavePlaces(token,[]),[]);
+ });
+});
+test('saved places validate coordinates and do not report success after a failed save',async()=>{
+ const {parseSavedPlaces,cloudSavePlaces}=await import('../src/cloud-api.ts');
+ assert.deepEqual(parseSavedPlaces([{id:'bad',label:'Home',coordinate:{latitude:200,longitude:7}}]),[]);
+ await withFetch(async()=>reply({code:'unauthorized'},401),async()=>{
+  await assert.rejects(()=>cloudSavePlaces(token,[]),e=>e instanceof CloudError&&e.status===401);
+ });
+});

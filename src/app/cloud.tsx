@@ -1,5 +1,7 @@
 import React,{useEffect,useRef,useState} from 'react';
 import {AppState,View} from 'react-native';
+import {siteCurrentPosition} from '../site-bridge';
+import {pickupAllowed} from '../pickup-policy';
 import RoutePanel from '../route-panel';
 import {router} from 'expo-router';
 import {useApp} from '../context';
@@ -29,6 +31,7 @@ export default function CloudBeta(){
  const statusName=(value:string)=>({requested:t('بانتظار السائق','Waiting'),accepted:t('قبل السائق','Accepted'),arrived:t('وصل السائق','Arrived'),riding:t('الرحلة جارية','Riding'),completed:t('انتهت الرحلة','Completed'),cancelled:t('ملغاة','Cancelled')} as Record<string,string>)[value]??value;
  function errorText(error:unknown){
    const kind=(error as CloudError)?.kind??(error instanceof Error?error.message:'');
+   if(kind==='pickup_distance')return t('نقطة الانطلاق يجب أن تكون ضمن ٥٠٠ متر من موقعك الحالي.','Pickup must be within 500 metres of your location.');
    if(kind==='select_map_points')return t('حدد الانطلاق والوصول على الخريطة قبل إرسال الطلب.','Choose pickup and destination on the map before sending.');
    if(kind==='driver_not_approved')return t('حساب السائق بانتظار مراجعة الإدارة.','Driver account is waiting for approval.');
    if(kind==='too_many_requests'||kind==='23505')return t('يوجد طلب نشط أو تم إرسال طلب قبل لحظات.','You already have an active or recent request.');
@@ -97,7 +100,7 @@ export default function CloudBeta(){
    </Panel>:
    <>
     <Panel>
-     <Label>{t('الحساب: ','Account: ')}{userEmail||t('مسجل الدخول','Signed in')}</Label>
+     <Label>{t('الحساب: ','Account: ')}{userEmail||t('مسجل الدخول','Signed in')}</Label><Button secondary icon="bookmark-outline" title={t('أماكني المحفوظة — المنزل والعمل وغيرها','My saved places — home, work and more')} onPress={()=>router.push({pathname:'/location',params:{target:'destination',returnTo:'cloud'}})}/>
      <View style={{gap:8}}>
       <Button secondary title={t('الراكب','Passenger')} disabled={mode==='passenger'} onPress={()=>changeMode('passenger')}/>
       <Button secondary title={t('السائق','Driver')} disabled={mode==='driver'} onPress={()=>changeMode('driver')}/>
@@ -114,6 +117,7 @@ export default function CloudBeta(){
        <Button secondary title={t('تحديد الانطلاق على الخريطة','Choose pickup on map')} onPress={()=>router.push({pathname:'/location',params:{target:'pickup',returnTo:'cloud'}})}/>
        <Button secondary title={t('تحديد الوصول على الخريطة','Choose destination on map')} onPress={()=>router.push({pathname:'/location',params:{target:'destination',returnTo:'cloud'}})}/>
        <Button title={t('إرسال طلب اختبار إلى الخادم','Send test request to server')} disabled={busy||!draft.pickupPoint||!draft.destinationPoint} onPress={()=>void run(async()=>{
+         const current=await siteCurrentPosition(false);if(!pickupAllowed(draft.pickupPoint,current))throw Error('pickup_distance');
          const result=await cloudRequestRide(token,draft);setPassengerPin(result.pin);setPinRideId(result.ride_id);await refresh(token);
        },t('أُرسل طلب الاختبار. احتفظ برمز البدء ذي 6 أرقام.','Test request sent. Keep the 6-digit start PIN.'))}/>
       </Panel>

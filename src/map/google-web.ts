@@ -15,6 +15,7 @@ export interface GoogleMap {
 export interface GoogleMarker {position:LatLng|undefined;map:GoogleMap|null;gmpDraggable:boolean;addListener:(name:string,callback:(event:MapEvent)=>void)=>Listener}
 export interface GoogleLine {setMap:(map:GoogleMap|null)=>void;setPath:(points:LatLng[])=>void}
 export interface GoogleMaps {
+ importLibrary?:(name:string)=>Promise<unknown>;
  Map:new(host:HTMLElement,options:Record<string,unknown>)=>GoogleMap;
  LatLngBounds:new()=>{extend:(point:LatLng)=>void};
  Polyline:new(options:Record<string,unknown>)=>GoogleLine;

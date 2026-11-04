@@ -30,3 +30,12 @@ Repository checks cannot substitute for this physical-device acceptance. Do not 
 - Native bootstrap requests retry once per second. Existing website storage remains usable if the host never responds. A first migration that times out opens the map but blocks saving until the user reopens the page to retry, with a specific notice. The original SQLite store remains untouched by the web page.
 - Invalid data supplied by an older native host is backed up under a `-native-recovery-*` website key before being skipped.
 - Physical acceptance: install over 0.8.0, confirm startup and location; verify older malformed data no longer causes a permanent startup error. This cannot be verified on the user's phone remotely.
+
+
+## Shared location picker update (2026-11-04)
+- The Android wrapper continues to load the same website. This is a website-only update; no APK version bump.
+- A recent position paints immediately, followed by a fresh foreground read. A returned position can also be used by the explicit pickup button even if its native event updated the camera first.
+- The home map initializes an empty pickup from the current position. Home pin selection, picker confirmation and both booking submission screens check a 500-metre straight-line radius from the device position; the pin is never used as the radius centre. Final confirmation rechecks position. Without GPS, pickup confirmation is blocked with a retry message.
+- Destination: tap/drag/select centre, Google Places text search, or authenticated account favourites. Search uses the existing website-restricted key and requires Places API (New) enabled and allowed by that key; failure remains explicit, with map selection available.
+- Account places are user-editable Supabase Auth metadata under yalla_saved_places, capped at 20. They confer no permissions. Only the signed-in user's /auth/v1/user endpoint is used; no admin/service key. Save/delete updates are displayed only after the server echoes the expected list. The existing in-memory sign-in policy is unchanged.
+- Physical acceptance still required: current-location permission and centring on Android, resume after background, denied permission/GPS off, inside/outside 500-metre pickup, Google search with the production key, account save/sign-out/sign-in and cross-device retrieval, map pin round trip and web/Android visual parity.

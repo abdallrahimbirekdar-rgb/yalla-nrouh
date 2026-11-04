@@ -1,58 +1,100 @@
-import React,{useEffect,useRef,useState} from 'react';
+import React,{useCallback,useEffect,useRef,useState} from 'react';
 import {ActivityIndicator,Platform,View} from 'react-native';
-import {announceWebPosition,recentWebPosition} from '../web-position';
-import {isNativeWebView,siteCurrentPosition} from '../site-bridge';
 import {router,useLocalSearchParams} from 'expo-router';
-import * as Location from 'expo-location';
+import {siteCurrentPosition} from '../site-bridge';
+import {recentWebPosition} from '../web-position';
+import {type CameraTarget,useCurrentPosition} from '../use-current-position';
+import {pickupAllowed,MAX_PICKUP_METERS} from '../pickup-policy';
 import MapCanvas from '../map/MapCanvas';
+import {searchGooglePlaces} from '../map/search-places';
 import {useApp} from '../context';
-import {formatCoordinate,parseCoordinate,type Coordinate} from '../geo';
-import {createPlacesClient,ServiceError,type Place} from '../api';
+import {formatCoordinate,type Coordinate} from '../geo';
+import {type Place} from '../api';
+import {cloudGetToken,cloudSavedPlaces,cloudSavePlaces,type SavedPlace} from '../cloud-api';
 import {Button,Field,Label,Page,Panel,useText} from '../ui';
-const placesClient=createPlacesClient(process.env.EXPO_PUBLIC_API_URL);
 export default function LocationPicker(){
-  const {target,returnTo}=useLocalSearchParams<{target:string;returnTo?:string}>();const pickup=target==='pickup';const fromCloud=returnTo==='cloud';
-  function goBack(){if(fromCloud)router.replace('/cloud');else router.replace({pathname:'/',params:{booking:'1'}})}const {draft,setDraft,state}=useApp();const t=useText();
-  const original=pickup?draft.pickupPoint:draft.destinationPoint;
-  // Show the actual destination picker on entry. Start near the passenger's
-  // pickup or last approved position, never silently select that location.
-  const initialCenter=useRef<Coordinate|undefined>(original??draft.pickupPoint??(Platform.OS==='web'?recentWebPosition(60000):null)??undefined);
-  const [mapVisible,setMapVisible]=useState(true);
-  const [point,setPoint]=useState<Coordinate|null>(original??null),[label,setLabel]=useState(pickup?draft.pickup:draft.destination),[query,setQuery]=useState(''),[results,setResults]=useState<Place[]>([]);
-  const [latitude,setLatitude]=useState(original?String(original.latitude):''),[longitude,setLongitude]=useState(original?String(original.longitude):''),[message,setMessage]=useState(''),[busy,setBusy]=useState<'gps'|'search'|null>(null),[manual,setManual]=useState(false);
-  const request=useRef<AbortController|null>(null);const alive=useRef(true);const task=useRef(0);
-  useEffect(()=>{alive.current=true;return()=>{alive.current=false;request.current?.abort()}},[]);
-  function choose(next:Coordinate,nextLabel?:string){setPoint(next);setLatitude(String(next.latitude));setLongitude(String(next.longitude));setLabel(nextLabel??formatCoordinate(next));setMessage('')}
-  async function currentLocation(){
-    if(busy)return;const id=++task.current;setBusy('gps');setMessage('');
-    const active=()=>alive.current&&task.current===id;let gpsTimer:ReturnType<typeof setTimeout>|undefined;
-    try{if(Platform.OS==='web'){const point=await siteCurrentPosition(true);if(active()){choose(point);if(!isNativeWebView())announceWebPosition(point)}return}
-    const permission=await Location.requestForegroundPermissionsAsync();if(!active())return;if(permission.status!=='granted'){setMessage(t('إذن الموقع مرفوض. يمكنك اختيار النقطة أو إدخال الإحداثيات يدويًا.','Location access was denied. Select a point or enter coordinates.'));return}
-      if(!await Location.hasServicesEnabledAsync()){if(active())setMessage(t('خدمة الموقع متوقفة. فعّلها أو أدخل الإحداثيات.','Location services are off. Turn them on or enter coordinates.'));return}
-      const position=await Promise.race([Location.getCurrentPositionAsync({accuracy:Location.Accuracy.Balanced}),new Promise<never>((_,reject)=>{gpsTimer=setTimeout(()=>reject(Error('timeout')),15000)})]);if(active())choose({latitude:position.coords.latitude,longitude:position.coords.longitude});
-    }catch{if(active())setMessage(t('تعذر تحديد موقعك. جرّب في مكان مفتوح أو أدخل الإحداثيات.','Could not find your location. Try outside or enter coordinates.'))}finally{if(gpsTimer)clearTimeout(gpsTimer);if(active())setBusy(null)}
-  }
-  async function search(){
-    if(busy)return;request.current?.abort();request.current=new AbortController();setBusy('search');setMessage('');setResults([]);const id=++task.current;
-    try{const places=await placesClient.search(query,state.language,draft.region,request.current.signal);if(alive.current&&task.current===id){setResults(places);if(!places.length)setMessage(t('لم نعثر على نتائج. عدّل البحث أو حدد النقطة يدويًا.','No results. Change the search or select a point.'))}}
-    catch(error){if(!alive.current||task.current!==id)return;setMessage(error instanceof ServiceError&&error.code==='not_configured'?t('البحث بالعنوان يحتاج ربط خدمة الأماكن. يمكنك استخدام الخريطة أو الموقع الحالي أو الإحداثيات.','Address search needs a connected places service. Use the map, your location or coordinates.'):t('تعذر البحث الآن. أعد المحاولة أو حدد الموقع يدويًا.','Search failed. Try again or enter the location.'))}finally{if(alive.current&&task.current===id)setBusy(null)}
-  }
-  function confirm(){if(!point)return;setDraft(previous=>({...previous,...(pickup?{pickup:label.trim()||formatCoordinate(point),pickupPoint:point}:{destination:label.trim()||formatCoordinate(point),destinationPoint:point})}));goBack()}
-  return <Page backTo={fromCloud?'/cloud':'/'} title={pickup?t('حدد نقطة الانطلاق على الخريطة','Choose pickup on the map'):t('حدد نقطة الوصول على الخريطة','Choose your destination on the map')}>
-    <Field label={pickup?t('عنوان الانطلاق','Pickup address'):t('عنوان الوصول','Destination address')} value={label} onChangeText={value=>{setLabel(value);setQuery(value);setResults([]);setPoint(null);setLatitude('');setLongitude('')}} maxLength={200} placeholder={t('المدينة، الشارع أو اسم المكان','City, street or place')}/>
-    <Label muted>{pickup?t('اضغط على نقطة الانطلاق المطلوبة في الخريطة، أو حرّك الخريطة ثم اختر مركزها.','Tap your pickup point on the map, or move the map and choose its centre.'):t('اضغط على المكان الذي تريد الوصول إليه في الخريطة. يمكنك تحريك الخريطة أو سحب العلامة لتعديل الهدف.','Tap the place you want to reach. Move the map or drag the marker to change the destination.')}</Label>
-    <Button secondary icon="map-outline" title={t(mapVisible?'إخفاء الخريطة':'إظهار الخريطة',mapVisible?'Hide map':'Show map')} onPress={()=>setMapVisible(!mapVisible)}/>
-    {mapVisible&&<MapCanvas point={point} initialCenter={initialCenter.current} onChange={choose}/>}
-    {point&&<Button icon="checkmark-circle-outline" title={pickup?t('تأكيد نقطة الانطلاق','Confirm pickup'):t('تأكيد نقطة الوصول والعودة للحجز','Confirm destination and return to booking')} onPress={confirm} disabled={Boolean(busy)}/>}
-    {point&&<Panel><Label>{pickup?t('نقطة الانطلاق المختارة','Selected pickup'):t('نقطة الوصول المختارة','Selected destination')}</Label><Label muted>{formatCoordinate(point)}</Label><Field label={t('اسم الموقع أو وصفه (اختياري)','Place name or description (optional)')} value={label} onChangeText={setLabel} maxLength={200}/></Panel>}
-    <Button secondary title={t('بحث عن المكان','Search places')} onPress={search} disabled={Boolean(busy)||query.trim().length<3}/>
-    {results.map(place=><Button key={place.id} secondary title={place.label} onPress={()=>{choose(place.coordinate,place.label);setResults([])}}/>)}
-    <Button title={t('استخدام موقعي الحالي','Use my current location')} onPress={currentLocation} disabled={Boolean(busy)}/>
-    {busy&&<ActivityIndicator accessibilityLabel={t('جارٍ التحميل','Loading')}/>}
-    <Button secondary title={t(manual?'إخفاء الإحداثيات':'إدخال الإحداثيات يدويًا',manual?'Hide coordinates':'Enter coordinates manually')} onPress={()=>setManual(!manual)}/>
-    {manual&&<Panel><Label>{t('إدخال الإحداثيات يدويًا','Enter coordinates')}</Label><Field label={t('خط العرض','Latitude')} value={latitude} editable={!busy} onChangeText={value=>{setLatitude(value);setPoint(null)}} keyboardType="numbers-and-punctuation" maxLength={24}/><Field label={t('خط الطول','Longitude')} value={longitude} editable={!busy} onChangeText={value=>{setLongitude(value);setPoint(null)}} keyboardType="numbers-and-punctuation" maxLength={24}/><Button secondary title={t('تطبيق الإحداثيات','Apply coordinates')} disabled={Boolean(busy)} onPress={()=>{const next=parseCoordinate(latitude,longitude);if(next)choose(next);else setMessage(t('أدخل إحداثيات صالحة. خط العرض بين ‎-90 و90، والطول بين ‎-180 و180.','Enter valid coordinates. Latitude: -90 to 90. Longitude: -180 to 180.'))}}/></Panel>}
-    {message!==''&&<View accessibilityRole="alert"><Label>{message}</Label></View>}
-    <Label muted>{t('يُطلب إذن الموقع عند الضغط فقط. البحث بالعنوان يرسل عبارة البحث إلى الخدمة المرتبطة.','Location access is requested only when you tap. Address search sends the search text to the connected service.')}</Label>
-    {!point&&<Button title={t('استخدام هذا العنوان','Use this address')} disabled={!label.trim()||Boolean(busy)} onPress={()=>{setDraft(previous=>({...previous,...(pickup?{pickup:label.trim(),pickupPoint:undefined}:{destination:label.trim(),destinationPoint:undefined})}));goBack()}}/>}<Button secondary title={t('العودة دون حفظ','Back without saving')} onPress={()=>goBack()}/>
-  </Page>
+ const {target,returnTo}=useLocalSearchParams<{target:string;returnTo?:string}>();
+ const pickup=target==='pickup',fromCloud=returnTo==='cloud';
+ const {draft,setDraft,state,ready}=useApp();const t=useText();
+ const gps=useCurrentPosition(ready);const original=pickup?draft.pickupPoint:draft.destinationPoint;
+ const initialCenter=useRef<Coordinate|undefined>(original??draft.pickupPoint??(Platform.OS==='web'?recentWebPosition(60000):null)??undefined);
+ const [point,setPoint]=useState<Coordinate|null>(original??null),[label,setLabel]=useState(pickup?draft.pickup:draft.destination);
+ const [query,setQuery]=useState(''),[results,setResults]=useState<Place[]>([]),[saved,setSaved]=useState<SavedPlace[]>([]);
+ const [message,setMessage]=useState(''),[busy,setBusy]=useState(false),[saving,setSaving]=useState(false),[loaded,setLoaded]=useState(false);
+ const [selectionCamera,setSelectionCamera]=useState<CameraTarget>();
+ const alive=useRef(true),task=useRef(0);const token=cloudGetToken();
+ useEffect(()=>{alive.current=true;return()=>{alive.current=false}},[]);
+ const loadSaved=useCallback(async()=>{
+  if(!token)return;
+  setLoaded(false);
+  try{const list=await cloudSavedPlaces(token);if(alive.current&&cloudGetToken()===token){setSaved(list);setLoaded(true)}}
+  catch{if(alive.current)setMessage(state.language==='ar'?'تعذر تحميل الأماكن المحفوظة. أعد المحاولة.':'Could not load saved places. Try again.')}
+ },[token,state.language])
+ useEffect(()=>{void loadSaved()},[loadSaved]); // Account places are fetched from the authenticated user only.
+ function goBack(){if(fromCloud)router.replace('/cloud');else router.replace({pathname:'/',params:{booking:'1'}})}
+ function choose(next:Coordinate,nextLabel?:string){setPoint(next);setLabel(nextLabel??formatCoordinate(next));setMessage('')}
+ async function selectCurrent(){
+  const next=await gps.locate();
+  if(next&&alive.current){choose(next,t('موقعي الحالي','My current location'));setSelectionCamera({point:next,revision:Date.now()})}
+ }
+ async function search(){
+  if(busy||query.trim().length<3)return;const id=++task.current;setBusy(true);setMessage('');setResults([]);
+  let timer:ReturnType<typeof setTimeout>|undefined;
+  try{
+   const places=await Promise.race([searchGooglePlaces(query,state.language,gps.camera?.point??draft.pickupPoint),new Promise<never>((_,reject)=>{timer=setTimeout(()=>reject(Error('timeout')),15000)})]);
+   if(alive.current&&id===task.current){setResults(places);if(!places.length)setMessage(t('لا توجد نتائج. جرّب اسمًا أوضح أو حدد نقطة على الخريطة.','No results. Try another name or choose on the map.'))}
+  }catch{if(alive.current&&id===task.current)setMessage(t('تعذر البحث في Google حاليًا. أعد المحاولة أو اختر نقطة على الخريطة.','Google search failed. Try again or choose a point on the map.'))}
+  finally{if(timer)clearTimeout(timer);if(alive.current&&id===task.current)setBusy(false)}
+ }
+ async function confirm(){
+  if(!point||busy)return;setBusy(true);setMessage('');
+  try{
+   // Recheck the actual phone position at confirmation, never a selected pin.
+   if(pickup){const current=await siteCurrentPosition(false);if(!pickupAllowed(point,current)){setMessage(t('نقطة الانطلاق تبعد أكثر من ٥٠٠ متر عن موقعك الحالي. اختر نقطة أقرب.','Pickup is more than 500 metres away. Choose a closer point.'));return}}
+   if(!alive.current)return;
+   setDraft(previous=>({...previous,...(pickup?{pickup:label.trim()||formatCoordinate(point),pickupPoint:point}:{destination:label.trim()||formatCoordinate(point),destinationPoint:point})}));goBack();
+  }catch{if(alive.current)setMessage(t('نحتاج موقعك الحالي للتحقق من مسافة الانطلاق. فعّل الموقع والإذن ثم أعد المحاولة.','We need your location to check pickup distance. Turn on location and allow access.'))}
+  finally{if(alive.current)setBusy(false)}
+ }
+ async function savePlace(removeId?:string){
+  if(!token||saving||!loaded||(!removeId&&!point))return;setSaving(true);setMessage('');
+  try{
+   const entry:SavedPlace|undefined=point?{id:Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,8),label:label.trim()||formatCoordinate(point),coordinate:point}:undefined;
+   const next=removeId?saved.filter(p=>p.id!==removeId):[entry!,...saved].slice(0,20);
+   const verified=await cloudSavePlaces(token,next);
+   if(alive.current&&cloudGetToken()===token){setSaved(verified);setMessage(t('تم تحديث الأماكن المحفوظة في حسابك.','Saved places updated in your account.'))}
+  }catch{if(alive.current)setMessage(t('لم يتم الحفظ. تحقق من الاتصال أو سجّل الدخول مجددًا ثم حاول.','Could not save. Check internet or sign in again, then retry.'))}
+  finally{if(alive.current)setSaving(false)}
+ }
+ const current=gps.camera?.point??null;
+ const allowed=!pickup||pickupAllowed(point??undefined,current);
+ return <Page backTo={fromCloud?'/cloud':'/'} title={pickup?t('نقطة الانطلاق','Pickup point'):t('نقطة الوصول','Destination point')}>
+  <Label muted>{pickup?t('استخدم موقعك الحالي، أو اختر نقطة على الخريطة ضمن ٥٠٠ متر منه.','Use your location, or choose a map point within 500 metres.'):t('اختر على الخريطة، أو ابحث باسم المكان، أو استخدم مكانًا محفوظًا في حسابك.','Choose on the map, search by name, or use a saved place.')}</Label>
+  {pickup&&<Button icon="locate" title={t('استخدام موقعي الحالي','Use my current location')} onPress={()=>void selectCurrent()} disabled={gps.busy||busy}/>}
+  {!pickup&&<Panel>
+   <Field label={t('البحث في Google Maps','Search Google Maps')} value={query} onChangeText={value=>{task.current++;setBusy(false);setQuery(value);setResults([])}} maxLength={200} placeholder={t('اسم مكان أو شارع أو منطقة','Place, street or area')}/>
+   <Button icon="search" title={t('بحث عن المكان','Search places')} onPress={()=>void search()} disabled={busy||query.trim().length<3}/>
+   {results.length>0&&<Label muted>{t('نتائج Google Maps — اختر نتيجة ثم عدّل النقطة إن أردت','Google Maps results — choose one, then move the point if needed')}</Label>}
+   {results.map(place=><Button key={place.id} secondary title={place.label} onPress={()=>{choose(place.coordinate,place.label);setSelectionCamera({point:place.coordinate,revision:Date.now(),isLocation:false});setResults([])}}/>)}
+  </Panel>}
+  <MapCanvas point={point} initialCenter={initialCenter.current} cameraTarget={selectionCamera??gps.camera} onChange={next=>choose(next)}/>
+  {(gps.busy||busy)&&<ActivityIndicator accessibilityLabel={t('جارٍ التحميل','Loading')}/>}
+  {gps.failure&&<View accessibilityRole="alert"><Label>{t('تعذر تحديد موقعك الحالي. تأكد من تشغيل الموقع والسماح بالموقع الدقيق ثم أعد المحاولة.','Could not get your location. Turn on location, allow precise access, then try again.')}</Label><Button secondary title={t('تحديد موقعي مجددًا','Find my location again')} onPress={()=>void selectCurrent()} disabled={gps.busy}/></View>}
+  {point&&<Panel>
+   <Label>{formatCoordinate(point)}</Label>
+   <Field label={t('اسم المكان أو وصف نقطة الالتقاء','Place name or meeting point')} value={label} onChangeText={setLabel} maxLength={200}/>
+   {pickup&&!allowed&&<Label>{t(`يجب أن تكون نقطة الانطلاق ضمن ${MAX_PICKUP_METERS} متر من موقعك الحالي.`,`Pickup must be within ${MAX_PICKUP_METERS} metres of your location.`)}</Label>}
+   <Button icon="checkmark-circle-outline" title={pickup?t('تأكيد نقطة الانطلاق','Confirm pickup'):t('تأكيد نقطة الوصول والعودة للحجز','Confirm destination and return to booking')} onPress={()=>void confirm()} disabled={busy||!allowed}/>
+   {!pickup&&token&&<Button secondary icon="bookmark-outline" title={t('حفظ المكان في حسابي','Save place to my account')} onPress={()=>void savePlace()} disabled={saving||!loaded}/>}
+  </Panel>}
+  {!pickup&&<Panel>
+   <Label large>{t('أماكني المحفوظة','My saved places')}</Label>
+   {!token?<><Label muted>{t('سجّل الدخول لعرض أماكنك وحفظ المنزل والعمل وغيرها.','Sign in to view and save home, work and other places.')}</Label><Button secondary title={t('الدخول إلى حسابي','Sign in to my account')} onPress={()=>router.push('/cloud')}/></>:<>
+    {!loaded?<Button secondary title={t('تحميل الأماكن المحفوظة','Load saved places')} onPress={()=>void loadSaved()}/>:saved.length===0&&<Label muted>{t('لم تحفظ أماكن بعد. اختر نقطة وسمّها ثم اضغط حفظ المكان.','No saved places yet. Choose a point, name it and tap Save place.')}</Label>}
+    {saved.map(place=><View key={place.id} style={{gap:6}}><Button secondary icon="bookmark" title={place.label} onPress={()=>{choose(place.coordinate,place.label);setSelectionCamera({point:place.coordinate,revision:Date.now(),isLocation:false})}}/><Button secondary title={t('حذف المكان المحفوظ','Delete saved place')} onPress={()=>void savePlace(place.id)} disabled={saving}/></View>)}
+   </>}
+  </Panel>}
+  {message!==''&&<View accessibilityRole="alert"><Label>{message}</Label></View>}
+  <Button secondary title={t('العودة دون حفظ','Back without saving')} onPress={goBack}/>
+ </Page>;
 }

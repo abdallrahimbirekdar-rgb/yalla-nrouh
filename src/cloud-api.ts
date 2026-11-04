@@ -26,7 +26,7 @@ const headers=(token?:string):Record<string,string>=>({
   apikey:API_KEY,'Content-Type':'application/json',
   ...(token?{Authorization:'Bearer '+token}:{})
 });
-async function call<T>(path:string,method:'GET'|'POST',token?:string,body?:unknown):Promise<T>{
+async function call<T>(path:string,method:'GET'|'POST'|'PUT',token?:string,body?:unknown):Promise<T>{
   const controller=new AbortController(), timeout=setTimeout(()=>controller.abort(),12000);
   try{
     const response=await fetch(API_ROOT+path,{method,headers:headers(token),body:body===undefined?undefined:JSON.stringify(body),signal:controller.signal,credentials:'omit'});
@@ -60,7 +60,7 @@ export async function cloudSignUp(email:string,password:string):Promise<void>{
   if(password.length<8||!email.includes('@'))throw new CloudError(400,'invalid_credentials');
   await call<unknown>('/auth/v1/signup','POST',undefined,{email:email.trim(),password});
 }
-export async function cloudWhoAmI(token:string):Promise<{id:string;email?:string}>{
+export async function cloudWhoAmI(token:string):Promise<{id:string;email?:string;user_metadata?:Record<string,unknown>}>{
   requireToken(token);
   return call('/auth/v1/user','GET',token);
 }
@@ -98,3 +98,20 @@ export const cloudAdvanceRide=(token:string,id:string,next:'arrived'|'riding'|'c
 export const cloudIsAdmin=(token:string)=>rpc<boolean>('is_staff_admin',token);
 export const cloudStaffDrivers=(token:string)=>rpc<StaffDriver[]>('admin_pending_drivers',token);
 export const cloudApproveDriver=(token:string,id:string,approved:boolean)=>rpc<boolean>('admin_review_driver',token,{p_driver_id:id,p_approved:approved});
+
+export interface SavedPlace {id:string;label:string;coordinate:{latitude:number;longitude:number}}
+export function parseSavedPlaces(value:unknown):SavedPlace[]{
+ if(!Array.isArray(value))return [];
+ return value.filter((p):p is SavedPlace=>!!p&&typeof p.id==='string'&&p.id.length<=100&&typeof p.label==='string'&&!!p.label.trim()&&p.label.length<=200&&isCoordinate(p.coordinate)).slice(0,20);
+}
+export async function cloudSavedPlaces(token:string):Promise<SavedPlace[]>{
+ const user=await cloudWhoAmI(token);return parseSavedPlaces(user.user_metadata?.yalla_saved_places);
+}
+export async function cloudSavePlaces(token:string,places:SavedPlace[]):Promise<SavedPlace[]>{
+ requireToken(token);
+ const clean=parseSavedPlaces(places);
+ const user=await call<{user_metadata?:Record<string,unknown>}>('/auth/v1/user','PUT',token,{data:{yalla_saved_places:clean}});
+ const verified=parseSavedPlaces(user.user_metadata?.yalla_saved_places);
+ if(JSON.stringify(verified)!==JSON.stringify(clean))throw new CloudError(500,'bad_response');
+ return verified;
+}

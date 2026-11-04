@@ -49,6 +49,7 @@ export default function MapContent({point,onChange,compact=false,route,readOnly=
  useEffect(()=>{
   if(!ready||!map.current||!api.current||!cameraTarget)return;
   const center=position(cameraTarget.point);map.current.setCenter(center);map.current.setZoom(19);
+  if(cameraTarget.isLocation===false)return;
   if(!userMarker.current){
    const dot=document.createElement('div');Object.assign(dot.style,{width:'18px',height:'18px',background:'#2688e8',border:'3px solid white',borderRadius:'50%',boxShadow:'0 0 0 8px #2688e822'});
    userMarker.current=new api.current.marker.AdvancedMarkerElement({map:map.current,position:center,content:dot,title:state.language==='ar'?'موقعي الحالي':'My current location'});

@@ -22,7 +22,7 @@ const adapter={
   return {coords:fix};
  },
 };
-export type CameraTarget={point:Coordinate;revision:number};
+export type CameraTarget={point:Coordinate;revision:number;isLocation?:boolean};
 export function useCurrentPosition(enabled:boolean){
  const [camera,setCamera]=useState<CameraTarget>();const [busy,setBusy]=useState(false),[failure,setFailure]=useState<PositionFailure|null>(null);
  const generation=useRef(0),alive=useRef(true),running=useRef<number|null>(null),located=useRef(false),manual=useRef(false);
@@ -34,6 +34,7 @@ export function useCurrentPosition(enabled:boolean){
   try{
    const point=Platform.OS==='web'?await siteCurrentPosition(ask):await currentPosition(adapter,ask);
    if(alive.current&&id===generation.current){located.current=true;setCamera({point,revision:id})}
+   if(alive.current)return point;
   }catch(error){
    if(alive.current&&id===generation.current)setFailure(error instanceof PositionError?error.code:'position');
   }finally{
@@ -62,6 +63,7 @@ export function useCurrentPosition(enabled:boolean){
   if(recent&&!manual.current){
    const id=++generation.current;located.current=true;setFailure(null);
    setCamera({point:recent,revision:id});
+   void locate(false);
   }else start(false);
   const subscription=AppState.addEventListener('change',value=>{if(value==='active')start(true)});
   if(Platform.OS!=='web')return()=>{active=false;subscription.remove()};
