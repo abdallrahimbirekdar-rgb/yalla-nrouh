@@ -37,9 +37,16 @@ Suggested server request: DRIVE, TRAFFIC_UNAWARE, no alternatives/intermediate w
 The parser validates bounded metrics, geometry and text instructions. Requests are on demand, cancellable, time-limited and throttled. Responses remain in the current screen's memory and are not cached on disk. Display geometry only on a configured Google map; otherwise display attributed Google Maps text and offer the official navigation link. Offline storage of the app's own user/GPS data is separate from Google route data.
 
 ## Price calculation
-`max(minimum, base + kilometres × per-km rate + full ride minutes × per-minute rate)`.
 
-The current local meter already uses accepted GPS distance and elapsed ride time. It starts only after the ride PIN is verified and ends on completion. The rate is copied at ride start; later admin changes do not change that ride. Travel to pickup is excluded. GPS gaps are marked incomplete and do not fabricate kilometres or a final payable fare. Prices are manually configured in demo admin; none are invented. A pre-ride road-price estimate remains unavailable until the Google Routes backend is connected. It would use Google's road distance/time, not straight-line distance. Real settlement, shared prices and driver dispatch still need the booking server.
+For **new** trips, the owner-specified equation is:
+
+`fare = round((starting fare + (distance_km × price_per_km) + (ride_minutes × price_per_minute)) × peak_multiplier)`
+
+The four configurable constants are editable in **Demo admin**. Peak multiplier **1** is normal pricing, **1.5** adds 50%, and **2** doubles the subtotal. A minimum charge is not added to this new formula. The app uses the same calculation in the local GPS meter and, when Google Routes integration is configured, the pre-ride road-distance estimate. Final fares use GPS distance and elapsed ride time; Google road-distance estimates must not substitute for the recorded journey. Prices are rounded to whole SYP.
+
+Existing saved ride snapshots without a peak factor retain their *previous* minimum-fare calculation, to avoid retroactively changing historical fares. Newly started rides normalize old rates to the new equation with multiplier 1. Each new ride keeps its own rate snapshot at start; subsequent admin edits never modify it.
+
+**Current scope:** Admin changes are saved locally in the demo on the same website/browser device. The admin page is an open demonstration, not a protected control panel. Before this formula can be enforced across passengers and drivers, the project needs authenticated administrator roles, a central pricing database, versioned/signed tariff responses, server validation and a production trip service. No default rates are invented. GPS gaps mark ride data incomplete; the estimate is not an official charge, and cash remains the only demo payment method.
 
 ## Official references (verify again before activation)
 - https://developers.google.com/maps/billing-and-pricing/pricing
