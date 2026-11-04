@@ -29,6 +29,7 @@ You can then sign into Server rides beta with that admin account and review the 
 3. On device B, sign in as driver. Register once with a region and vehicle category, then wait for explicit admin approval.
 4. A verified admin account approves the driver. Driver enables availability and refreshes requests (same region and category).
 5. Driver accepts the request. Both users can refresh to see status; driver marks arrived, asks the passenger for their six-digit PIN, starts and completes.
+   Before starting, the assigned driver can also release an accepted or arrived test ride, which returns it to the request pool. Only the assigned driver may do so.
 6. Confirm a different driver's attempt to claim an already accepted request does not succeed.
 
 ## Known limits
