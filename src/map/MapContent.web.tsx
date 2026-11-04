@@ -6,7 +6,7 @@ import {useApp} from '../context';
 import {Button,Label,useText,useTheme} from '../ui';
 import {loadGoogleMaps,onMapsAuthFailure,webMapsKey,type GoogleMap,type GoogleMaps,type GoogleMarker,type GoogleLine,type LatLng} from './google-web';
 const position=(point:Coordinate):LatLng=>({lat:point.latitude,lng:point.longitude});
-export default function MapContent({point,onChange,compact=false,route,readOnly=false,lean=false,cameraTarget}:{point:Coordinate|null;onChange:(point:Coordinate)=>void;compact?:boolean;route?:Coordinate[];readOnly?:boolean;lean?:boolean;loadTimeoutMs?:number;cameraTarget?:CameraTarget}){
+export default function MapContent({point,onChange,compact=false,route,readOnly=false,lean=false,loadTimeoutMs=25000,cameraTarget}:{point:Coordinate|null;onChange:(point:Coordinate)=>void;compact?:boolean;route?:Coordinate[];readOnly?:boolean;lean?:boolean;loadTimeoutMs?:number;cameraTarget?:CameraTarget}){
  const {state}=useApp();const t=useText();const {colors,dark}=useTheme();const host=useRef<HTMLDivElement>(null);
  const map=useRef<GoogleMap|null>(null),api=useRef<GoogleMaps|null>(null),marker=useRef<GoogleMarker|null>(null),line=useRef<GoogleLine|null>(null);
  const userMarker=useRef<GoogleMarker|null>(null);
@@ -17,6 +17,9 @@ export default function MapContent({point,onChange,compact=false,route,readOnly=
  const key=webMapsKey(process.env.EXPO_PUBLIC_GOOGLE_MAPS_WEB_API_KEY);
  useEffect(()=>{
   const container=host.current;if(!container||!key)return;let disposed=false;failed.current=false;setError(false);setReady(false);
+  // Never leave the picker showing a spinner indefinitely. If Google Maps
+  // cannot initialize in time, show a clear retry and keep manual selection.
+  const pending=setTimeout(()=>{if(!disposed){failed.current=true;setError(true)}},Math.min(loadTimeoutMs,20000));
   const removeAuthListener=onMapsAuthFailure(()=>{if(!disposed){failed.current=true;setError(true)}});
   const online=()=>{if(!disposed&&failed.current)setAttempt(value=>value+1)};
   window.addEventListener('online',online);
@@ -29,10 +32,10 @@ export default function MapContent({point,onChange,compact=false,route,readOnly=
    const select=(event:{latLng?:{lat:()=>number;lng:()=>number}|null})=>{if(!event.latLng||readOnly)return;const next={latitude:event.latLng.lat(),longitude:event.latLng.lng()};if(isCoordinate(next))choose.current(next)};
    if(!readOnly){instance.addListener('click',select);pin.addListener('dragend',select)}
    line.current=new maps.Polyline({map:instance,strokeColor:'#2688e8',strokeWeight:5,clickable:false});
-   setReady(true);
-  }).catch(()=>{if(!disposed){failed.current=true;setError(true)}});
-  return()=>{disposed=true;removeAuthListener();window.removeEventListener('online',online);if(marker.current){api.current?.event.clearInstanceListeners(marker.current);marker.current.map=null}if(userMarker.current)userMarker.current.map=null;userMarker.current=null;line.current?.setMap(null);if(map.current)api.current?.event.clearInstanceListeners(map.current);map.current=null;marker.current=null;line.current=null;container.replaceChildren()};
- },[key,state.language,readOnly,attempt]);
+   clearTimeout(pending);setReady(true);
+  }).catch(()=>{if(!disposed){clearTimeout(pending);failed.current=true;setError(true)}});
+  return()=>{disposed=true;clearTimeout(pending);removeAuthListener();window.removeEventListener('online',online);if(marker.current){api.current?.event.clearInstanceListeners(marker.current);marker.current.map=null}if(userMarker.current)userMarker.current.map=null;userMarker.current=null;line.current?.setMap(null);if(map.current)api.current?.event.clearInstanceListeners(map.current);map.current=null;marker.current=null;line.current=null;container.replaceChildren()};
+ },[key,state.language,readOnly,attempt,loadTimeoutMs]);
  useEffect(()=>{
   const instance=map.current,pin=marker.current;if(!ready||!instance||!pin)return;
   pin.position=point?position(point):undefined;
