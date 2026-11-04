@@ -14,14 +14,6 @@ concurrency:
 
 jobs:
   android-apk:
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - abi: arm64-v8a
-            label: arm64
-          - abi: armeabi-v7a
-            label: arm32
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
@@ -44,11 +36,11 @@ jobs:
         run: npx expo prebuild --platform android --no-install
       - name: Build test APK
         working-directory: android
-        run: ./gradlew :app:assembleRelease -PreactNativeArchitectures=${{ matrix.abi }} -Pexpo.useLegacyPackaging=true --no-daemon -Dorg.gradle.jvmargs="-Xmx4g -XX:MaxMetaspaceSize=1g" -Dorg.gradle.workers.max=2
+        run: ./gradlew :app:assembleRelease -PreactNativeArchitectures=arm64-v8a,armeabi-v7a -Pexpo.useLegacyPackaging=true --no-daemon -Dorg.gradle.jvmargs="-Xmx4g -XX:MaxMetaspaceSize=1g" -Dorg.gradle.workers.max=2
       - name: Upload test APK
         uses: actions/upload-artifact@v4
         with:
-          name: yalla-nrouh-android-${{ matrix.label }}-test
+          name: yalla-nrouh-android-unified-test
           path: android/app/build/outputs/apk/release/*.apk
           if-no-files-found: error
           retention-days: 14
@@ -59,8 +51,8 @@ jobs:
           APK=$(find android/app/build/outputs/apk/release -name '*.apk' -type f | head -n 1)
           test -n "$APK"
           mkdir -p release-apk
-          cp "$APK" release-apk/yalla-nrouh-test-${{ matrix.label }}.apk
+          cp "$APK" release-apk/yalla-nrouh-test.apk
           if ! gh release view android-test-latest >/dev/null 2>&1; then
             gh release create android-test-latest --title "Yalla Nrouh Android test (latest)" --notes "Test build only; not a live taxi booking service." --prerelease
           fi
-          gh release upload android-test-latest release-apk/yalla-nrouh-test-${{ matrix.label }}.apk --clobber
+          gh release upload android-test-latest release-apk/yalla-nrouh-test.apk --clobber

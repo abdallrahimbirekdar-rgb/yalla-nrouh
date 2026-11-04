@@ -51,3 +51,6 @@ The owner requested a map-first white interface inspired by their Yalla Go scree
 
 ## Low connectivity (0.5.0)
 Data saver defaults on; keep map mounting explicit in this mode. Respect saved drafts and prior storage migrations. Keep cash as the only connected payment method. GPS is opt-in, foreground only, 10 seconds / 20 metres; never bridge a recording gap into a billable distance. Keep local fare snapshots immutable after ride start. Theme can be system/light/dark. SMS is a manual composer with no delivery/booking confirmation; local alerts only reflect events known to this device. There is no production booking/sync backend. Read docs/LOW_CONNECTIVITY.md before adding transport or payment behavior. Do not bulk-prefetch OSM tiles.
+
+## One application
+The owner requested one APK containing both passenger and driver modes. Publish one unified ARM64 + ARM32 APK and one website download button. Keep passenger/driver mode choices clearly visible together in the menu. Do not publish separate architecture or role downloads.

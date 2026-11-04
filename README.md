@@ -1,12 +1,12 @@
-## Update 0.5.0 — low-connectivity mode
+## Update 0.5.1 — low-connectivity mode
 
 Data saver, persistent booking drafts, local route recording, dark/system theme, opt-in local alerts, manual SMS composer, and local demo fare settings are available. The application is still a single-device demo; booking synchronization, automatic SMS, remote driver updates, and local payment providers are not connected. See [low-connectivity behavior and limits](docs/LOW_CONNECTIVITY.md).
 
-Android release builds target Android 7+ and publish separate ARM64/ARM32 APKs. Actual APK sizes are measured after building; physical-device testing remains required. Native maps no longer require a Google Maps key.
+Android release builds target Android 7+ and publish one universal ARM64/ARM32 APK containing both passenger and driver modes. Actual APK sizes are measured after building; physical-device testing remains required. Native maps no longer require a Google Maps key.
 
 # يلا نروح — Yalla Nrouh
 
-مشروع تطبيق أصلي لأندرويد وآيفون ونسخة ويب، بالعربية والإنكليزية. الإصدار **0.5.0 تجربة محلية**: لا يطلب سيارة فعلية ولا يسجل حسابات حقيقية. يمكنه قراءة موقع الجهاز في المقدمة بعد ضغط زر الموقع والموافقة على إذن النظام.
+مشروع تطبيق أصلي لأندرويد وآيفون ونسخة ويب، بالعربية والإنكليزية. الإصدار **0.5.1 تجربة محلية**: لا يطلب سيارة فعلية ولا يسجل حسابات حقيقية. يمكنه قراءة موقع الجهاز في المقدمة بعد ضغط زر الموقع والموافقة على إذن النظام.
 
 ## التصميم الجديد
 

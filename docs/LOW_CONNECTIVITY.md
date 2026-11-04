@@ -1,4 +1,4 @@
-# Low-connectivity build 0.5.0
+# Low-connectivity build 0.5.1
 
 ## Implemented
 - The same SQLite key is retained. A versioned storage envelope saves app state and partial booking draft together, with migration from older installs. Browser storage mirrors this behavior. Writes are serialized, pending snapshots coalesce, failures are visible and retryable.
@@ -7,7 +7,7 @@
 - Wall-clock trip duration survives restarts. Rates are entered by the demo administrator and snapshotted at ride start. The local estimate is explicitly not an official fare, particularly when GPS coverage is incomplete. No default fares are invented.
 - Light, dark and system themes, with reduced animation. Local status notifications require explicit permission and only reflect state changes already known to this device.
 - SMS opens the phone's normal composer with a visible demo message and a configured recipient. The user reviews and sends it. Sending does not change booking status or imply acceptance. No READ_SMS, RECEIVE_SMS, SEND_SMS or background location permissions are requested.
-- Native build removes Google Maps, unused gradient and vector style libraries, imports only used Cairo fonts and avoids the unused filled Material-font barrel via the standard Expo font hook, enables release minification/resource shrinking, sets Android min SDK 24 and produces separate ARM64 and ARM32 builds. APK sizes must be measured after release builds; minimum OS is a build target, not a claim of physical-device testing.
+- Native build removes Google Maps, unused gradient and vector style libraries, imports only used Cairo fonts and avoids the unused filled Material-font barrel via the standard Expo font hook, enables release minification/resource shrinking, sets Android min SDK 24 and produces one unified APK with both ARM64 and ARM32 libraries and both passenger/driver modes. APK sizes must be measured after release builds; minimum OS is a build target, not a claim of physical-device testing.
 
 ## Services still required for live use
 This remains a single-device demo. There is no authenticated booking server, driver identity, real dispatch, shared pricing or real-time transport. No queued demo request is silently promoted to a real request when internet returns.
@@ -17,4 +17,4 @@ A production sync transport needs authenticated user/driver roles, a trip-scoped
 Automatic SMS and inbound booking replies require a contracted local SMS provider and server integration. Delivery receipts are separate from trip acceptance. Mobile composer return values do not prove delivery. Syriatel Cash, MTN Cash or banking require merchant credentials and provider APIs, server verification, idempotent payment records and reconciliation. Those services are not represented as connected.
 
 ## Verification
-Run `npm ci`, `npm run lint`, `npm run typecheck`, `npm test`, web export and native export. CI builds both APK architectures. Before live service, test on real Android 7/8 devices, loss/recovery of connectivity, a power cycle, storage-full errors, locked-screen behavior, notification permission denial and actual SMS/carrier delivery. There is no background GPS service in this build.
+Run `npm ci`, `npm run lint`, `npm run typecheck`, `npm test`, web export and native export. CI builds one APK containing both phone architectures. Before live service, test on real Android 7/8 devices, loss/recovery of connectivity, a power cycle, storage-full errors, locked-screen behavior, notification permission denial and actual SMS/carrier delivery. There is no background GPS service in this build.
