@@ -1,3 +1,9 @@
+## Server booking beta — November 4, 2026
+
+A separate Supabase backend now exists for **Yalla Nrouh**. Open **«اختبار الحجوزات عبر الخادم»** from the home page or menu to try email login, passenger requests, driver onboarding, approval, claiming and ride status changes. These server flows are separate from the old one-device demo. They are not an operational taxi service. Real-time dispatch, approved tariffs, actual driver verification, background location tracking and live field tests remain outstanding.
+
+See [cloud beta and protected admin setup](docs/CLOUD_BETA.md). Do not mistake published code for a verified successful Android build.
+
 ## Google navigation and permissions — 0.6.0
 
 One unified passenger/driver APK. Google Maps URLs provide free external directions/navigation without an API key. The app includes foreground-permission onboarding and native Google Maps SDK wiring, which stays inactive until a restricted Android SDK key is configured. The temporary OSM picker remains labelled until that setup is done. No paid Google Routes request is sent by default. In-app road-distance/price estimates require the configured project backend, a server-side Google Routes key, billing and enforced quotas. See [Google Maps setup and price calculation](docs/ROUTING.md).
