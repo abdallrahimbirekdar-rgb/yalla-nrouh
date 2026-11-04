@@ -2,7 +2,7 @@ import {useCallback,useEffect,useRef,useState} from 'react';
 import {AppState,Platform} from 'react-native';
 import * as Location from 'expo-location';
 import {currentPosition,PositionError,type PositionFailure} from './current-position';
-import {getWebPosition,webLocationGranted} from './web-position';
+import {getWebPosition,recentWebPosition,webLocationGranted} from './web-position';
 import {isCoordinate,type Coordinate} from './geo';
 
 let browserPermissionFix:Coordinate|null=null;
@@ -26,29 +26,65 @@ export function useCurrentPosition(enabled:boolean){
  const [camera,setCamera]=useState<CameraTarget>();const [busy,setBusy]=useState(false),[failure,setFailure]=useState<PositionFailure|null>(null);
  const generation=useRef(0),alive=useRef(true),running=useRef(false),located=useRef(false),manual=useRef(false);
  const locate=useCallback(async(ask=false)=>{
-  if(running.current)return;const id=++generation.current;running.current=true;setBusy(true);setFailure(null);
-  try{const point=await currentPosition(adapter,ask);if(alive.current&&id===generation.current){located.current=true;setCamera({point,revision:id})}}
-  catch(error){if(alive.current&&id===generation.current)setFailure(error instanceof PositionError?error.code:'position')}
-  finally{running.current=false;if(alive.current)setBusy(false)}
+  if(running.current)return;
+  const id=++generation.current;running.current=true;setBusy(true);setFailure(null);
+  try{
+   const point=await currentPosition(adapter,ask);
+   if(alive.current&&id===generation.current){located.current=true;setCamera({point,revision:id})}
+  }catch(error){
+   if(alive.current&&id===generation.current)setFailure(error instanceof PositionError?error.code:'position');
+  }finally{
+   running.current=false;
+   if(alive.current)setBusy(false);
+  }
  },[]);
  const chooseManually=useCallback(()=>{manual.current=true;generation.current++},[]);
+ const locateOnTap=useCallback(()=>{manual.current=false;return locate(true)},[locate]);
  useEffect(()=>{alive.current=true;generation.current++;return()=>{alive.current=false}},[]);
  useEffect(()=>{
   if(!enabled)return;
-  // Only auto-locate after an existing site/native grant; a new grant needs a tap.
-  const start=()=>{if(!located.current&&!manual.current)void locate(false)};
-  if(AppState.currentState==='active'||Platform.OS==='web')start();
-  const subscription=AppState.addEventListener('change',value=>{if(value==='active')start()});
-  if(Platform.OS!=='web')return()=>subscription.remove();
-  const onNativeGrant=(event:Event)=>{if((event as CustomEvent).detail?.granted===true)start()};
+  let active=true,delayed:ReturnType<typeof setTimeout>|undefined,lastResumeAt=0;
+  // Auto-centre at cold start and when the user returns to the app. Never
+  // prompt again in the background; only read an already granted permission.
+  const start=(onResume=false)=>{
+   if(!active||manual.current||!onResume&&located.current)return;
+   if(onResume&&Date.now()-lastResumeAt<1800)return;
+   if(running.current){
+    if(delayed)clearTimeout(delayed);
+    delayed=setTimeout(()=>{delayed=undefined;start(onResume)},350);
+    return;
+   }
+   if(onResume)lastResumeAt=Date.now();
+   void locate(false);
+  };
+  const recent=Platform.OS==='web'?recentWebPosition():null;
+  if(recent&&!manual.current){
+   const id=++generation.current;located.current=true;setFailure(null);
+   setCamera({point:recent,revision:id});
+  }else start(false);
+  const subscription=AppState.addEventListener('change',value=>{if(value==='active')start(true)});
+  if(Platform.OS!=='web')return()=>{active=false;subscription.remove();if(delayed)clearTimeout(delayed)};
+  const onNativeGrant=(event:Event)=>{if((event as CustomEvent).detail?.granted===true)start(false)};
   const onWebFix=(event:Event)=>{
    const point=(event as CustomEvent).detail;
    if(!isCoordinate(point)||manual.current)return;
    const id=++generation.current;located.current=true;setFailure(null);setCamera({point,revision:id});
   };
+  const onNativeVisibility=(event:Event)=>{
+   if((event as CustomEvent).detail?.active===true)start(true);
+  };
+  const onVisibility=()=>{if(document.visibilityState==='visible')start(true)};
   window.addEventListener('yalla:native-location-permission',onNativeGrant);
   window.addEventListener('yalla:location-ready',onWebFix);
-  return()=>{subscription.remove();window.removeEventListener('yalla:native-location-permission',onNativeGrant);window.removeEventListener('yalla:location-ready',onWebFix)};
+  window.addEventListener('yalla:native-visibility',onNativeVisibility);
+  document.addEventListener('visibilitychange',onVisibility);
+  return()=>{
+   active=false;subscription.remove();if(delayed)clearTimeout(delayed);
+   window.removeEventListener('yalla:native-location-permission',onNativeGrant);
+   window.removeEventListener('yalla:location-ready',onWebFix);
+   window.removeEventListener('yalla:native-visibility',onNativeVisibility);
+   document.removeEventListener('visibilitychange',onVisibility);
+  };
  },[enabled,locate]);
- return {camera,busy,failure,locate:()=>locate(true),chooseManually};
+ return {camera,busy,failure,locate:locateOnTap,chooseManually};
 }
