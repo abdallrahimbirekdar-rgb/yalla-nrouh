@@ -86,6 +86,7 @@ export async function cloudRequestRide(token:string,draft:TripDraft):Promise<{ri
   return rows[0];
 }
 export const cloudCancelRide=(token:string,id:string)=>rpc<boolean>('cancel_ride',token,{p_ride_id:id});
+export const cloudReleaseRide=(token:string,id:string)=>rpc<boolean>('release_ride',token,{p_ride_id:id});
 export const cloudPassengerPin=(token:string,id:string)=>rpc<string|null>('passenger_ride_pin',token,{p_ride_id:id});
 export const cloudRegisterDriver=(token:string,region:number,category:string)=>rpc<boolean>('register_driver',token,{p_region:region,p_category:category});
 export const cloudSetDriverOnline=(token:string,online:boolean)=>rpc<boolean>('set_driver_online',token,{p_online:online});
