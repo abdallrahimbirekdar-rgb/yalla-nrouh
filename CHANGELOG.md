@@ -1,3 +1,8 @@
+## 0.6.4 — Start at the current location
+- Centre the home Google map on a fresh foreground position after permission is granted, on web and Android.
+- Add My current location to re-centre, with a blue location marker and clear permission/GPS/timeout states.
+- Keep manually chosen pickup/address intact; a late GPS response cannot move the camera after manual selection.
+
 ## 0.6.3 — Google Maps on both platforms
 - Use Maps JavaScript API on web and the Google SDK on Android, with the shared booking interface and centred logo.
 - Remove active OSM fallback; slow connections keep the Google provider.

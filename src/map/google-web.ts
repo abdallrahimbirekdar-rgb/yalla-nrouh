@@ -9,6 +9,7 @@ export interface GoogleMap {
  getBounds:()=>{contains:(point:LatLng)=>boolean}|undefined;
  getCenter:()=>{lat:()=>number;lng:()=>number}|undefined;
  setCenter:(point:LatLng)=>void;
+ setZoom:(zoom:number)=>void;
  fitBounds:(bounds:unknown,padding?:number)=>void;
 }
 export interface GoogleMarker {position:LatLng|undefined;map:GoogleMap|null;gmpDraggable:boolean;addListener:(name:string,callback:(event:MapEvent)=>void)=>Listener}

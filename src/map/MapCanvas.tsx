@@ -6,7 +6,8 @@ import {useMapNetwork} from '../connectivity';
 import {Icon,Label,useText,useTheme} from '../ui';
 import {mapPolicy} from './network-policy';
 import MapContent from './MapContent';
-export default function MapCanvas(props:{point:Coordinate|null;onChange:(point:Coordinate)=>void;compact?:boolean;route?:Coordinate[];readOnly?:boolean}){
+import type {CameraTarget} from '../use-current-position';
+export default function MapCanvas(props:{point:Coordinate|null;onChange:(point:Coordinate)=>void;compact?:boolean;route?:Coordinate[];readOnly?:boolean;cameraTarget?:CameraTarget}){
  const {state,ready}=useApp();const {colors}=useTheme();const t=useText();const network=useMapNetwork();const policy=mapPolicy(network,state.preferences.dataSaver);
  const [mounted,setMounted]=useState(false);
  useEffect(()=>{
