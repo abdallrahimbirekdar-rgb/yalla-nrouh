@@ -16,6 +16,8 @@ on:
       - 'assets/logo-approved.png'
       - 'src/site-shell.tsx'
       - 'src/position-jobs.ts'
+      - 'src/foreground-fix.ts'
+      - 'src/current-position.ts'
       - 'src/site-shell-policy.ts'
       - 'src/site-bridge.ts'
       - 'src/permissions-intro.tsx'

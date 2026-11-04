@@ -81,7 +81,7 @@ test('unresponsive Android location bridge fails within a fixed timeout',t=>with
  t.mock.timers.enable({apis:['setTimeout']});
  host.ReactNativeWebView={postMessage:()=>{}};
  const locating=siteCurrentPosition(false);
- t.mock.timers.tick(11000);
+ t.mock.timers.tick(25000);
  await assert.rejects(locating,error=>error instanceof PositionError&&error.code==='timeout');
 }));
 
@@ -111,4 +111,17 @@ test('Android ride tracking rejects coarse GPS instead of inventing paid distanc
   }})));
  }};
  await assert.rejects(siteCurrentFix(false),error=>error instanceof PositionError&&error.code==='position');
+}));
+
+test('an approximate Android grant has a distinct actionable error',async()=>withLocationBrowser({},async host=>{
+ host.ReactNativeWebView={postMessage:raw=>{const {id}=JSON.parse(raw);queueMicrotask(()=>host.dispatchEvent(new CustomEvent('yalla:native-position',{detail:{id,point:null,error:'accuracy'}})))}};
+ await assert.rejects(siteCurrentPosition(false),error=>error.code==='accuracy');
+}));
+
+test('a fresh Android fix after the old short deadline still reaches the website',t=>withLocationBrowser({},async host=>{
+ t.mock.timers.enable({apis:['setTimeout']});let id;
+ host.ReactNativeWebView={postMessage:raw=>{id=JSON.parse(raw).id}};
+ const task=siteCurrentPosition(false);t.mock.timers.tick(15000);
+ host.dispatchEvent(new CustomEvent('yalla:native-position',{detail:{id,point:{latitude:51.48,longitude:7.21}}}));
+ assert.deepEqual(await task,{latitude:51.48,longitude:7.21});
 }));

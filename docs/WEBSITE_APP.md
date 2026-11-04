@@ -54,3 +54,13 @@ Automated checks cover persistence and refresh without password storage, rejecti
 A cached Pages document can reference the previous hashed JavaScript bundle after a deployment. Deleting that bundle can leave only the download banner and a blank app. The web workflow now retains published files and restores the last six published asset archives before deployment, while never restoring old HTML over the new build. A regression test verifies old bundles remain available, new files win, and current HTML is preserved.
 
 The HTML shows a bounded startup/retry message until React mounts. Web fonts load without blocking account/map rendering. No automatic page reload erases an unfinished edit; retry is a user action and stored data stays intact.
+
+
+## Native GPS isolation 0.9.1 / code 19
+The Android root no longer initializes the legacy native AppProvider, AuthProvider, SQLite preferences, fonts or native permission intro before opening the live website. Accounts, settings and drafts have a single website owner. The wrapper is limited to its WebView, foreground permissions, lifecycle and notifications. A new installation grants location from the website's deliberate My location action through the single Android bridge.
+
+The previous passenger request used balanced accuracy and timed out before trying high accuracy when no first fix arrived. The replacement uses a temporary high-accuracy foreground subscription from the start, accepts only a recent measured fix (250 m for the passenger map, 50 m for metering), waits up to 20 seconds and removes the subscription on success, deadline or backgrounding, including late registration. Concurrent requests share a task. Cache is bounded to 60 seconds/250 m (30 seconds/50 m for metering). No background service is added.
+
+A deliberate location tap may show Android's high-accuracy location-services dialog when network location is off. App permission and provider state are checked separately; approximate-only grants produce a precise-location instruction. Settings never start GPS on mount and no longer mark a timeout as a denied permission. Native provider diagnostics show app version, precise/coarse permission, satellite/network provider and services state without coordinates or account data. The typed settings action opens OS app settings.
+
+Device acceptance remains required: upgrade in place; open Settings and change theme/back without waiting for GPS; test denied/coarse/precise permission, service-off dialog, fresh GPS indoors/outside, timeout/retry, background cancellation, return from OS settings, map centring and 500 m pickup checks. Unit tests and APK compilation do not establish physical reception on the owner's phone.

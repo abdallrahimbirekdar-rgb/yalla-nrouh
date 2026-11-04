@@ -20,3 +20,6 @@ export async function siteCurrentPosition(askPermission:boolean):Promise<Coordin
   return point;
  }catch{throw new PositionError('position')}
 }
+
+// Only the website sends typed native bridge actions.
+export async function nativeAction(_type:'alerts-enable'|'notify'|'location-settings',_text?:{title:string;body:string}):Promise<boolean>{return false}

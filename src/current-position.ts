@@ -1,5 +1,5 @@
 import {isCoordinate,type Coordinate} from './geo.ts';
-export type PositionFailure='permission'|'services'|'timeout'|'position';
+export type PositionFailure='permission'|'accuracy'|'services'|'timeout'|'position';
 export class PositionError extends Error {code:PositionFailure;constructor(code:PositionFailure){super(code);this.code=code}}
 export type PositionAdapter={
  permission:()=>Promise<{granted:boolean}>;

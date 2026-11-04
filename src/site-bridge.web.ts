@@ -16,7 +16,7 @@ function listenNativePosition(host:SiteWindow){
   if((event as CustomEvent).detail?.id===latestNativeGpsId&&isCoordinate(point))announceWebPosition(point);
  });
 }
-export type NativePositionResult={point:Coordinate|null;error:'permission'|'services'|'position'|'timeout'|'unsupported'|null;fix?:Fix};
+export type NativePositionResult={point:Coordinate|null;error:'permission'|'accuracy'|'services'|'position'|'timeout'|'unsupported'|null;fix?:Fix};
 export function isNativeWebView():boolean{
  return typeof window!=='undefined'&&Boolean((window as SiteWindow).ReactNativeWebView);
 }
@@ -31,7 +31,7 @@ export function nativeCurrentPosition(askPermission:boolean,signal?:AbortSignal,
    const detail=(event as CustomEvent).detail;
    if(detail?.id!==id)return;
    const point=isCoordinate(detail.point)?detail.point:null;
-   const error=point?null:['permission','services','position','timeout'].includes(detail.error)?detail.error as NativePositionResult['error']:'position';
+   const error=point?null:['permission','accuracy','services','position','timeout'].includes(detail.error)?detail.error as NativePositionResult['error']:'position';
    const rawFix=detail.fix;
    const fix=point&&rawFix&&Number.isFinite(rawFix.accuracy)&&rawFix.accuracy>=0&&Number.isFinite(rawFix.time)&&rawFix.time>0?{...point,accuracy:rawFix.accuracy,time:rawFix.time} as Fix:undefined;
    cleanup();
@@ -39,7 +39,7 @@ export function nativeCurrentPosition(askPermission:boolean,signal?:AbortSignal,
   };
   const cleanup=()=>{clearTimeout(timer);window.removeEventListener('yalla:native-position',finish);signal?.removeEventListener('abort',abort)};
   const abort=()=>{cleanup();resolve({point:null,error:'unsupported'})};
-  const timer=setTimeout(()=>{cleanup();resolve({point:null,error:'timeout'})},11000);
+  const timer=setTimeout(()=>{cleanup();resolve({point:null,error:'timeout'})},askPermission?60000:25000);
   window.addEventListener('yalla:native-position',finish);
   if(signal?.aborted){abort();return}
   signal?.addEventListener('abort',abort,{once:true});
@@ -60,7 +60,7 @@ export async function siteCurrentPosition(askPermission:boolean):Promise<Coordin
   const result=await nativeCurrentPosition(askPermission);
   if(result.point)return result.point;
   throw new PositionError(
-   result.error==='permission'||result.error==='services'||result.error==='timeout'
+   result.error==='permission'||result.error==='accuracy'||result.error==='services'||result.error==='timeout'
     ?result.error:'position'
   );
  }
@@ -75,7 +75,7 @@ export async function siteCurrentFix(askPermission:boolean):Promise<Fix>{
  const result=await nativeCurrentPosition(askPermission,undefined,true);
  if(result.fix&&result.fix.accuracy<=50)return result.fix;
  throw new PositionError(
-  result.error==='permission'||result.error==='services'||result.error==='timeout'
+  result.error==='permission'||result.error==='accuracy'||result.error==='services'||result.error==='timeout'
    ?result.error:'position'
  );
 }
@@ -105,7 +105,7 @@ export async function loadSiteState(storage:Pick<Storage,'getItem'|'setItem'>,ke
  return saved;
 }
 
-export function nativeAction(type:'alerts-enable'|'notify',text?:{title:string;body:string}):Promise<boolean>{
+export function nativeAction(type:'alerts-enable'|'notify'|'location-settings',text?:{title:string;body:string}):Promise<boolean>{
  const host=window as SiteWindow;const bridge=host.ReactNativeWebView;if(!bridge)return Promise.resolve(false);
  const id=Date.now().toString(36)+'-'+Math.random().toString(36).slice(2);
  return new Promise((resolve,reject)=>{
