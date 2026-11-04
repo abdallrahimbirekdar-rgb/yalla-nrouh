@@ -132,3 +132,16 @@ test('central fare settings read numeric server values and block non-admin updat
   await assert.rejects(()=>cloudUpdateFareSettings(token,tariff),e=>e instanceof CloudError&&e.kind==='not_admin');
  });
 });
+
+test('signed-in requests resolve a refreshed access token before calling the server',async()=>{
+ const {cloudSetSessionBridge}=await import('../src/cloud-api.ts');let current=token;
+ cloudSetSessionBridge(()=>current,async()=>{current='refreshed-user-access-token';return current});
+ try{await withFetch(async(_url,options)=>{assert.equal(options.headers.Authorization,'Bearer refreshed-user-access-token');return reply({id:'owner'})},async()=>assert.equal((await cloudWhoAmI(token)).id,'owner'))}
+ finally{cloudSetSessionBridge(null,null)}
+});
+test('stale requests cannot borrow the next signed-in account session',async()=>{
+ const {cloudSetSessionBridge}=await import('../src/cloud-api.ts');
+ cloudSetSessionBridge(()=>'other-account-access-token',async()=>{throw Error('must not resolve a different account')});
+ try{await withFetch(()=>{throw Error('must not send stale request')},async()=>assert.rejects(()=>cloudWhoAmI(token),e=>e.status===401))}
+ finally{cloudSetSessionBridge(null,null)}
+});

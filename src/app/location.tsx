@@ -7,6 +7,7 @@ import {type CameraTarget,useCurrentPosition} from '../use-current-position';
 import {pickupAllowed,MAX_PICKUP_METERS} from '../pickup-policy';
 import MapCanvas from '../map/MapCanvas';
 import {searchGooglePlaces} from '../map/search-places';
+import {useAuth} from '../auth';
 import {useApp} from '../context';
 import {formatCoordinate,type Coordinate} from '../geo';
 import {type Place} from '../api';
@@ -15,14 +16,14 @@ import {Button,Field,Label,Page,Panel,useText} from '../ui';
 export default function LocationPicker(){
  const {target,returnTo}=useLocalSearchParams<{target:string;returnTo?:string}>();
  const pickup=target==='pickup',fromCloud=returnTo==='cloud';
- const {draft,setDraft,state,ready}=useApp();const t=useText();
- const gps=useCurrentPosition(ready);const original=pickup?draft.pickupPoint:draft.destinationPoint;
+ const {draft,setDraft,state,ready}=useApp();const auth=useAuth();const t=useText();
+ const gps=useCurrentPosition(ready&&pickup);const original=pickup?draft.pickupPoint:draft.destinationPoint;
  const initialCenter=useRef<Coordinate|undefined>(original??draft.pickupPoint??(Platform.OS==='web'?recentWebPosition(60000):null)??undefined);
  const [point,setPoint]=useState<Coordinate|null>(original??null),[label,setLabel]=useState(pickup?draft.pickup:draft.destination);
  const [query,setQuery]=useState(''),[results,setResults]=useState<Place[]>([]),[saved,setSaved]=useState<SavedPlace[]>([]);
  const [message,setMessage]=useState(''),[busy,setBusy]=useState(false),[saving,setSaving]=useState(false),[loaded,setLoaded]=useState(false);
  const [selectionCamera,setSelectionCamera]=useState<CameraTarget>();
- const alive=useRef(true),task=useRef(0);const token=cloudGetToken();
+ const alive=useRef(true),task=useRef(0);const token=auth.session?.access_token??null;
  useEffect(()=>{alive.current=true;return()=>{alive.current=false}},[]);
  const loadSaved=useCallback(async()=>{
   if(!token)return;
@@ -77,9 +78,9 @@ export default function LocationPicker(){
    {results.length>0&&<Label muted>{t('نتائج Google Maps — اختر نتيجة ثم عدّل النقطة إن أردت','Google Maps results — choose one, then move the point if needed')}</Label>}
    {results.map(place=><Button key={place.id} secondary title={place.label} onPress={()=>{choose(place.coordinate,place.label);setSelectionCamera({point:place.coordinate,revision:Date.now(),isLocation:false});setResults([])}}/>)}
   </Panel>}
-  <MapCanvas point={point} initialCenter={initialCenter.current} cameraTarget={selectionCamera??gps.camera} onChange={next=>choose(next)}/>
+  <MapCanvas point={point} initialCenter={initialCenter.current} cameraTarget={selectionCamera??gps.camera} onChange={next=>{gps.chooseManually();choose(next)}}/>
   {(gps.busy||busy)&&<ActivityIndicator accessibilityLabel={t('جارٍ التحميل','Loading')}/>}
-  {gps.failure&&<View accessibilityRole="alert"><Label>{t('تعذر تحديد موقعك الحالي. تأكد من تشغيل الموقع والسماح بالموقع الدقيق ثم أعد المحاولة.','Could not get your location. Turn on location, allow precise access, then try again.')}</Label><Button secondary title={t('تحديد موقعي مجددًا','Find my location again')} onPress={()=>void selectCurrent()} disabled={gps.busy}/></View>}
+  {pickup&&gps.failure&&<View accessibilityRole="alert"><Label>{t('تعذر تحديد موقعك الحالي. تأكد من تشغيل الموقع والسماح بالموقع الدقيق ثم أعد المحاولة.','Could not get your location. Turn on location, allow precise access, then try again.')}</Label><Button secondary title={t('تحديد موقعي مجددًا','Find my location again')} onPress={()=>void selectCurrent()} disabled={gps.busy}/></View>}
   {point&&<Panel>
    <Label>{formatCoordinate(point)}</Label>
    <Field label={t('اسم المكان أو وصف نقطة الالتقاء','Place name or meeting point')} value={label} onChangeText={setLabel} maxLength={200}/>
@@ -89,7 +90,7 @@ export default function LocationPicker(){
   </Panel>}
   {!pickup&&<Panel>
    <Label large>{t('أماكني المحفوظة','My saved places')}</Label>
-   {!token?<><Label muted>{t('سجّل الدخول لعرض أماكنك وحفظ المنزل والعمل وغيرها.','Sign in to view and save home, work and other places.')}</Label><Button secondary title={t('الدخول إلى حسابي','Sign in to my account')} onPress={()=>router.push('/cloud')}/></>:<>
+   {!token?<><Label muted>{t('سجّل الدخول لعرض أماكنك وحفظ المنزل والعمل وغيرها.','Sign in to view and save home, work and other places.')}</Label><Button secondary title={t('الدخول إلى حسابي','Sign in to my account')} onPress={()=>router.push({pathname:'/account',params:{next:'destination'}})}/></>:<>
     {!loaded?<Button secondary title={t('تحميل الأماكن المحفوظة','Load saved places')} onPress={()=>void loadSaved()}/>:saved.length===0&&<Label muted>{t('لم تحفظ أماكن بعد. اختر نقطة وسمّها ثم اضغط حفظ المكان.','No saved places yet. Choose a point, name it and tap Save place.')}</Label>}
     {saved.map(place=><View key={place.id} style={{gap:6}}><Button secondary icon="bookmark" title={place.label} onPress={()=>{choose(place.coordinate,place.label);setSelectionCamera({point:place.coordinate,revision:Date.now(),isLocation:false})}}/><Button secondary title={t('حذف المكان المحفوظ','Delete saved place')} onPress={()=>void savePlace(place.id)} disabled={saving}/></View>)}
    </>}

@@ -46,3 +46,7 @@ test('first approved location is ready while the home map mounts',()=>withBrowse
  assert.deepEqual(recentWebPosition(12000),point);
  assert.equal(recentWebPosition(-1),null);
 }));
+
+test('a browser GPS implementation that never calls back cannot leave an endless spinner',t=>withBrowser({geolocation:{getCurrentPosition:()=>{}}},async()=>{
+ t.mock.timers.enable({apis:['setTimeout']});const pending=getWebPosition(1000);const rejected=assert.rejects(pending,e=>e.code==='timeout');t.mock.timers.tick(1500);await rejected;
+}));

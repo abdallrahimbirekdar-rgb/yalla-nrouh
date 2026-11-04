@@ -1,3 +1,11 @@
+# 0.9.0 — 2026-11-05
+- Rebuild map-first home with visible sign-in/account, saved places and a single route/fare/confirmed-server-request flow.
+- Add persistent Supabase Auth sessions, refresh, signup/recovery, local sign-out and server-verified admin navigation.
+- Replace public demo admin with shared rate management and protected driver approvals.
+- Replace main driver/history demo screens with account server rides and six-digit ride PINs.
+- Bound browser GPS waits; share native permission/GPS requests; improve WebView readiness, back and safe refresh behavior.
+- Retain earlier stored data; do not claim production dispatch, payment settlement or physical-device acceptance.
+
 ## 0.8.1 — startup recovery
 - Back up malformed saved data before recovering readable settings and drafts; surface a recovery notice instead of a permanent startup error.
 - Retry the Android website bootstrap and keep existing web data usable if the bridge is delayed. Protect first migration from writes after timeout.

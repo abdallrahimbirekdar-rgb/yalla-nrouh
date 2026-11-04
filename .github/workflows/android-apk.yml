@@ -15,6 +15,7 @@ on:
       - 'assets/monochrome-approved.png'
       - 'assets/logo-approved.png'
       - 'src/site-shell.tsx'
+      - 'src/position-jobs.ts'
       - 'src/site-shell-policy.ts'
       - 'src/site-bridge.ts'
       - 'src/permissions-intro.tsx'

@@ -1,3 +1,4 @@
+import {createPositionJobs} from './position-jobs';
 import React,{useEffect,useRef,useState} from 'react';
 import {ActivityIndicator,AppState,BackHandler,Linking,View} from 'react-native';
 import {SafeAreaView} from 'react-native-safe-area-context';
@@ -11,12 +12,17 @@ export default function SiteShell(){
  const {ready,state,draft,dispatch}=useApp();const t=useText();const {colors}=useTheme();const web=useRef<WebView>(null);
  const [url,setUrl]=useState(()=>SITE_URL+'?app=android&launch='+Date.now());
  const [failed,setFailed]=useState(false),[loading,setLoading]=useState(true),[available,setAvailable]=useState(false),[notice,setNotice]=useState('');
+ const permissionRequest=useRef<Promise<Location.LocationPermissionResponse>|null>(null);
+ const gpsJobs=useRef<ReturnType<typeof createPositionJobs<Location.LocationObject>>|null>(null);
+ if(!gpsJobs.current)gpsJobs.current=createPositionJobs(precise=>Location.getCurrentPositionAsync({accuracy:precise?Location.Accuracy.High:Location.Accuracy.Balanced,mayShowUserSettingsDialog:false}));
  const safe=useRef(false),canGoBack=useRef(false),loadedVersion=useRef<string|null>(null),checking=useRef(false),alive=useRef(true),checkAbort=useRef<AbortController|null>(null);
+ const navigationTimer=useRef<ReturnType<typeof setTimeout>|null>(null);
+ const finishLoading=()=>{if(navigationTimer.current)clearTimeout(navigationTimer.current);navigationTimer.current=null;setLoading(false)};
  const saved=useRef('');saved.current=JSON.stringify({storageVersion:2,state,draft});
  function refresh(){if(!safe.current){setNotice(t('احفظ بياناتك وأكمل الرحلة، ثم حدّث العرض من الصفحة الرئيسية.','Save your work and finish the ride, then refresh from the home page.'));return}setNotice('');setAvailable(false);setFailed(false);setLoading(true);safe.current=false;setUrl(SITE_URL+'?app=android&launch='+Date.now())}
- useEffect(()=>{alive.current=true;return()=>{alive.current=false;checkAbort.current?.abort()}},[]);
+ useEffect(()=>{alive.current=true;return()=>{alive.current=false;checkAbort.current?.abort();if(navigationTimer.current)clearTimeout(navigationTimer.current)}},[]);
  useEffect(()=>{
-  const listener=BackHandler.addEventListener('hardwareBackPress',()=>{if(failed||loading)return false;web.current?.injectJavaScript("if(window.dispatchEvent(new CustomEvent('yalla:native-back',{cancelable:true}))){window.ReactNativeWebView.postMessage(JSON.stringify({type:'back-default'}));}true;");return true});
+  const listener=BackHandler.addEventListener('hardwareBackPress',()=>{if(failed||loading)return false;web.current?.injectJavaScript("if(window.dispatchEvent(new CustomEvent('yalla:native-back',{cancelable:true}))&&window.dispatchEvent(new CustomEvent('yalla:native-back-default',{cancelable:true}))){window.ReactNativeWebView.postMessage(JSON.stringify({type:'back-default'}));}true;");return true});
   return()=>listener.remove();
  },[failed,loading]);
  useEffect(()=>{
@@ -37,11 +43,11 @@ export default function SiteShell(){
    onShouldStartLoadWithRequest={request=>{if(request.isTopFrame===false)return true;if(isSiteUrl(request.url))return true;if(externalLink(request.url))void Linking.openURL(request.url).catch(()=>setNotice(t('تعذر فتح الرابط الخارجي.','Could not open the link.')));return false}}
    onOpenWindow={event=>{const target=event.nativeEvent.targetUrl;if(externalLink(target))void Linking.openURL(target).catch(()=>setNotice(t('تعذر فتح الرابط.','Could not open the link.')))}}
    onNavigationStateChange={navigation=>{canGoBack.current=navigation.canGoBack}}
-   onLoadStart={()=>{setLoading(true);setFailed(false)}} onLoadEnd={()=>setLoading(false)}
+   onLoadStart={()=>{setLoading(true);setFailed(false);if(navigationTimer.current)clearTimeout(navigationTimer.current);navigationTimer.current=setTimeout(()=>{if(alive.current){setLoading(false);setFailed(true)}},30000)}} onLoadEnd={finishLoading}
    onError={()=>{setLoading(false);setFailed(true)}} onRenderProcessGone={()=>{setLoading(false);setFailed(true)}} onHttpError={event=>{if(event.nativeEvent.url===url&&event.nativeEvent.statusCode>=400){setLoading(false);setFailed(true)}}}
    onMessage={event=>{
     if(!isSiteUrl(event.nativeEvent.url))return;const message=readShellMessage(event.nativeEvent.data);if(!message)return;
-    if(message.type==='status'){safe.current=message.safeToReload;canGoBack.current=message.canGoBack;if(message.language&&message.language!==state.language)dispatch({type:'language',language:message.language});if(message.theme&&message.theme!==state.preferences.theme)dispatch({type:'preferences',preferences:{theme:message.theme}});return}
+    if(message.type==='status'){finishLoading();setFailed(false);safe.current=message.safeToReload;canGoBack.current=message.canGoBack;if(message.language&&message.language!==state.language)dispatch({type:'language',language:message.language});if(message.theme&&message.theme!==state.preferences.theme)dispatch({type:'preferences',preferences:{theme:message.theme}});return}
     if(message.type==='refresh'){refresh();return}
     if(message.type==='back-default'){if(canGoBack.current)web.current?.goBack();else BackHandler.exitApp();return}
     if(message.type==='location'){
@@ -56,7 +62,7 @@ export default function SiteShell(){
       try{
        if(AppState.currentState==='background'){send(null,'position');return}
        let permission=await Location.getForegroundPermissionsAsync();
-       if(!permission.granted&&message.askPermission)permission=await Location.requestForegroundPermissionsAsync();
+       if(!permission.granted&&message.askPermission){if(!permissionRequest.current)permissionRequest.current=Location.requestForegroundPermissionsAsync().finally(()=>{permissionRequest.current=null});permission=await permissionRequest.current;}
        if(!permission.granted){send(null,'permission');return}
        if(!await Location.hasServicesEnabledAsync()){send(null,'services');return}
        // Bounded last-known lookup: even a stalled cache read must not hold
@@ -80,10 +86,7 @@ export default function SiteShell(){
        let fresh:Location.LocationObject|null=null;
        try{
         fresh=await Promise.race([
-         Location.getCurrentPositionAsync({
-          accuracy:track?Location.Accuracy.High:Location.Accuracy.Balanced,
-          mayShowUserSettingsDialog:false,
-         }),
+         gpsJobs.current!(track),
          new Promise<never>((_,reject)=>{timeout=setTimeout(()=>reject(Error('timeout')),track?9500:7500)}),
         ]);
         if(allowed(fresh))transmit(fresh);
@@ -96,7 +99,7 @@ export default function SiteShell(){
         let refineTimeout:ReturnType<typeof setTimeout>|undefined;
         try{
          const precise=await Promise.race([
-          Location.getCurrentPositionAsync({accuracy:Location.Accuracy.High,mayShowUserSettingsDialog:false}),
+          gpsJobs.current!(true),
           new Promise<never>((_,reject)=>{refineTimeout=setTimeout(()=>reject(Error('timeout')),9500)}),
          ]);
          if(precise.coords.accuracy===null||fresh?.coords.accuracy===null||!fresh||precise.coords.accuracy<=fresh.coords.accuracy)

@@ -1,10 +1,14 @@
+import {readRideState,receiveRideState} from './cloud-ride-state.ts';
 import type {TripDraft} from './domain.ts';
 import {validTariff,type Tariff} from './meter.ts';
 import {isCoordinate} from './geo.ts';
 
 const API_ROOT='https://gokosprcqpdvqgahvquk.supabase.co';
 let volatileToken:string|null=null;
-export const cloudGetToken=()=>volatileToken;
+let sessionReader:(()=>string|null)|null=null;let tokenResolver:(()=>Promise<string>)|null=null;
+export function cloudSetSessionBridge(read:(()=>string|null)|null,resolve:(()=>Promise<string>)|null){sessionReader=read;tokenResolver=resolve}
+export const cloudGetToken=()=>sessionReader?sessionReader():volatileToken;
+export async function cloudCurrentToken():Promise<string>{if(tokenResolver)return tokenResolver();const token=cloudGetToken();if(!token)throw new CloudError(401,'login_required');return token}
 export const cloudSignOut=()=>{volatileToken=null};
 /** Supabase publishable key (not a service-role/secret key); safe for public clients. */
 const API_KEY='sb_publishable_0l-T6t_dTDt1OedSTIpLNA_uruCvJ8C';
@@ -30,7 +34,9 @@ const headers=(token?:string):Record<string,string>=>({
 async function call<T>(path:string,method:'GET'|'POST'|'PUT'|'PATCH',token?:string,body?:unknown):Promise<T>{
   const controller=new AbortController(), timeout=setTimeout(()=>controller.abort(),12000);
   try{
-    const response=await fetch(API_ROOT+path,{method,headers:headers(token),body:body===undefined?undefined:JSON.stringify(body),signal:controller.signal,credentials:'omit'});
+    if(token&&sessionReader&&token!==sessionReader())throw new CloudError(401,'login_required');
+    const activeToken=token&&tokenResolver?await cloudCurrentToken():token;
+    const response=await fetch(API_ROOT+path,{method,headers:headers(activeToken),body:body===undefined?undefined:JSON.stringify(body),signal:controller.signal,credentials:'omit'});
     const raw=await response.text();
     let data:unknown;
     try{data=raw?JSON.parse(raw):null}catch{throw new CloudError(response.status,'bad_response')}
@@ -67,7 +73,9 @@ export async function cloudWhoAmI(token:string):Promise<{id:string;email?:string
 }
 export async function cloudMyRides(token:string):Promise<CloudRide[]>{
   requireToken(token);
-  return call('/rest/v1/rides?select=id,passenger_id,driver_id,pickup,destination,pickup_lat,pickup_lng,destination_lat,destination_lng,category,region,status,created_at,updated_at&order=created_at.desc&limit=30','GET',token);
+  const owner=readRideState().owner;
+  const rides=await call<CloudRide[]>('/rest/v1/rides?select=id,passenger_id,driver_id,pickup,destination,pickup_lat,pickup_lng,destination_lat,destination_lng,category,region,status,created_at,updated_at&order=created_at.desc&limit=30','GET',token);
+  receiveRideState(owner,rides);return rides;
 }
 export async function cloudMyDriver(token:string):Promise<CloudDriver|null>{
   requireToken(token);

@@ -1,5 +1,5 @@
 import {isCoordinate,type Coordinate} from './geo.ts';
-import {announceWebPosition,getWebPosition,webLocationGranted} from './web-position.ts';
+import {announceWebPosition,getWebPosition,refineWebPosition,webLocationGranted} from './web-position.ts';
 import {PositionError} from './current-position.ts';
 import type {Fix} from './meter.ts';
 export type SiteWindow=Window&{ReactNativeWebView?:{postMessage:(message:string)=>void};__YALLA_NATIVE_LOCATION_GRANTED__?:boolean};
@@ -66,7 +66,7 @@ export async function siteCurrentPosition(askPermission:boolean):Promise<Coordin
  }
  // Ordinary browsers still use their own permission once.
  if(!askPermission&&!await webLocationGranted())throw new PositionError('permission');
- return getWebPosition(6500);
+ const point=await getWebPosition(6500);refineWebPosition();return point;
 }
 // Driver metering needs the actual native GPS timestamp and accuracy.
 // Invalid/inaccurate fixes are NOT counted as traveled distance.

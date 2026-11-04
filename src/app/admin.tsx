@@ -1,50 +1,49 @@
-import React,{useEffect,useState} from 'react';
-import {cloudGetToken,cloudIsAdmin,cloudFareSettings,cloudUpdateFareSettings} from '../cloud-api';
+import React,{useCallback,useEffect,useState} from 'react';
+import {ActivityIndicator,View} from 'react-native';
 import {router} from 'expo-router';
+import {useAuth} from '../auth';
 import {useApp} from '../context';
-import {parseAmount,priceForRoute,suggestedNewSypTariff,type Tariff} from '../meter';
-import {Button,Field,Label,Page,Panel,useText} from '../ui';
-export default function Admin(){const {state,dispatch}=useApp();const t=useText();const [base,setBase]=useState(state.tariff?String(state.tariff.base):''),[perKm,setPerKm]=useState(state.tariff?String(state.tariff.perKm):''),[perMinute,setPerMinute]=useState(state.tariff?String(state.tariff.perMinute):''),[peak,setPeak]=useState(String(state.tariff?.peakMultiplier??1)),[phone,setPhone]=useState(state.preferences.smsNumber),[message,setMessage]=useState('');
- const token=cloudGetToken();const [staff,setStaff]=useState(false),[sharedBusy,setSharedBusy]=useState(false);
- useEffect(()=>{let alive=true;if(token)void cloudIsAdmin(token).then(value=>{if(alive)setStaff(value)}).catch(()=>{});return()=>{alive=false}},[token]);
- async function sharedRates(publish:boolean){if(!token||!staff||sharedBusy)return;setSharedBusy(true);try{if(publish){if(!previewTariff)return;await cloudUpdateFareSettings(token,previewTariff)}const rates=await cloudFareSettings(token);setBase(String(rates.base));setPerKm(String(rates.perKm));setPerMinute(String(rates.perMinute));setPeak(String(rates.peakMultiplier??1));dispatch({type:'tariff',tariff:rates});setMessage(publish?t('تم نشر التسعيرة المشتركة لجميع حسابات التطبيق.','Shared rates saved for all app accounts.'):t('تم تحميل التسعيرة المشتركة.','Shared rates loaded.'))}catch{setMessage(t('تعذر تحديث التسعيرة المشتركة. تحقق من الاتصال وصلاحيات حساب الإدارة.','Could not update shared rates. Check internet and your admin account.'))}finally{setSharedBusy(false)}}
- const values=[base,perKm,perMinute,peak].map(parseAmount);
- const validInputs=values.every(value=>value!==null)&&values[3]!>=1&&values[3]!<=10;
- const previewTariff:Tariff|null=validInputs?{base:values[0]!,perKm:values[1]!,perMinute:values[2]!,peakMultiplier:values[3]!,updatedAt:new Date().toISOString()}:null;
- const example=previewTariff?priceForRoute(5000,10,previewTariff):null;
- function saveTariff(){
-  if(!validInputs||!previewTariff){setMessage(t('أدخل أسعارًا صحيحة ومعامل ذروة بين 1 و10، دون فواصل آلاف.','Enter valid rates and a peak factor from 1 to 10, with no thousands marks.'));return;}
-  dispatch({type:'tariff',tariff:previewTariff});
-  setMessage(t('حُفظت ثوابت الأجرة للرحلات الجديدة على هذا الجهاز. التغييرات لا تمس رحلات بدأت سابقًا.','New fare settings were saved on this device. Earlier rides do not change.'));
- }
- function applySuggestedTariff(){
-  const tariff={...suggestedNewSypTariff,updatedAt:new Date().toISOString()};
-  setBase(String(tariff.base));setPerKm(String(tariff.perKm));setPerMinute(String(tariff.perMinute));setPeak(String(tariff.peakMultiplier));
-  dispatch({type:'tariff',tariff});
-  setMessage(t('تم تطبيق ثوابت التسعير المقترحة بالليرة السورية الجديدة للرحلات القادمة على هذا الجهاز.','Suggested prices in new Syrian pounds now apply to future rides on this device.'));
- }
- function savePhone(){const value=phone.trim().replace(/[٠-٩]/g,c=>String(c.charCodeAt(0)-1632));if(value!==''&&!/^\+?\d{7,15}$/.test(value)){setMessage(t('أدخل رقمًا صحيحًا من 7 إلى 15 رقمًا، أو اتركه فارغًا.','Enter a valid phone number of 7 to 15 digits, or leave it empty.'));return;}dispatch({type:'preferences',preferences:{smsNumber:value}});setMessage(t('تم تطبيق رقم الرسائل محليًا.','SMS number applied on this phone.'));}
- return <Page title={t('إدارة النسخة التجريبية','Demo admin')}>
- <Label muted>{t('هذه شاشة محاكاة مفتوحة. التغييرات تخص هذا الجهاز فقط. الإدارة الفعلية وتعميم الأسعار تحتاجان حسابًا محميًا وخادمًا.','This is an open demo screen. Changes are for this phone only. Live admin and shared prices need a protected account and server.')}</Label>
- <Panel>
-  <Label>{t('ثوابت حساب الأجرة — الليرة السورية الجديدة','Fare settings — new Syrian pounds')}</Label>
-  <Label muted>{t('قيم تجريبية مقترحة وفق مقياس الأسعار الجديد، وليست تعرفة رسمية. يمكنك تعديل كل قيمة وحفظها.','Suggested demo rates in new Syrian pounds, not an official taxi tariff. You can edit and save every value.')}</Label>
-  <Label muted>{t('الأجرة = (فتح العداد + الكيلومترات × سعر الكيلومتر + الدقائق × سعر الدقيقة) × معامل الذروة','Fare = (Base + km × km price + minutes × minute price) × peak factor')}</Label>
-  <Field label={t('أجرة فتح العداد (ل.س)','Starting fare (SYP)')} value={base} onChangeText={setBase} keyboardType="decimal-pad"/>
-  <Field label={t('سعر الكيلومتر الواحد (ل.س)','Price per kilometre (SYP)')} value={perKm} onChangeText={setPerKm} keyboardType="decimal-pad"/>
-  <Field label={t('سعر الدقيقة الواحدة (ل.س)','Price per minute (SYP)')} value={perMinute} onChangeText={setPerMinute} keyboardType="decimal-pad"/>
-  <Field label={t('معامل الذروة','Peak multiplier')} value={peak} onChangeText={setPeak} keyboardType="decimal-pad"/>
-  <Label muted>{t('ضع 1 للسعر العادي، أو 1.5 لزيادة 50٪، أو 2 لمضاعفة الأجرة.','Use 1 for normal price, 1.5 for a 50% increase, or 2 for double fare.')}</Label>
-  {example!==null&&<Label>{t('مثال توضيحي: رحلة 5 كم و10 دقائق','Example: a 5 km, 10 minute ride')}: {example.toLocaleString('en-US')} {t('ل.س','SYP')}</Label>}
-  <Button secondary title={t('تطبيق ثوابت مقترحة لليرة الجديدة','Use suggested new-SYP rates')} onPress={applySuggestedTariff}/>
-  <Button title={t('حفظ ثوابت التسعير','Save fare settings')} onPress={saveTariff} disabled={!validInputs}/>
-  {staff&&<Panel><Label>{t('التسعيرة المشتركة — حساب إدارة موثّق','Shared rates — verified admin')}</Label><Button secondary title={t('تحميل التسعيرة المشتركة','Load shared rates')} onPress={()=>void sharedRates(false)} disabled={sharedBusy}/><Button title={t('نشر هذه الثوابت لجميع المستخدمين','Save these rates for all users')} onPress={()=>void sharedRates(true)} disabled={sharedBusy||!validInputs}/></Panel>}
-  <Label muted>{t('هذه إعدادات محلية تجريبية لا تصل إلى باقي المستخدمين. تُثبت الثوابت عند بدء الرحلة ولا تتغير للرحلات السابقة. الدفع نقدًا فقط.','These are local demo settings, not shared with other users. Rates are fixed when a ride starts. Cash only.')}</Label>
- </Panel>
- <Panel><Field label={t('رقم استقبال الرسائل للتجربة — اختياري','SMS recipient for testing — optional')} value={phone} onChangeText={setPhone} keyboardType="phone-pad" maxLength={16}/><Button secondary title={t('حفظ رقم الرسائل','Save SMS number')} onPress={savePhone}/><Label muted>{t('هذا لا يربط بوابة رسائل ولا يجعل الطلبات مقبولة تلقائيًا.','This does not connect an SMS service or accept requests on its own.')}</Label></Panel>
- {message!==''&&<Label>{message}</Label>}
- <Panel><Label>{t('السائق التجريبي','Demo driver')}</Label><Label>{state.driver.approved?t('الحالة: معتمد','Status: Approved'):t('الحالة: بانتظار المراجعة','Status: Waiting for review')}</Label><Button title={state.driver.approved?t('تعليق السائق التجريبي','Suspend demo driver'):t('اعتماد السائق التجريبي','Approve demo driver')} onPress={()=>dispatch({type:'approve',approved:!state.driver.approved})}/></Panel>
- <Panel><Label>{t('عدد الطلبات التجريبية','Demo requests')}: {state.trips.length}</Label><Label>{t('الرحلات المكتملة','Completed rides')}: {state.trips.filter(trip=>trip.status==='completed').length}</Label></Panel>
- <Button secondary title={t('حالة الخدمات','Service status')} onPress={()=>router.push('/services')}/>
+import {cloudCurrentToken,cloudFareSettings,cloudUpdateFareSettings,cloudStaffDrivers,cloudApproveDriver,type StaffDriver} from '../cloud-api';
+import {authErrorMessage} from '../auth-errors';
+import {parseAmount,priceForRoute,type Tariff} from '../meter';
+import {regions} from '../domain';
+import {Button,Field,Icon,Label,Page,Panel,useText,useTheme} from '../ui';
+export default function Admin(){
+ const auth=useAuth();const userId=auth.session?.user.id;const {state,dispatch}=useApp();const t=useText();const {colors}=useTheme();
+ const [loaded,setLoaded]=useState(false),[busy,setBusy]=useState(false),[notice,setNotice]=useState(''),[drivers,setDrivers]=useState<StaffDriver[]>([]),[updated,setUpdated]=useState('');
+ const [base,setBase]=useState(''),[perKm,setPerKm]=useState(''),[perMinute,setPerMinute]=useState(''),[peak,setPeak]=useState('');
+ const load=useCallback(async()=>{
+  if(!userId||!auth.admin)return;setBusy(true);setNotice('');
+  try{const token=await cloudCurrentToken();const [rates,accounts]=await Promise.all([cloudFareSettings(token),cloudStaffDrivers(token)]);setBase(String(rates.base));setPerKm(String(rates.perKm));setPerMinute(String(rates.perMinute));setPeak(String(rates.peakMultiplier??1));setDrivers(accounts);setUpdated(rates.updatedAt);setLoaded(true);dispatch({type:'tariff',tariff:rates})}
+  catch(e){setNotice(authErrorMessage(e,state.language==='ar'))}finally{setBusy(false)}
+ },[userId,auth.admin,dispatch,state.language]);
+ useEffect(()=>{void load()},[load]);
+ const amounts=[base,perKm,perMinute,peak].map(parseAmount);const valid=amounts.every(value=>value!==null)&&amounts[3]!>=1&&amounts[3]!<=10;
+ const tariff:Tariff|null=valid?{base:amounts[0]!,perKm:amounts[1]!,perMinute:amounts[2]!,peakMultiplier:amounts[3]!,updatedAt:new Date().toISOString()}:null;
+ const example=tariff?priceForRoute(5000,10,tariff):null;
+ async function publish(){if(!tariff||busy)return;setBusy(true);setNotice('');try{const token=await cloudCurrentToken();await cloudUpdateFareSettings(token,tariff);const verified=await cloudFareSettings(token);dispatch({type:'tariff',tariff:verified});setUpdated(verified.updatedAt);setNotice(t('تم حفظ التسعيرة المشتركة بنجاح. ستُستخدم عند حساب الأجرة لجميع الحسابات.','Shared rates saved. They will be used for fare estimates for all accounts.'))}catch(e){setNotice(authErrorMessage(e,state.language==='ar'))}finally{setBusy(false)}}
+ async function approve(account:StaffDriver){if(busy)return;setBusy(true);setNotice('');try{const token=await cloudCurrentToken();const ok=await cloudApproveDriver(token,account.user_id,!account.approved);if(!ok)throw Error('not_allowed');setDrivers(await cloudStaffDrivers(token));setNotice(t('تم تحديث صلاحية السائق.','Driver access updated.'))}catch(e){setNotice(authErrorMessage(e,state.language==='ar'))}finally{setBusy(false)}}
+ if(!auth.ready||auth.checkingAdmin)return <Page title={t('لوحة الإدارة','Administration')}><ActivityIndicator color={colors.purple}/><Label muted>{t('جارٍ التحقق من صلاحيات الحساب…','Checking account access…')}</Label></Page>;
+ if(!auth.session)return <Page title={t('لوحة الإدارة','Administration')}><Panel><Icon name="shield-checkmark-outline" size={44}/><Label>{t('ادخل ببريد حساب الإدارة وكلمة المرور لفتح لوحة التحكم.','Sign in with the admin email and password to open this page.')}</Label><Button title={t('تسجيل دخول الإدارة','Admin sign in')} onPress={()=>router.replace({pathname:'/account',params:{next:'admin'}})}/></Panel></Page>;
+ if(!auth.admin)return <Page title={t('لوحة الإدارة','Administration')}><Panel><Label>{t('هذا الحساب لا يملك صلاحية الإدارة.','This account does not have admin access.')}</Label><Label muted>{auth.session.user.email}</Label><Button title={t('الذهاب إلى حسابي','Go to my account')} onPress={()=>router.replace('/account')}/><Button secondary title={t('إعادة التحقق من الصلاحية','Check access again')} onPress={()=>void auth.retry()}/></Panel></Page>;
+ return <Page title={t('لوحة الإدارة','Administration')} backTo="/account">
+  <Panel><View style={{flexDirection:'row',alignItems:'center',gap:12}}><Icon name="shield-checkmark-outline" size={36} color={colors.purple}/><View style={{flex:1}}><Label>{t('أهلًا بك في الإدارة','Welcome to administration')}</Label><Label muted>{auth.session.user.email}</Label></View></View><Button secondary icon="refresh-outline" title={t('تحديث بيانات الإدارة','Refresh admin data')} disabled={busy} onPress={()=>void load()}/></Panel>
+  {!loaded?<Panel><Label>{t('جارٍ تحميل إعدادات المشروع.','Loading project settings.')}</Label>{busy&&<ActivityIndicator/>}</Panel>:<>
+   <Panel><Label large>{t('تسعيرة الرحلات','Ride rates')}</Label><Label muted>{t('الأجرة = (فتح العداد + كم × سعر الكيلومتر + دقائق × سعر الدقيقة) × معامل الذروة','Fare = (base + km × km price + minutes × minute price) × peak factor')}</Label>
+    <Field label={t('فتح العداد — ل.س','Starting fare — SYP')} value={base} onChangeText={setBase} keyboardType="decimal-pad" editable={!busy}/>
+    <Field label={t('سعر الكيلومتر — ل.س','Price per km — SYP')} value={perKm} onChangeText={setPerKm} keyboardType="decimal-pad" editable={!busy}/>
+    <Field label={t('سعر الدقيقة — ل.س','Price per minute — SYP')} value={perMinute} onChangeText={setPerMinute} keyboardType="decimal-pad" editable={!busy}/>
+    <Field label={t('معامل الذروة — ١ للسعر العادي','Peak factor — 1 for normal price')} value={peak} onChangeText={setPeak} keyboardType="decimal-pad" editable={!busy}/>
+    {example!==null&&<View style={{padding:12,borderRadius:12,backgroundColor:colors.selected}}><Label>{t('مثال: رحلة ٥ كم و١٠ دقائق','Example: 5 km and 10 minutes')}</Label><Label large>{example} {t('ل.س','SYP')}</Label></View>}
+    {!valid&&<Label>{t('أدخل أرقامًا صحيحة. معامل الذروة بين ١ و١٠.','Enter valid numbers. Peak factor must be from 1 to 10.')}</Label>}
+    <Button icon="save-outline" title={busy?t('جارٍ الحفظ…','Saving…'):t('حفظ التسعيرة لجميع المستخدمين','Save rates for all users')} onPress={()=>void publish()} disabled={!valid||busy}/>
+    {!!updated&&<Label muted>{t('آخر تحديث: ','Last update: ')}{new Date(updated).toLocaleString(state.language==='ar'?'ar':'en')}</Label>}
+   </Panel>
+   <Panel><Label large>{t('طلبات السائقين','Driver accounts')}</Label><Label muted>{t('تحقق من هوية السائق وأوراق السيارة قبل اعتماده.','Check the driver and vehicle papers before approval.')}</Label>
+    {drivers.length===0&&<Label muted>{t('لا توجد طلبات تسجيل سائق بعد.','No driver accounts yet.')}</Label>}
+    {drivers.map(account=><View key={account.user_id} style={{gap:9,paddingVertical:10,borderTopWidth:1,borderColor:colors.line}}><Label>{regions[account.region]?.[state.language==='ar'?0:1]} · {account.category}</Label><Label muted>{account.user_id}</Label><Label>{account.approved?t('معتمد','Approved'):t('بانتظار المراجعة','Waiting for review')}</Label><Button secondary title={account.approved?t('تعليق السائق','Suspend driver'):t('اعتماد السائق','Approve driver')} disabled={busy} onPress={()=>void approve(account)}/></View>)}
+   </Panel>
+  </>}
+  {!!notice&&<View accessibilityRole="alert"><Label>{notice}</Label></View>}
  </Page>;
 }

@@ -39,3 +39,12 @@ Repository checks cannot substitute for this physical-device acceptance. Do not 
 - Destination: tap/drag/select centre, Google Places text search, or authenticated account favourites. Search uses the existing website-restricted key and requires Places API (New) enabled and allowed by that key; failure remains explicit, with map selection available.
 - Account places are user-editable Supabase Auth metadata under yalla_saved_places, capped at 20. They confer no permissions. Only the signed-in user's /auth/v1/user endpoint is used; no admin/service key. Save/delete updates are displayed only after the server echoes the expected list. The existing in-memory sign-in policy is unchanged.
 - Physical acceptance still required: current-location permission and centring on Android, resume after background, denied permission/GPS off, inside/outside 500-metre pickup, Google search with the production key, account save/sign-out/sign-in and cross-device retrieval, map pin round trip and web/Android visual parity.
+
+## Rebuild 0.9.0 (2026-11-05)
+The home header includes a visible account action; login, signup and recovery live at `/account`. The official pinned Supabase Auth client persists and rotates the session without retaining the password. Account changes clear known ride state; stale network work cannot borrow a later account's session. The admin screen is gated by server-verified membership and uses central rates and driver approval RPCs.
+
+The home booking flow now uses the account's server rides. `/review` calculates the route on entry after sign-in, presents a fare estimate, then requires explicit booking confirmation and a fresh pickup-radius check. Previous local-demo state is retained but no longer presented as the primary booking/driver/history service.
+
+Android 0.9.0 / code 18 rebuilds the wrapper for shared, bounded GPS tasks, shared native permission prompts, a website-readiness loading signal, a 30-second navigation recovery deadline and router-aware hardware back. A new APK is needed for these native changes. Subsequent website interface changes keep the established live-website delivery model.
+
+Automated checks cover persistence and refresh without password storage, rejecting stale-account requests, GPS request sharing/timeouts, pickup limits, server quotas and auth, saved places and safe refresh state. Physical Android acceptance and actual email delivery are separate checks; do not claim those passed remotely.

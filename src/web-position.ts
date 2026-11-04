@@ -30,14 +30,17 @@ export function recentWebPosition(maxAgeMs=12000):Coordinate|null{
 export function getWebPosition(timeout=7000):Promise<Coordinate>{
  if(typeof navigator==='undefined'||!navigator.geolocation)return Promise.reject(new PositionError('position'));
  return new Promise((resolve,reject)=>{
-  navigator.geolocation.getCurrentPosition(
-   result=>{
-    const point={latitude:result.coords.latitude,longitude:result.coords.longitude};
-    if(isCoordinate(point)){recentFix={point,at:Date.now()};resolve(point)}else reject(new PositionError('position'));
-   },
-   error=>reject(new PositionError(error.code===1?'permission':error.code===3?'timeout':'position')),
-   {enableHighAccuracy:false,maximumAge:30000,timeout}
-  );
+  let settled=false;
+  const timer=setTimeout(()=>{settled=true;reject(new PositionError('timeout'))},timeout+500);
+  const fail=(code:'permission'|'timeout'|'position')=>{if(settled)return;settled=true;clearTimeout(timer);reject(new PositionError(code))};
+  try{navigator.geolocation.getCurrentPosition(result=>{
+   const point={latitude:result.coords.latitude,longitude:result.coords.longitude};
+   if(!isCoordinate(point)){fail('position');return}
+   recentFix={point,at:Date.now()};
+   if(settled){if(typeof document!=='undefined'&&document.visibilityState==='visible')announceWebPosition(point);return}
+   settled=true;clearTimeout(timer);resolve(point);
+  },error=>fail(error.code===1?'permission':error.code===3?'timeout':'position'),{enableHighAccuracy:false,maximumAge:12000,timeout});}
+  catch{fail('position')}
  });
 }
 // After the map has a first fix, improve it in the background while the site

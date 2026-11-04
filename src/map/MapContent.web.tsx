@@ -12,6 +12,7 @@ export default function MapContent({point,onChange,compact=false,route,readOnly=
  const userMarker=useRef<GoogleMarker|null>(null);
  const current=useRef(point);current.current=point;const choose=useRef(onChange);choose.current=onChange;
  const profile=useRef({lean,dark});profile.current={lean,dark};
+ const entry=useRef({initialCenter,compact});
  const failed=useRef(false);
  const [error,setError]=useState(false),[ready,setReady]=useState(false),[attempt,setAttempt]=useState(0);
  const key=webMapsKey(process.env.EXPO_PUBLIC_GOOGLE_MAPS_WEB_API_KEY);
@@ -25,8 +26,8 @@ export default function MapContent({point,onChange,compact=false,route,readOnly=
   window.addEventListener('online',online);
   void loadGoogleMaps(key,state.language).then(maps=>{
    if(disposed||!host.current)return;api.current=maps;
-   const start=current.current??initialCenter??{latitude:33.5138,longitude:36.2765};
-   const instance=new maps.Map(host.current,{center:position(start),zoom:profile.current.lean?13:14,mapId:process.env.EXPO_PUBLIC_GOOGLE_MAPS_WEB_MAP_ID||'DEMO_MAP_ID',renderingType:'RASTER',mapTypeId:'roadmap',disableDefaultUI:true,zoomControl:true,gestureHandling:readOnly||compact?'cooperative':'greedy',clickableIcons:false,tilt:0,heading:0,colorScheme:profile.current.dark?'DARK':'LIGHT'});
+   const start=current.current??entry.current.initialCenter??{latitude:33.5138,longitude:36.2765};
+   const instance=new maps.Map(host.current,{center:position(start),zoom:profile.current.lean?13:14,mapId:process.env.EXPO_PUBLIC_GOOGLE_MAPS_WEB_MAP_ID||'DEMO_MAP_ID',renderingType:'RASTER',mapTypeId:'roadmap',disableDefaultUI:true,zoomControl:true,gestureHandling:readOnly||entry.current.compact?'cooperative':'greedy',clickableIcons:false,tilt:0,heading:0,colorScheme:profile.current.dark?'DARK':'LIGHT'});
    map.current=instance;
    const pin=new maps.marker.AdvancedMarkerElement({map:instance,gmpDraggable:!readOnly,title:state.language==='ar'?'الموقع المحدد':'Selected location'});marker.current=pin;
    const select=(event:{latLng?:{lat:()=>number;lng:()=>number}|null})=>{if(!event.latLng||readOnly)return;const next={latitude:event.latLng.lat(),longitude:event.latLng.lng()};if(isCoordinate(next))choose.current(next)};

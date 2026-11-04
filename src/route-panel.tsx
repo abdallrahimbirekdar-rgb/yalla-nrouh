@@ -1,29 +1,51 @@
 import React,{useEffect,useRef,useState} from 'react';
-import {Linking,Platform} from 'react-native';
+import {ActivityIndicator,Linking,View} from 'react-native';
 import {router} from 'expo-router';
-import Constants from 'expo-constants';
+import {useAuth} from './auth';
+import {cloudCurrentToken} from './cloud-api';
 import {siteCurrentPosition} from './site-bridge';
-import {cloudGetToken} from './cloud-api';
 import {type Coordinate} from './geo';
 import {googleDirections} from './google-links';
 import {createRoutingClient,type RoutePlan} from './routing';
-import {ServiceError,normalizeServiceUrl} from './api';
+import {ServiceError} from './api';
 import {priceForRoute} from './meter';
 import {useApp} from './context';
 import MapCanvas from './map/MapCanvas';
-import {Button,Label,Panel,useText} from './ui';
-export default function RoutePanel({from,to,fromAddress,toAddress,currentLocation=false,estimate=false,title}:{from?:Coordinate;to?:Coordinate;fromAddress?:string;toAddress?:string;currentLocation?:boolean;estimate?:boolean;title:string}){
- const {state}=useApp();const t=useText();const [plan,setPlan]=useState<RoutePlan|null>(null),[busy,setBusy]=useState(false),[message,setMessage]=useState(''),[expanded,setExpanded]=useState(false);const generation=useRef(0),alive=useRef(true),abort=useRef<AbortController|null>(null);
- let proxy:string|null=null;try{proxy=normalizeServiceUrl(process.env.EXPO_PUBLIC_GOOGLE_ROUTES_PROXY||'https://gokosprcqpdvqgahvquk.supabase.co/functions/v1/fare-route');}catch{}
- const fromKey=from?from.latitude.toFixed(5)+','+from.longitude.toFixed(5):'',toKey=to?to.latitude.toFixed(5)+','+to.longitude.toFixed(5):'';
- useEffect(()=>{alive.current=true;return()=>{alive.current=false;abort.current?.abort();};},[]);
- useEffect(()=>{generation.current++;abort.current?.abort();setBusy(false);setPlan(null);},[fromKey,toKey]);
- async function navigate(){try{const destination=to??toAddress;if(!destination)return;const origin=currentLocation?undefined:from??fromAddress;await Linking.openURL(googleDirections(destination,origin,currentLocation));}catch{setMessage(t('تعذر فتح Google Maps. تحقق من المتصفح أو تطبيق الخرائط.','Could not open Google Maps. Check your browser or Maps app.'));}}
- async function calculate(){if(busy||!to||!proxy)return;if(!cloudGetToken()){setMessage(t('سجّل الدخول إلى حسابك لحساب أجرة الطريق.','Sign in to your account to check the fare.'));return}const id=generation.current;const active=()=>alive.current&&id===generation.current;setBusy(true);setMessage('');abort.current?.abort();const controller=new AbortController();abort.current=controller;let timer:ReturnType<typeof setTimeout>|undefined;
- try{let start=from;if(currentLocation){start=await siteCurrentPosition(true);if(!active())return;}if(!start)throw Error('coordinates');if(!active())return;const next=await createRoutingClient(proxy).route(start,to,controller.signal,state.language,cloudGetToken()??undefined);if(active())setPlan(next);
- }catch(error){if(!active())return;setMessage(error instanceof ServiceError&&error.code==='unauthorized'?t('انتهت الجلسة. سجّل الدخول مجددًا.','Session ended. Sign in again.'):error instanceof ServiceError&&error.code==='not_configured'?t('حساب الأجرة جاهز، لكنه ينتظر تفعيل خدمة الطرق من إدارة التطبيق.','Fare calculation is ready but the route service needs to be turned on.'):error instanceof ServiceError&&error.code==='not_enabled'?t('خدمة الطرق لا تستجيب. جرّب لاحقًا أو افتح الطريق في Google Maps.','The route service is not available. Try later or open Google Maps.'):error instanceof ServiceError&&error.code==='no_route'?t('لم تعثر Google على طريق قيادة بين النقطتين. عدّل النقاط وأعد المحاولة.','Google found no driving route. Change the points and try again.'):error instanceof Error&&error.message==='permission'?t('امنح إذن الموقع لحساب الطريق من مكانك.','Allow location to find the route from your position.'):error instanceof Error&&error.message==='gps'?t('فعّل GPS وحاول مجددًا.','Turn on GPS and try again.'):error instanceof ServiceError&&error.code==='busy'?t('انتظر قليلًا قبل إعادة الحساب.','Wait a moment before trying again.'):t('تعذر حساب الطريق داخل التطبيق. يمكنك فتحه في Google Maps.','Could not find the route in the app. You can open it in Google Maps.'));}finally{if(timer)clearTimeout(timer);if(active())setBusy(false);}}
- const price=plan&&estimate?priceForRoute(plan.meters,plan.seconds/60,plan.tariff??state.tariff):null;
- const canDraw=Platform.OS==='web'?Boolean(process.env.EXPO_PUBLIC_GOOGLE_MAPS_WEB_API_KEY):Platform.OS==='android'&&Boolean(Constants.expoConfig?.extra?.googleMapsConfigured);
- return <Panel><Label>{title}</Label><Label muted>{t('يفتح الزر Google Maps أو المتصفح، ويرسل إليه الوجهة ونقطة الانطلاق المحددة إن وُجدت. الملاحة تعمل في خرائط جوجل وتحتاج إذن الموقع الخاص بها.','The button opens Google Maps or your browser and shares the destination and chosen start point. Navigation runs in Google Maps and needs its own location permission.')}</Label><Button secondary icon="navigate-outline" disabled={!to&&!toAddress} title={currentLocation?t('بدء الملاحة في Google Maps','Start navigation in Google Maps'):t('عرض الطريق في Google Maps','Show route in Google Maps')} onPress={()=>{void navigate();}}/>{!proxy?<Label muted>{t('فتح الطريق في جوجل متاح الآن. عرض المسافة والسعر المتوقع تلقائيًا هنا ينتظر تفعيل خدمة حساب الطرق.','Opening the route in Google Maps is available now. Automatic distance and price estimates here need the route service to be set up.')}</Label>:<><Label muted>{t('حساب الطريق داخل التطبيق يرسل النقطتين إلى خدمة المشروع المتصلة بجوجل عند الضغط.','In-app route requests send the two points to the project service linked to Google when you tap.')}</Label><Button secondary disabled={busy||!to||!from&&!currentLocation} title={busy?t('جارٍ الحساب…','Working…'):estimate?t('حساب قيمة الأجرة','Calculate fare'):t('حساب الطريق داخل التطبيق','Find route in the app')} onPress={()=>{void calculate();}}/></>}{!cloudGetToken()&&<Button secondary title={t('تسجيل الدخول لحساب الأجرة','Sign in to calculate fare')} onPress={()=>router.push('/cloud')}/>}
- {message!==''&&<Label>{message}</Label>}{plan&&<><Label>{(plan.meters/1000).toFixed(1)} {t('كم','km')} · {Math.ceil(plan.seconds/60)} {t('دقيقة تقديريًا','min estimated')}</Label>{estimate&&(price===null?<Label muted>{t('حدد التسعيرة في الإدارة لحساب تقدير السعر.','Set rates in admin for a price estimate.')}</Label>:<><Label>{t('تقدير السعر','Price estimate')}: {price.toLocaleString('en-US')} {t('ل.س — غير نهائي','SYP — not final')}</Label>{(plan.tariff??state.tariff)?.peakMultiplier!==undefined&&<Label muted>{t('معامل الذروة','Peak factor')}: ×{(plan.tariff??state.tariff)?.peakMultiplier}</Label>}</>)}{estimate&&plan.tariff&&<Label muted>{t('وفق التسعيرة المشتركة المعتمدة في إعدادات التطبيق. السعر النهائي يتبع مسافة الرحلة ووقتها الفعليين.','Uses the shared app rates. The final fare follows the actual ride distance and time.')}</Label>}{canDraw&&<MapCanvas point={plan.from} route={plan.points} readOnly onChange={()=>{}}/>}<Button secondary title={t(expanded?'إخفاء تعليمات الطريق':'عرض تعليمات الطريق',expanded?'Hide route steps':'Show route steps')} onPress={()=>setExpanded(!expanded)}/>{expanded&&plan.steps.map((step,index)=><Label key={index}>{index+1}. {step.instruction} · {Math.round(step.meters)} {t('م','m')}</Label>)}<Label muted>Google Maps</Label></>}</Panel>;
+import {Button,Icon,Label,Panel,useText,useTheme} from './ui';
+export default function RoutePanel({from,to,fromAddress,toAddress,currentLocation=false,estimate=false,autoEstimate=false,title,onQuote}:{from?:Coordinate;to?:Coordinate;fromAddress?:string;toAddress?:string;currentLocation?:boolean;estimate?:boolean;autoEstimate?:boolean;title:string;onQuote?:(price:number|null)=>void}){
+ const auth=useAuth();const userId=auth.session?.user.id;const {state}=useApp();const t=useText();const {colors}=useTheme();const [plan,setPlan]=useState<RoutePlan|null>(null),[busy,setBusy]=useState(false),[error,setError]=useState(''),[expanded,setExpanded]=useState(false);
+ const alive=useRef(true),generation=useRef(0),running=useRef(false),abort=useRef<AbortController|null>(null),lastAuto=useRef('');const quoteCallback=useRef(onQuote);quoteCallback.current=onQuote;
+ const key=[from?.latitude,from?.longitude,to?.latitude,to?.longitude,currentLocation,auth.session?.user.id].join('|');
+ useEffect(()=>{alive.current=true;return()=>{alive.current=false;abort.current?.abort()}},[]);
+ useEffect(()=>{generation.current++;abort.current?.abort();running.current=false;setBusy(false);setPlan(null);setError('');quoteCallback.current?.(null)},[key]);
+ async function calculate(){
+  if(running.current||!to||(!from&&!currentLocation))return;if(!auth.session){setError('unauthorized');return}
+  const id=++generation.current;const active=()=>alive.current&&id===generation.current;running.current=true;setBusy(true);setError('');setPlan(null);quoteCallback.current?.(null);abort.current?.abort();const controller=new AbortController();abort.current=controller;
+  try{
+   const token=await cloudCurrentToken();const start=currentLocation?await siteCurrentPosition(false):from;if(!start||!active())return;
+   const next=await createRoutingClient(process.env.EXPO_PUBLIC_GOOGLE_ROUTES_PROXY||'https://gokosprcqpdvqgahvquk.supabase.co/functions/v1/fare-route').route(start,to,controller.signal,state.language,token);
+   if(active()){setPlan(next);quoteCallback.current?.(priceForRoute(next.meters,next.seconds/60,next.tariff??state.tariff))}
+  }catch(e){if(active())setError(e instanceof ServiceError?e.code:(e as {status?:number})?.status===401?'unauthorized':'network')}
+  finally{if(active()){running.current=false;setBusy(false)}}
+ }
+ const action=useRef(calculate);action.current=calculate;
+ useEffect(()=>{if(!autoEstimate||!auth.ready||!userId||!from||!to||lastAuto.current===key)return;lastAuto.current=key;void action.current()},[autoEstimate,auth.ready,userId,key,from,to]);
+ async function navigate(){try{const end=to??toAddress;if(end)await Linking.openURL(googleDirections(end,currentLocation?undefined:from??fromAddress,currentLocation))}catch{setError('navigation')}}
+ const price=plan?priceForRoute(plan.meters,plan.seconds/60,plan.tariff??state.tariff):null;
+ const message=error==='unauthorized'?t('سجّل الدخول مجددًا لحساب الأجرة.','Sign in again to check the fare.'):error==='busy'?t('تم بلوغ حد المحاولات أو أُعيد الطلب بسرعة. انتظر قليلًا قبل المحاولة.','Too many requests. Wait before trying again.'):error==='no_route'?t('لم تعثر Google على طريق قيادة بين النقطتين. جرّب تعديل النقاط.','Google found no driving route. Try changing the points.'):error==='not_configured'||error==='not_enabled'?t('خدمة حساب الطريق غير متاحة الآن. أعد المحاولة لاحقًا.','The route service is not available. Try later.'):t('تعذر حساب الطريق. تحقق من الاتصال وأعد المحاولة.','Could not find the route. Check internet and try again.');
+ return <Panel><Label large>{title}</Label>
+  {busy&&<View style={{gap:8,alignItems:'center',padding:16}}><ActivityIndicator color={colors.purple}/><Label muted>{t('نحسب الطريق والأجرة عبر Google Maps…','Finding route and fare with Google Maps…')}</Label></View>}
+  {plan&&<>
+   {estimate&&price!==null&&<View style={{padding:16,borderRadius:14,backgroundColor:colors.selected,alignItems:'center',gap:4}}><Label muted>{t('الأجرة التقديرية','Estimated fare')}</Label><Label large>{price.toLocaleString('en-US')} {t('ل.س','SYP')}</Label></View>}
+   <View style={{flexDirection:'row',justifyContent:'space-around',gap:16}}><View style={{gap:4,alignItems:'center'}}><Icon name="map-outline"/><Label>{(plan.meters/1000).toFixed(2)} {t('كم','km')}</Label></View><View style={{gap:4,alignItems:'center'}}><Icon name="time-outline"/><Label>{Math.ceil(plan.seconds/60)} {t('دقيقة','min')}</Label></View></View>
+   <MapCanvas point={plan.from} route={plan.points} readOnly onChange={()=>{}}/>
+   {estimate&&<Label muted>{t('الأجرة = (فتح العداد + المسافة × سعر الكيلومتر + الوقت × سعر الدقيقة) × معامل الذروة. تستخدم تسعيرة الإدارة المشتركة.','Fare = (base + distance × km price + time × minute price) × peak factor. Uses shared admin rates.')}</Label>}
+   <Button secondary title={t(expanded?'إخفاء تعليمات الطريق':'تعليمات الطريق',expanded?'Hide route steps':'Route steps')} onPress={()=>setExpanded(!expanded)}/>
+   {expanded&&plan.steps.map((step,index)=><Label key={index}>{index+1}. {step.instruction}</Label>)}
+   <Label muted>Google Maps</Label>
+  </>}
+  {!!error&&<View accessibilityRole="alert"><Label>{message}</Label></View>}
+  {!auth.session?<Button icon="log-in-outline" title={t('تسجيل الدخول','Sign in')} onPress={()=>router.push({pathname:'/account',params:{next:'review'}})}/>:<Button secondary={Boolean(plan)} disabled={busy||!to||!from&&!currentLocation} title={plan?t('إعادة حساب الطريق والأجرة','Update route and fare'):estimate?t('حساب قيمة الأجرة','Calculate fare'):t('حساب الطريق','Find route')} onPress={()=>void calculate()}/>}
+  <Button secondary icon="navigate-outline" disabled={!to&&!toAddress} title={t('فتح الملاحة في Google Maps','Open directions in Google Maps')} onPress={()=>void navigate()}/>
+ </Panel>;
 }
