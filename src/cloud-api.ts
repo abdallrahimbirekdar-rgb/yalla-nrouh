@@ -15,6 +15,7 @@ export interface CloudRide {
 }
 export interface CloudDriver {user_id:string;region:number;category:string;approved:boolean;online:boolean;last_seen_at:string|null}
 export interface RidePreview {ride_id:string;region:number;category:string;created_at:string;pickup_lat_approx:number;pickup_lng_approx:number}
+export interface StaffDriver {user_id:string;region:number;category:string;approved:boolean;online:boolean;created_at:string}
 export class CloudError extends Error {
   constructor(public readonly status:number,public readonly kind:string){super(kind);this.name='CloudError'}
 }
@@ -89,3 +90,7 @@ export const cloudHeartbeat=(token:string)=>rpc<boolean>('driver_heartbeat',toke
 export const cloudOpenRides=(token:string)=>rpc<RidePreview[]>('open_ride_previews',token);
 export const cloudAcceptRide=(token:string,id:string)=>rpc<boolean>('accept_ride',token,{p_ride_id:id});
 export const cloudAdvanceRide=(token:string,id:string,next:'arrived'|'riding'|'completed',pin?:string)=>rpc<string>('advance_ride',token,{p_ride_id:id,p_next:next,p_pin:pin??null});
+
+export const cloudIsAdmin=(token:string)=>rpc<boolean>('is_staff_admin',token);
+export const cloudStaffDrivers=(token:string)=>rpc<StaffDriver[]>('admin_pending_drivers',token);
+export const cloudApproveDriver=(token:string,id:string,approved:boolean)=>rpc<boolean>('admin_review_driver',token,{p_driver_id:id,p_approved:approved});
