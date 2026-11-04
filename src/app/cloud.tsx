@@ -1,5 +1,6 @@
 import React,{useEffect,useRef,useState} from 'react';
 import {AppState,View} from 'react-native';
+import RoutePanel from '../route-panel';
 import {router} from 'expo-router';
 import {useApp} from '../context';
 import {Button,Field,Label,Page,Panel,useText} from '../ui';
@@ -180,6 +181,11 @@ export default function CloudBeta(){
       {driving.map(r=><Panel key={r.id}>
        <Label>{r.pickup} → {r.destination}</Label>
        <Label muted>{statusName(r.status)}</Label>
+       {['accepted','arrived','riding'].includes(r.status)&&<RoutePanel
+        title={r.status==='riding'?t('الملاحة إلى وجهة الراكب','Directions to passenger destination'):t('الملاحة إلى نقطة انطلاق الراكب','Directions to passenger pickup')}
+        to={r.status==='riding'?{latitude:r.destination_lat,longitude:r.destination_lng}:{latitude:r.pickup_lat,longitude:r.pickup_lng}}
+        toAddress={r.status==='riding'?r.destination:r.pickup}
+        currentLocation/>}
        {r.status==='accepted'&&<Button title={t('وصلت إلى نقطة الانطلاق','Arrived at pickup')} disabled={busy} onPress={()=>void run(async()=>{
          const result=await cloudAdvanceRide(token,r.id,'arrived');if(result!=='arrived')throw Error();await refresh(token);
        })}/>}
