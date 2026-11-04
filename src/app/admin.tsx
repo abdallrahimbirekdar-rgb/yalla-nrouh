@@ -1,7 +1,7 @@
 import React,{useState} from 'react';
 import {router} from 'expo-router';
 import {useApp} from '../context';
-import {parseAmount,priceForRoute,type Tariff} from '../meter';
+import {parseAmount,priceForRoute,suggestedNewSypTariff,type Tariff} from '../meter';
 import {Button,Field,Label,Page,Panel,useText} from '../ui';
 export default function Admin(){const {state,dispatch}=useApp();const t=useText();const [base,setBase]=useState(state.tariff?String(state.tariff.base):''),[perKm,setPerKm]=useState(state.tariff?String(state.tariff.perKm):''),[perMinute,setPerMinute]=useState(state.tariff?String(state.tariff.perMinute):''),[peak,setPeak]=useState(String(state.tariff?.peakMultiplier??1)),[phone,setPhone]=useState(state.preferences.smsNumber),[message,setMessage]=useState('');
  const values=[base,perKm,perMinute,peak].map(parseAmount);
@@ -13,11 +13,18 @@ export default function Admin(){const {state,dispatch}=useApp();const t=useText(
   dispatch({type:'tariff',tariff:previewTariff});
   setMessage(t('حُفظت ثوابت الأجرة للرحلات الجديدة على هذا الجهاز. التغييرات لا تمس رحلات بدأت سابقًا.','New fare settings were saved on this device. Earlier rides do not change.'));
  }
+ function applySuggestedTariff(){
+  const tariff={...suggestedNewSypTariff,updatedAt:new Date().toISOString()};
+  setBase(String(tariff.base));setPerKm(String(tariff.perKm));setPerMinute(String(tariff.perMinute));setPeak(String(tariff.peakMultiplier));
+  dispatch({type:'tariff',tariff});
+  setMessage(t('تم تطبيق ثوابت التسعير المقترحة بالليرة السورية الجديدة للرحلات القادمة على هذا الجهاز.','Suggested prices in new Syrian pounds now apply to future rides on this device.'));
+ }
  function savePhone(){const value=phone.trim().replace(/[٠-٩]/g,c=>String(c.charCodeAt(0)-1632));if(value!==''&&!/^\+?\d{7,15}$/.test(value)){setMessage(t('أدخل رقمًا صحيحًا من 7 إلى 15 رقمًا، أو اتركه فارغًا.','Enter a valid phone number of 7 to 15 digits, or leave it empty.'));return;}dispatch({type:'preferences',preferences:{smsNumber:value}});setMessage(t('تم تطبيق رقم الرسائل محليًا.','SMS number applied on this phone.'));}
  return <Page title={t('إدارة النسخة التجريبية','Demo admin')}>
  <Label muted>{t('هذه شاشة محاكاة مفتوحة. التغييرات تخص هذا الجهاز فقط. الإدارة الفعلية وتعميم الأسعار تحتاجان حسابًا محميًا وخادمًا.','This is an open demo screen. Changes are for this phone only. Live admin and shared prices need a protected account and server.')}</Label>
  <Panel>
-  <Label>{t('ثوابت حساب الأجرة — ليرة سورية','Fare calculation settings — SYP')}</Label>
+  <Label>{t('ثوابت حساب الأجرة — الليرة السورية الجديدة','Fare settings — new Syrian pounds')}</Label>
+  <Label muted>{t('قيم تجريبية مقترحة وفق مقياس الأسعار الجديد، وليست تعرفة رسمية. يمكنك تعديل كل قيمة وحفظها.','Suggested demo rates in new Syrian pounds, not an official taxi tariff. You can edit and save every value.')}</Label>
   <Label muted>{t('الأجرة = (فتح العداد + الكيلومترات × سعر الكيلومتر + الدقائق × سعر الدقيقة) × معامل الذروة','Fare = (Base + km × km price + minutes × minute price) × peak factor')}</Label>
   <Field label={t('أجرة فتح العداد (ل.س)','Starting fare (SYP)')} value={base} onChangeText={setBase} keyboardType="decimal-pad"/>
   <Field label={t('سعر الكيلومتر الواحد (ل.س)','Price per kilometre (SYP)')} value={perKm} onChangeText={setPerKm} keyboardType="decimal-pad"/>
@@ -25,6 +32,7 @@ export default function Admin(){const {state,dispatch}=useApp();const t=useText(
   <Field label={t('معامل الذروة','Peak multiplier')} value={peak} onChangeText={setPeak} keyboardType="decimal-pad"/>
   <Label muted>{t('ضع 1 للسعر العادي، أو 1.5 لزيادة 50٪، أو 2 لمضاعفة الأجرة.','Use 1 for normal price, 1.5 for a 50% increase, or 2 for double fare.')}</Label>
   {example!==null&&<Label>{t('مثال توضيحي: رحلة 5 كم و10 دقائق','Example: a 5 km, 10 minute ride')}: {example.toLocaleString('en-US')} {t('ل.س','SYP')}</Label>}
+  <Button secondary title={t('تطبيق ثوابت مقترحة لليرة الجديدة','Use suggested new-SYP rates')} onPress={applySuggestedTariff}/>
   <Button title={t('حفظ ثوابت التسعير','Save fare settings')} onPress={saveTariff} disabled={!validInputs}/>
   <Label muted>{t('هذه إعدادات محلية تجريبية لا تصل إلى باقي المستخدمين. تُثبت الثوابت عند بدء الرحلة ولا تتغير للرحلات السابقة. الدفع نقدًا فقط.','These are local demo settings, not shared with other users. Rates are fixed when a ride starts. Cash only.')}</Label>
  </Panel>
