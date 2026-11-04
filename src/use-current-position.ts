@@ -4,7 +4,7 @@ import * as Location from 'expo-location';
 import {currentPosition,PositionError,type PositionFailure} from './current-position';
 import {getWebPosition,recentWebPosition,webLocationGranted} from './web-position';
 import {isCoordinate,type Coordinate} from './geo';
-import {siteCurrentPosition} from './site-bridge.web';
+import {siteCurrentPosition} from './site-bridge';
 
 let browserPermissionFix:Coordinate|null=null;
 const adapter={
