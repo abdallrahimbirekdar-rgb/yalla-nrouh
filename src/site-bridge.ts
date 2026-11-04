@@ -1,6 +1,11 @@
 import * as Location from 'expo-location';
 import {isCoordinate,type Coordinate} from './geo';
 import {PositionError} from './current-position';
+import type {Fix} from './meter';
+
+// The website build resolves site-bridge.web.ts; native screens never use a WebView bridge.
+export function isNativeWebView():boolean{return false}
+export async function siteCurrentFix(_askPermission:boolean):Promise<Fix>{throw new PositionError('position')}
 
 // Native-screen equivalent of the website's location helper.
 // Website builds resolve site-bridge.web.ts instead.
