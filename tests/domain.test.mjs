@@ -19,3 +19,17 @@ test('restoration validates, restores active ride and switches driver offline',(
 test('language change keeps ride and addresses',()=>{const s=reduce(create(),{type:'language',language:'en'});assert.equal(s.language,'en');assert.equal(s.trips[0].pickup,'داريا')});
 test('validates coordinates and rejects identical pickup/destination points',()=>{assert.equal(validateDraft({...draft,pickupPoint:{latitude:100,longitude:1}}),'coordinates');assert.equal(validateDraft({...draft,pickupPoint:{latitude:33.5,longitude:36.2},destinationPoint:{latitude:33.5,longitude:36.2}}),'same')});
 test('trip stores a coordinate snapshot, and older coordinate-free history still restores',()=>{const point={latitude:33.5,longitude:36.2};const s=reduce(initialState,{type:'create',draft:{...draft,pickupPoint:point},id:'p',now,pin:'1234'});point.latitude=34;assert.equal(s.trips[0].pickupPoint.latitude,33.5);assert(restoreState(JSON.parse(JSON.stringify(create()))));assert.equal(restoreState({...s,trips:[{...s.trips[0],pickupPoint:{latitude:200,longitude:0}}]}),null)});
+
+test('pin-chosen destination is retained in the ride and restored after reload',()=>{
+ const pickupPoint={latitude:33.5138,longitude:36.2765};
+ const destinationPoint={latitude:33.47,longitude:36.34};
+ const chosen={...draft,pickupPoint,destinationPoint,destination:'33.47000, 36.34000'};
+ assert.equal(validateDraft(chosen),null);
+ const state=reduce(initialState,{type:'create',draft:chosen,id:'destination-pin',now,pin:'1234'});
+ assert.deepEqual(state.trips[0].destinationPoint,destinationPoint);
+ destinationPoint.latitude=0;
+ assert.equal(state.trips[0].destinationPoint.latitude,33.47);
+ const restored=restoreState(JSON.parse(JSON.stringify(state)));
+ assert.deepEqual(restored.trips[0].destinationPoint,{latitude:33.47,longitude:36.34});
+ assert.equal(validateDraft({...chosen,destinationPoint:pickupPoint}),'same');
+});
