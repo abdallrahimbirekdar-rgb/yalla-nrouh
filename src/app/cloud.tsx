@@ -7,7 +7,7 @@ import {Button,Field,Label,Page,Panel,useText} from '../ui';
 import {categories,regions} from '../domain';
 import {
   cloudAcceptRide,cloudAdvanceRide,cloudCancelRide,cloudGetToken,cloudHeartbeat,
-  cloudMyDriver,cloudMyRides,cloudOpenRides,cloudPassengerPin,cloudRegisterDriver,
+  cloudMyDriver,cloudMyRides,cloudOpenRides,cloudPassengerPin,cloudRegisterDriver,cloudReleaseRide,
   cloudRequestRide,cloudSetDriverOnline,cloudSignIn,cloudSignOut,cloudSignUp,cloudWhoAmI,
   cloudIsAdmin,cloudStaffDrivers,cloudApproveDriver,
   type CloudDriver,type CloudRide,type RidePreview,type StaffDriver,type CloudError
@@ -189,6 +189,9 @@ export default function CloudBeta(){
        {r.status==='accepted'&&<Button title={t('وصلت إلى نقطة الانطلاق','Arrived at pickup')} disabled={busy} onPress={()=>void run(async()=>{
          const result=await cloudAdvanceRide(token,r.id,'arrived');if(result!=='arrived')throw Error();await refresh(token);
        })}/>}
+       {['accepted','arrived'].includes(r.status)&&<Button secondary title={t('إرجاع الطلب للبحث عن سائق آخر','Release ride to other drivers')} disabled={busy} onPress={()=>void run(async()=>{
+         const ok=await cloudReleaseRide(token,r.id);if(!ok)throw new Error('invalid_transition');await refresh(token);
+       },t('أُعيد الطلب إلى قائمة السائقين المتاحين.','Ride released for another driver.'))}/>}
        {r.status==='arrived'&&<>
         <Field label={t('رمز الراكب من 6 أرقام','Passenger 6-digit PIN')} value={pin} onChangeText={setPin} keyboardType="number-pad" maxLength={6}/>
         <Button title={t('بدء الرحلة','Start ride')} disabled={busy||!/^\d{6}$/.test(pin)} onPress={()=>void run(async()=>{
