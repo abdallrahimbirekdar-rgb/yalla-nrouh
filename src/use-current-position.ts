@@ -4,6 +4,7 @@ import * as Location from 'expo-location';
 import {currentPosition,PositionError,type PositionFailure} from './current-position';
 import {getWebPosition,recentWebPosition,webLocationGranted} from './web-position';
 import {isCoordinate,type Coordinate} from './geo';
+import {siteCurrentPosition} from './site-bridge.web';
 
 let browserPermissionFix:Coordinate|null=null;
 const adapter={
@@ -29,7 +30,7 @@ export function useCurrentPosition(enabled:boolean){
   if(running.current)return;
   const id=++generation.current;running.current=true;setBusy(true);setFailure(null);
   try{
-   const point=await currentPosition(adapter,ask);
+   const point=Platform.OS==='web'?await siteCurrentPosition(ask):await currentPosition(adapter,ask);
    if(alive.current&&id===generation.current){located.current=true;setCamera({point,revision:id})}
   }catch(error){
    if(alive.current&&id===generation.current)setFailure(error instanceof PositionError?error.code:'position');
