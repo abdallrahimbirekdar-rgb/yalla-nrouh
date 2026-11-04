@@ -1,6 +1,6 @@
 import React,{useEffect,useRef,useState} from 'react';
 import {ActivityIndicator,Platform,View} from 'react-native';
-import {announceWebPosition} from '../web-position';
+import {announceWebPosition,recentWebPosition} from '../web-position';
 import {isNativeWebView,siteCurrentPosition} from '../site-bridge';
 import {router,useLocalSearchParams} from 'expo-router';
 import * as Location from 'expo-location';
@@ -14,12 +14,18 @@ export default function LocationPicker(){
   const {target,returnTo}=useLocalSearchParams<{target:string;returnTo?:string}>();const pickup=target==='pickup';const fromCloud=returnTo==='cloud';
   function goBack(){if(fromCloud)router.replace('/cloud');else router.replace({pathname:'/',params:{booking:'1'}})}const {draft,setDraft,state}=useApp();const t=useText();
   const original=pickup?draft.pickupPoint:draft.destinationPoint;
-  const [mapVisible,setMapVisible]=useState(false);
+  // Selecting a pickup or destination should open the map immediately,
+  // rather than requiring a second tap on a hidden map button.
+  const [mapVisible,setMapVisible]=useState(true);
+  const [cameraTarget,setCameraTarget]=useState(()=>{
+   const fix=Platform.OS==='web'?recentWebPosition(60000):null;
+   return fix?{point:fix,revision:1}:undefined;
+  });
   const [point,setPoint]=useState<Coordinate|null>(original??null),[label,setLabel]=useState(pickup?draft.pickup:draft.destination),[query,setQuery]=useState(''),[results,setResults]=useState<Place[]>([]);
   const [latitude,setLatitude]=useState(original?String(original.latitude):''),[longitude,setLongitude]=useState(original?String(original.longitude):''),[message,setMessage]=useState(''),[busy,setBusy]=useState<'gps'|'search'|null>(null),[manual,setManual]=useState(false);
   const request=useRef<AbortController|null>(null);const alive=useRef(true);const task=useRef(0);
   useEffect(()=>{alive.current=true;return()=>{alive.current=false;request.current?.abort()}},[]);
-  function choose(next:Coordinate,nextLabel?:string){setPoint(next);setLatitude(String(next.latitude));setLongitude(String(next.longitude));setLabel(nextLabel??formatCoordinate(next));setMessage('')}
+  function choose(next:Coordinate,nextLabel?:string){setPoint(next);setLatitude(String(next.latitude));setLongitude(String(next.longitude));setLabel(nextLabel??formatCoordinate(next));setMessage('');setCameraTarget(previous=>({point:next,revision:(previous?.revision??0)+1}));}
   async function currentLocation(){
     if(busy)return;const id=++task.current;setBusy('gps');setMessage('');
     const active=()=>alive.current&&task.current===id;let gpsTimer:ReturnType<typeof setTimeout>|undefined;
@@ -37,8 +43,8 @@ export default function LocationPicker(){
   function confirm(){if(!point)return;setDraft(previous=>({...previous,...(pickup?{pickup:label.trim()||formatCoordinate(point),pickupPoint:point}:{destination:label.trim()||formatCoordinate(point),destinationPoint:point})}));goBack()}
   return <Page backTo={fromCloud?'/cloud':'/'} title={pickup?t('حدد نقطة الانطلاق','Choose pickup location'):t('حدد الوجهة','Choose destination')}>
     <Field label={pickup?t('عنوان الانطلاق','Pickup address'):t('عنوان الوصول','Destination address')} value={label} onChangeText={value=>{setLabel(value);setQuery(value);setResults([]);setPoint(null);setLatitude('');setLongitude('')}} maxLength={200} placeholder={t('المدينة، الشارع أو اسم المكان','City, street or place')}/>
-    <Button secondary icon="map-outline" title={t(mapVisible?'إخفاء الخريطة':'تحديد نقطة على الخريطة',mapVisible?'Hide map':'Choose a point on the map')} onPress={()=>setMapVisible(!mapVisible)}/>
-    {mapVisible&&<MapCanvas point={point} onChange={choose}/>}
+    <Button secondary icon="map-outline" title={t(mapVisible?'إخفاء الخريطة':'إظهار الخريطة',mapVisible?'Hide map':'Show map')} onPress={()=>setMapVisible(!mapVisible)}/>
+    {mapVisible&&<MapCanvas point={point} cameraTarget={cameraTarget} onChange={choose}/>}
     {point&&<Panel><Label>{t('الموقع المختار','Selected location')}</Label><Label muted>{formatCoordinate(point)}</Label><Field label={t('وصف المكان','Location label')} value={label} onChangeText={setLabel} maxLength={200}/><Button icon="checkmark-circle-outline" title={t('تأكيد الموقع','Confirm location')} onPress={confirm} disabled={Boolean(busy)}/></Panel>}
     <Button secondary title={t('بحث عن المكان','Search places')} onPress={search} disabled={Boolean(busy)||query.trim().length<3}/>
     {results.map(place=><Button key={place.id} secondary title={place.label} onPress={()=>{choose(place.coordinate,place.label);setResults([])}}/>)}
