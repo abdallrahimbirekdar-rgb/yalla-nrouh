@@ -1,17 +1,18 @@
 import {isCoordinate,type Coordinate} from './geo.ts';
-import {announceWebPosition,getWebPosition,webLocationGranted} from './web-position.ts';
+import {announceWebPosition,getWebPosition,refineWebPosition,webLocationGranted} from './web-position.ts';
 import {PositionError} from './current-position.ts';
 export type SiteWindow=Window&{ReactNativeWebView?:{postMessage:(message:string)=>void};__YALLA_NATIVE_LOCATION_GRANTED__?:boolean};
 // The website owns its local data. Never block a launch or save while trying
 // to import older APK data; the owner chose to start without that migration.
 // Keep the native handshake only for optional foreground location status.
 const nativePositionHosts=new WeakSet<SiteWindow>();
+let latestNativeGpsId:string|null=null;
 function listenNativePosition(host:SiteWindow){
  if(nativePositionHosts.has(host))return;
  nativePositionHosts.add(host);
  host.addEventListener('yalla:native-position',event=>{
   const point=(event as CustomEvent).detail?.point;
-  if(isCoordinate(point))announceWebPosition(point);
+  if((event as CustomEvent).detail?.id===latestNativeGpsId&&isCoordinate(point))announceWebPosition(point);
  });
 }
 export type NativePositionResult={point:Coordinate|null;error:'permission'|'services'|'position'|'timeout'|'unsupported'|null};
@@ -23,6 +24,7 @@ export function nativeCurrentPosition(askPermission:boolean):Promise<NativePosit
  if(!bridge)return Promise.resolve({point:null,error:'unsupported'});
  listenNativePosition(window as SiteWindow);
  const id=Date.now().toString(36)+'-'+Math.random().toString(36).slice(2);
+ latestNativeGpsId=id;
  return new Promise(resolve=>{
   const finish=(event:Event)=>{
    const detail=(event as CustomEvent).detail;
@@ -46,24 +48,42 @@ export function nativeCurrentPosition(askPermission:boolean):Promise<NativePosit
  */
 export async function siteCurrentPosition(askPermission:boolean):Promise<Coordinate>{
  if(isNativeWebView()){
-  // Prefer Android's foreground GPS bridge. Older installed APKs, however, may
-  // not have this bridge, and some devices may fail to return a native fix.
-  // In either case give the live website a chance to get a browser GPS fix.
-  const result=await nativeCurrentPosition(askPermission);
-  if(result.point)return result.point;
-  if(result.error==='services')throw new PositionError('services');
-  // Automatic launch may only use an already granted location permission.
-  // A button press is explicit permission intent and may show the browser prompt.
-  if(!askPermission&&!await webLocationGranted()){
-   throw new PositionError(result.error==='permission'?'permission':result.error==='timeout'?'timeout':'permission');
+  // Run the permitted browser location and Android bridge concurrently:
+  // sequential high-accuracy GPS retries previously delayed map centring.
+  const native=nativeCurrentPosition(askPermission).then(result=>{
+   if(result.point)return result.point;
+   throw new PositionError(result.error==='unsupported'?'position':result.error??'position');
+  });
+  const webAllowed=await webLocationGranted();
+  if(webAllowed){
+   let webFailure:PositionError|null=null;
+   const browser=getWebPosition(6500).then(point=>{refineWebPosition();return point},error=>{
+    webFailure=error instanceof PositionError?error:new PositionError('position');
+    throw webFailure;
+   });
+   try{return await Promise.any([native,browser])}
+   catch(error){
+    const nativeFailure=await native.catch(failure=>failure);
+    if(nativeFailure instanceof PositionError&&nativeFailure.code!=='position')throw nativeFailure;
+    throw webFailure??new PositionError('position');
+   }
   }
-  try{return await getWebPosition(12000)}
+  try{return await native}
   catch(error){
+   // Only a user tap may request new browser permission; do not show prompts
+   // on automatic launch when neither origin nor Android has permission.
+   if(askPermission){
+    const point=await getWebPosition(6500);
+    refineWebPosition();
+    return point;
+   }
    throw error instanceof PositionError?error:new PositionError('position');
   }
  }
  if(!askPermission&&!await webLocationGranted())throw new PositionError('permission');
- return getWebPosition();
+ const point=await getWebPosition(6500);
+ refineWebPosition();
+ return point;
 }
 export const siteMigrationPending=()=>false;
 export async function loadSiteState(storage:Pick<Storage,'getItem'|'setItem'>,key:string):Promise<string|null>{
