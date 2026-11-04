@@ -8,7 +8,8 @@ import {
   cloudAcceptRide,cloudAdvanceRide,cloudCancelRide,cloudGetToken,cloudHeartbeat,
   cloudMyDriver,cloudMyRides,cloudOpenRides,cloudPassengerPin,cloudRegisterDriver,
   cloudRequestRide,cloudSetDriverOnline,cloudSignIn,cloudSignOut,cloudSignUp,cloudWhoAmI,
-  type CloudDriver,type CloudRide,type RidePreview,type CloudError
+  cloudIsAdmin,cloudStaffDrivers,cloudApproveDriver,
+  type CloudDriver,type CloudRide,type RidePreview,type StaffDriver,type CloudError
 } from '../cloud-api';
 
 const liveStatuses=['requested','accepted','arrived','riding'];
@@ -20,6 +21,7 @@ export default function CloudBeta(){
  const [mode,setMode]=useState<'passenger'|'driver'>('passenger');
  const [busy,setBusy]=useState(false),[notice,setNotice]=useState('');
  const [driver,setDriver]=useState<CloudDriver|null>(null);
+ const [isAdmin,setIsAdmin]=useState(false),[staffDrivers,setStaffDrivers]=useState<StaffDriver[]>([]);
  const [rides,setRides]=useState<CloudRide[]>([]),[offers,setOffers]=useState<RidePreview[]>([]);
  const [pin,setPin]=useState(''),[passengerPin,setPassengerPin]=useState('');
  const statusName=(value:string)=>({requested:t('بانتظار السائق','Waiting'),accepted:t('قبل السائق','Accepted'),arrived:t('وصل السائق','Arrived'),riding:t('الرحلة جارية','Riding'),completed:t('انتهت الرحلة','Completed'),cancelled:t('ملغاة','Cancelled')} as Record<string,string>)[value]??value;
@@ -37,6 +39,8 @@ export default function CloudBeta(){
    const [me,myRides,myDriver]=await Promise.all([cloudWhoAmI(current),cloudMyRides(current),cloudMyDriver(current)]);
    setUserId(me.id);setUserEmail(me.email??'');setRides(myRides);setDriver(myDriver);
    setOffers(myDriver?.approved&&myDriver.online?await cloudOpenRides(current):[]);
+   const admin=await cloudIsAdmin(current);setIsAdmin(admin);
+   setStaffDrivers(admin?await cloudStaffDrivers(current):[]);
  }
  async function run(work:()=>Promise<void>,message?:string){
    if(busy)return;setBusy(true);setNotice('');
@@ -54,7 +58,7 @@ export default function CloudBeta(){
  const activeDriverRide=driving.find(r=>liveStatuses.includes(r.status));
  const fullCategory=categories.find(c=>c.id===draft.category);
  function changeMode(next:'passenger'|'driver'){setMode(next);setNotice('')}
- function logout(){cloudSignOut();setToken(null);setUserId('');setUserEmail('');setRides([]);setOffers([]);setDriver(null);setPin('');setPassengerPin('')}
+ function logout(){cloudSignOut();setToken(null);setUserId('');setUserEmail('');setRides([]);setOffers([]);setDriver(null);setIsAdmin(false);setStaffDrivers([]);setPin('');setPassengerPin('')}
  return <Page title={t('الرحلات عبر الخادم — اختبار','Server rides — beta test')}>
   <Panel>
    <Label large>{t('اختبار الربط الحقيقي','Server connection test')}</Label>
@@ -110,6 +114,20 @@ export default function CloudBeta(){
        </>}
       </Panel>)}
      </>}
+    {isAdmin&&<Panel>
+      <Label large>{t('إدارة السائقين — اختبار','Driver review — beta')}</Label>
+      <Label muted>{t('لا تعتمد أي سائق قبل التحقق من هويته وأوراق السيارة.','Check the driver and vehicle documents before approval.')}</Label>
+      {staffDrivers.length===0&&<Label muted>{t('لا توجد طلبات تسجيل سائق.','No driver applications.')}</Label>}
+      {staffDrivers.map(account=><View key={account.user_id} style={{gap:8,paddingVertical:10}}>
+        <Label>{account.user_id.slice(0,8)}… · {regions[account.region]?.[state.language==='ar'?0:1]} · {account.category}</Label>
+        <Label muted>{account.approved?t('معتمد','Approved'):t('بانتظار المراجعة','Pending')}</Label>
+        <Button secondary title={account.approved?t('سحب الموافقة','Revoke approval'):t('الموافقة على السائق','Approve driver')} disabled={busy}
+         onPress={()=>void run(async()=>{
+           const ok=await cloudApproveDriver(token,account.user_id,!account.approved);
+           if(!ok)throw Error();await refresh(token);
+         },t('تم تحديث حالة السائق.','Driver status updated.'))}/>
+      </View>)}
+    </Panel>}
     {mode==='driver'&&<>
       {!driver?<Panel>
        <Label>{t('التسجيل كسائق اختبار يحتاج موافقة الإدارة قبل استقبال أي طلب.','Test driver registration needs admin approval before receiving requests.')}</Label>
