@@ -33,7 +33,7 @@ export function loadGoogleMaps(key:string|null,language:string):Promise<GoogleMa
  loading=new Promise<GoogleMaps>((resolve,reject)=>{
   const script=document.createElement('script');let settled=false;
   const fail=()=>{if(settled)return;settled=true;clearTimeout(timer);script.remove();delete target.__yallaGoogleMapsReady;loading=null;reject(Error('map_load'))};
-  const timer=setTimeout(fail,45000);
+  const timer=setTimeout(fail,20000);
   target.__yallaGoogleMapsReady=()=>{if(!target.google?.maps?.marker){fail();return}settled=true;clearTimeout(timer);delete target.__yallaGoogleMapsReady;resolve(target.google.maps)};
   target.gm_authFailure=()=>{for(const listener of authListeners)listener();fail()};
   const params=new URLSearchParams({key,callback:'__yallaGoogleMapsReady',loading:'async',libraries:'marker',v:'quarterly',language:language==='ar'?'ar':'en'});
