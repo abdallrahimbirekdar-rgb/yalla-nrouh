@@ -31,7 +31,7 @@ async function call<T>(path:string,method:'GET'|'POST',token?:string,body?:unkno
     let data:unknown;
     try{data=raw?JSON.parse(raw):null}catch{throw new CloudError(response.status,'bad_response')}
     if(!response.ok){
-      const error=data&&typeof data==='object'?data as Record<string,unknown>:{};
+      const error:Record<string,unknown>=data&&typeof data==='object'?(data as Record<string,unknown>):{};
       const kind=typeof error.code==='string'?error.code:typeof error.error_code==='string'?error.error_code:typeof error.message==='string'?error.message:'request_failed';
       throw new CloudError(response.status,kind);
     }
