@@ -44,6 +44,18 @@ jobs:
       - name: Build test APK
         working-directory: android
         run: ./gradlew :app:assembleRelease -PreactNativeArchitectures=arm64-v8a,armeabi-v7a -Pexpo.useLegacyPackaging=true --no-daemon -Dorg.gradle.jvmargs="-Xmx4g -XX:MaxMetaspaceSize=1g" -Dorg.gradle.workers.max=2
+      - name: Verify compiled APK and Android version
+        run: |
+          set -euo pipefail
+          mapfile -t APKS < <(find android/app/build/outputs/apk/release -name '*.apk' -type f)
+          test "${#APKS[@]}" -eq 1
+          APK="${APKS[0]}"
+          test -s "$APK"
+          unzip -t "$APK" >/dev/null
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose --print-certs "$APK"
+          "$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging "$APK" | tee apk-badging.txt
+          grep -E "package: name='com\\.yallanrouh\\.demo' versionCode='8' versionName='0\\.6\\.1'" apk-badging.txt
+          sha256sum "$APK" | tee apk-build-sha256.txt
       - name: Upload test APK
         uses: actions/upload-artifact@v4
         with:
@@ -51,15 +63,19 @@ jobs:
           path: android/app/build/outputs/apk/release/*.apk
           if-no-files-found: error
           retention-days: 14
-      - name: Publish latest Android test APK for direct download
+      - name: Publish verified Android test APK for direct download
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          APK=$(find android/app/build/outputs/apk/release -name '*.apk' -type f | head -n 1)
-          test -n "$APK"
+          set -euo pipefail
+          mapfile -t APKS < <(find android/app/build/outputs/apk/release -name '*.apk' -type f)
+          test "${#APKS[@]}" -eq 1
           mkdir -p release-apk
-          cp "$APK" release-apk/yalla-nrouh-test.apk
+          cp "${APKS[0]}" release-apk/yalla-nrouh-test.apk
+          (cd release-apk && sha256sum yalla-nrouh-test.apk > yalla-nrouh-test.apk.sha256)
           if ! gh release view android-test-unified >/dev/null 2>&1; then
-            gh release create android-test-unified --title "Yalla Nrouh Android test (latest)" --notes "Test build only; not a live taxi booking service." --prerelease
+            gh release create android-test-unified --title "Yalla Nrouh Android 0.6.1 (test)" --notes "Test build only; not a live taxi booking service." --prerelease
           fi
-          gh release upload android-test-unified release-apk/yalla-nrouh-test.apk --clobber
+          gh release upload android-test-unified release-apk/yalla-nrouh-test.apk release-apk/yalla-nrouh-test.apk.sha256 --clobber
+          printf 'Android test 0.6.1, versionCode 8.\\nSource commit: %s\\nBuilt via GitHub Actions after automated checks and APK signature verification.\\nTest only; not a live taxi booking service.\\n' "$GITHUB_SHA" > release-notes.txt
+          gh release edit android-test-unified --title "Yalla Nrouh Android 0.6.1 (test)" --notes-file release-notes.txt --prerelease
