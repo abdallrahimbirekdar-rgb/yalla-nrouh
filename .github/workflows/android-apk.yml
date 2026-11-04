@@ -16,6 +16,7 @@ on:
       - 'assets/logo-approved.png'
       - 'src/site-shell.tsx'
       - 'src/site-shell-policy.ts'
+      - 'src/site-bridge.ts'
       - 'src/permissions-intro.tsx'
       - 'src/alerts.ts'
       - 'src/storage.ts'
