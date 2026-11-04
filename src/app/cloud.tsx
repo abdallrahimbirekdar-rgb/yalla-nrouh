@@ -25,7 +25,7 @@ export default function CloudBeta(){
  const [driver,setDriver]=useState<CloudDriver|null>(null);
  const [isAdmin,setIsAdmin]=useState(false),[staffDrivers,setStaffDrivers]=useState<StaffDriver[]>([]);
  const [rides,setRides]=useState<CloudRide[]>([]),[offers,setOffers]=useState<RidePreview[]>([]);
- const [pin,setPin]=useState(''),[passengerPin,setPassengerPin]=useState('');
+ const [pin,setPin]=useState(''),[passengerPin,setPassengerPin]=useState(''),[pinRideId,setPinRideId]=useState<string|null>(null);
  const statusName=(value:string)=>({requested:t('بانتظار السائق','Waiting'),accepted:t('قبل السائق','Accepted'),arrived:t('وصل السائق','Arrived'),riding:t('الرحلة جارية','Riding'),completed:t('انتهت الرحلة','Completed'),cancelled:t('ملغاة','Cancelled')} as Record<string,string>)[value]??value;
  function errorText(error:unknown){
    const kind=(error as CloudError)?.kind??(error instanceof Error?error.message:'');
@@ -76,7 +76,7 @@ export default function CloudBeta(){
  const activeDriverRide=driving.find(r=>liveStatuses.includes(r.status));
  const fullCategory=categories.find(c=>c.id===draft.category);
  function changeMode(next:'passenger'|'driver'){setMode(next);setNotice('')}
- function logout(){cloudSignOut();setToken(null);setUserId('');setUserEmail('');setRides([]);setOffers([]);setDriver(null);setIsAdmin(false);setStaffDrivers([]);setPin('');setPassengerPin('')}
+ function logout(){cloudSignOut();setToken(null);setUserId('');setUserEmail('');setRides([]);setOffers([]);setDriver(null);setIsAdmin(false);setStaffDrivers([]);setPin('');setPassengerPin('');setPinRideId(null)}
  return <Page title={t('الرحلات عبر الخادم — اختبار','Server rides — beta test')}>
   <Panel>
    <Label large>{t('اختبار الربط الحقيقي','Server connection test')}</Label>
@@ -114,9 +114,8 @@ export default function CloudBeta(){
        <Button secondary title={t('تحديد الانطلاق على الخريطة','Choose pickup on map')} onPress={()=>router.push({pathname:'/location',params:{target:'pickup',returnTo:'cloud'}})}/>
        <Button secondary title={t('تحديد الوصول على الخريطة','Choose destination on map')} onPress={()=>router.push({pathname:'/location',params:{target:'destination',returnTo:'cloud'}})}/>
        <Button title={t('إرسال طلب اختبار إلى الخادم','Send test request to server')} disabled={busy||!draft.pickupPoint||!draft.destinationPoint} onPress={()=>void run(async()=>{
-         const result=await cloudRequestRide(token,draft);setPassengerPin(result.pin);await refresh(token);
+         const result=await cloudRequestRide(token,draft);setPassengerPin(result.pin);setPinRideId(result.ride_id);await refresh(token);
        },t('أُرسل طلب الاختبار. احتفظ برمز البدء ذي 6 أرقام.','Test request sent. Keep the 6-digit start PIN.'))}/>
-       {!!passengerPin&&<Label>{t('رمز بدء الرحلة: ','Ride start PIN: ')}{passengerPin}</Label>}
       </Panel>
       <Label large>{t('طلباتي على الخادم','My server requests')}</Label>
       {mine.length===0&&<Label muted>{t('لا توجد طلبات بعد.','No server rides yet.')}</Label>}
@@ -125,8 +124,9 @@ export default function CloudBeta(){
        <Label muted>{statusName(r.status)} · {r.category}</Label>
        {liveStatuses.includes(r.status)&&<>
         <Button secondary title={t('إظهار رمز بدء الرحلة','Show ride PIN')} disabled={busy} onPress={()=>void run(async()=>{
-          const found=await cloudPassengerPin(token,r.id);setPassengerPin(found??'');
+          const found=await cloudPassengerPin(token,r.id);setPassengerPin(found??'');setPinRideId(r.id);
         })}/>
+        {pinRideId===r.id&&!!passengerPin&&<Label>{t('رمز بدء هذه الرحلة: ','Start PIN for this ride: ')}{passengerPin}</Label>}
         {['requested','accepted','arrived'].includes(r.status)&&<Button secondary title={t('إلغاء هذا الطلب','Cancel request')} disabled={busy} onPress={()=>void run(async()=>{
           const ok=await cloudCancelRide(token,r.id);if(!ok)throw Error();await refresh(token);
         },t('تم إلغاء طلب الاختبار.','Test request cancelled.'))}/>}
