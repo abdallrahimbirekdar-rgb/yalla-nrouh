@@ -31,36 +31,57 @@ async function withBrowser(work){
 test('ordinary browsers read their existing local data without contacting the native bridge',()=>withBrowser(async(_host,storage)=>{
  storage.setItem('state','existing');assert.equal(await loadSiteState(storage,'state'),'existing');
 }));
-test('first native launch imports the old APK state; later website state is never overwritten',()=>withBrowser(async(host,storage)=>{
- const requests=[];host.ReactNativeWebView={postMessage:raw=>{const message=JSON.parse(raw);requests.push(message);queueMicrotask(()=>host.dispatchEvent(new CustomEvent('yalla:native-bootstrap',{detail:{id:message.id,savedState:message.needsSavedState?oldState:null,locationGranted:true}})))}};
- assert.equal(await loadSiteState(storage,'state'),oldState);assert.equal(host.__YALLA_NATIVE_LOCATION_GRANTED__,true);
- storage.setItem('state','newer-web-state');assert.equal(await loadSiteState(storage,'state'),'newer-web-state');assert.equal(requests[1].needsSavedState,false);
+test('the website keeps its own data and never imports an old APK state',()=>withBrowser(async(host,storage)=>{
+ const requests=[];
+ host.ReactNativeWebView={postMessage:raw=>{const message=JSON.parse(raw);requests.push(message);queueMicrotask(()=>host.dispatchEvent(new CustomEvent('yalla:native-bootstrap',{detail:{id:message.id,savedState:oldState,locationGranted:true}})))}};
+ assert.equal(await loadSiteState(storage,'state'),null);
+ await new Promise(resolve=>queueMicrotask(resolve));
+ assert.equal(storage.getItem('state'),null);
+ assert.equal(host.__YALLA_NATIVE_LOCATION_GRANTED__,true);
+ assert.equal(requests[0].needsSavedState,false);
+ storage.setItem('state','newer-web-state');
+ assert.equal(await loadSiteState(storage,'state'),'newer-web-state');
+ assert.equal(storage.getItem('state'),'newer-web-state');
+ assert.equal(requests[1].needsSavedState,false);
 }));
 test('notification actions wait for their matching response',()=>withBrowser(async(host)=>{
  host.ReactNativeWebView={postMessage:raw=>{const message=JSON.parse(raw);queueMicrotask(()=>{host.dispatchEvent(new CustomEvent('yalla:native-result',{detail:{id:'wrong-id',ok:true}}));host.dispatchEvent(new CustomEvent('yalla:native-result',{detail:{id:message.id,ok:false}}))})}};
  assert.equal(await nativeAction('alerts-enable'),false);
 }));
 
-test('invalid migrated data never replaces an empty website store',()=>withBrowser(async(host,storage,values)=>{
+test('unexpected legacy payloads are ignored without changing website storage',()=>withBrowser(async(host,storage,values)=>{
  host.ReactNativeWebView={postMessage:raw=>{const message=JSON.parse(raw);queueMicrotask(()=>host.dispatchEvent(new CustomEvent('yalla:native-bootstrap',{detail:{id:message.id,savedState:'invalid-data',locationGranted:false}})))}};
- assert.equal(await loadSiteState(storage,'state'),null);assert.equal(storage.getItem('state'),null);assert.equal([...values.values()].includes('invalid-data'),true);
+ assert.equal(await loadSiteState(storage,'state'),null);
+ await new Promise(resolve=>queueMicrotask(resolve));
+ assert.equal(storage.getItem('state'),null);
+ assert.equal(values.size,0);
 }));
-
-test('a dropped first bootstrap message is retried and old data is imported',t=>withBrowser(async(host,storage)=>{
+test('a missed native reply is retried for optional location status',t=>withBrowser(async(host,storage)=>{
  t.mock.timers.enable({apis:['setTimeout','setInterval']});let requests=0;
  host.ReactNativeWebView={postMessage:raw=>{const message=JSON.parse(raw);if(++requests===1)return;host.dispatchEvent(new CustomEvent('yalla:native-bootstrap',{detail:{id:message.id,savedState:oldState,locationGranted:true}}))}};
- const result=loadSiteState(storage,'state');t.mock.timers.tick(1000);
- assert.equal(await result,oldState);assert.equal(requests,2);assert.equal(siteMigrationPending(),false);
+ assert.equal(await loadSiteState(storage,'state'),null);
+ t.mock.timers.tick(1000);
+ assert.equal(requests,2);
+ assert.equal(host.__YALLA_NATIVE_LOCATION_GRANTED__,true);
+ assert.equal(siteMigrationPending(),false);
+ assert.equal(storage.getItem('state'),null);
 }));
-test('unavailable native migration does not block opening but prevents overwriting native data',t=>withBrowser(async(host,storage)=>{
- t.mock.timers.enable({apis:['setTimeout','setInterval']});host.ReactNativeWebView={postMessage:()=>{}};
- const result=loadSiteState(storage,'state');t.mock.timers.tick(15000);
- assert.equal(await result,null);assert.equal(siteMigrationPending(),true);assert.equal(storage.getItem('state'),null);
+test('missing native reply never delays the map or blocks website saves',t=>withBrowser(async(host,storage)=>{
+ t.mock.timers.enable({apis:['setTimeout','setInterval']});
+ host.ReactNativeWebView={postMessage:()=>{}};
+ assert.equal(await loadSiteState(storage,'state'),null);
+ assert.equal(siteMigrationPending(),false);
+ storage.setItem('state',oldState);
+ t.mock.timers.tick(5000);
+ assert.equal(storage.getItem('state'),oldState);
 }));
-test('existing website data is usable even when the native bridge never responds',t=>withBrowser(async(host,storage)=>{
- t.mock.timers.enable({apis:['setTimeout','setInterval']});storage.setItem('state',oldState);host.ReactNativeWebView={postMessage:()=>{}};
- const result=loadSiteState(storage,'state');t.mock.timers.tick(3000);
- assert.equal(await result,oldState);assert.equal(siteMigrationPending(),false);
+test('existing website data is returned immediately without native response',t=>withBrowser(async(host,storage)=>{
+ t.mock.timers.enable({apis:['setTimeout','setInterval']});
+ storage.setItem('state',oldState);
+ host.ReactNativeWebView={postMessage:()=>{}};
+ assert.equal(await loadSiteState(storage,'state'),oldState);
+ assert.equal(siteMigrationPending(),false);
+ t.mock.timers.tick(5000);
 }));
 test('malformed saved data is backed up unchanged before a readable replacement is stored',async()=>{
  const broken=JSON.stringify({storageVersion:2,state:{...initialState,trips:[{oldFormat:true}]},draft:{...emptyDraft,pickup:'Old pickup'}});
