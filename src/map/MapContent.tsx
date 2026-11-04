@@ -6,7 +6,7 @@ import {type Coordinate} from '../geo';
 import type {CameraTarget} from '../use-current-position';
 import {Button,Label,useText,useTheme} from '../ui';
 
-export default function MapContent({point,onChange,compact=false,route,readOnly=false,lean=false,loadTimeoutMs=25000,cameraTarget}:{point:Coordinate|null;onChange:(point:Coordinate)=>void;compact?:boolean;route?:Coordinate[];readOnly?:boolean;lean?:boolean;loadTimeoutMs?:number;cameraTarget?:CameraTarget}){
+export default function MapContent({point,onChange,compact=false,route,readOnly=false,lean=false,loadTimeoutMs=25000,cameraTarget,initialCenter}:{point:Coordinate|null;onChange:(point:Coordinate)=>void;compact?:boolean;route?:Coordinate[];readOnly?:boolean;lean?:boolean;loadTimeoutMs?:number;cameraTarget?:CameraTarget;initialCenter?:Coordinate}){
  const t=useText();const {colors,dark}=useTheme();const ref=useRef<MapView>(null);
  const [ready,setReady]=useState(false),[tilesLoaded,setTilesLoaded]=useState(false);
  const [slow,setSlow]=useState(false),[attempt,setAttempt]=useState(0);
@@ -36,7 +36,7 @@ export default function MapContent({point,onChange,compact=false,route,readOnly=
     rotateEnabled={!lean}
     liteMode={readOnly&&lean}
     userInterfaceStyle={dark?'dark':'light'}
-    initialRegion={{latitude:cameraTarget?.point.latitude??point?.latitude??33.5138,longitude:cameraTarget?.point.longitude??point?.longitude??36.2765,latitudeDelta:cameraTarget?0.0015:lean?0.06:0.035,longitudeDelta:cameraTarget?0.0015:lean?0.06:0.035}}
+    initialRegion={{latitude:cameraTarget?.point.latitude??point?.latitude??initialCenter?.latitude??33.5138,longitude:cameraTarget?.point.longitude??point?.longitude??initialCenter?.longitude??36.2765,latitudeDelta:cameraTarget?0.0015:lean?0.06:0.035,longitudeDelta:cameraTarget?0.0015:lean?0.06:0.035}}
     onMapReady={()=>setReady(true)}
     onMapLoaded={()=>{setTilesLoaded(true);setSlow(false)}}
     onPress={event=>{if(!readOnly)onChange(event.nativeEvent.coordinate)}}
