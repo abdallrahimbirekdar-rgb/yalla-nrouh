@@ -6,7 +6,7 @@ import {useApp} from '../context';
 import {Button,Label,useText,useTheme} from '../ui';
 import {loadGoogleMaps,onMapsAuthFailure,webMapsKey,type GoogleMap,type GoogleMaps,type GoogleMarker,type GoogleLine,type LatLng} from './google-web';
 const position=(point:Coordinate):LatLng=>({lat:point.latitude,lng:point.longitude});
-export default function MapContent({point,onChange,compact=false,route,readOnly=false,lean=false,loadTimeoutMs=25000,cameraTarget,initialCenter}:{point:Coordinate|null;onChange:(point:Coordinate)=>void;compact?:boolean;route?:Coordinate[];readOnly?:boolean;lean?:boolean;loadTimeoutMs?:number;cameraTarget?:CameraTarget;initialCenter?:Coordinate}){
+export default function MapContent({point,onChange,compact=false,route,readOnly=false,lean=false,loadTimeoutMs=25000,cameraTarget,initialCenter,minMapHeight=260}:{point:Coordinate|null;onChange:(point:Coordinate)=>void;compact?:boolean;route?:Coordinate[];readOnly?:boolean;lean?:boolean;loadTimeoutMs?:number;cameraTarget?:CameraTarget;initialCenter?:Coordinate;minMapHeight?:number}){
  const {state}=useApp();const t=useText();const {colors,dark}=useTheme();const host=useRef<HTMLDivElement>(null);
  const map=useRef<GoogleMap|null>(null),api=useRef<GoogleMaps|null>(null),marker=useRef<GoogleMarker|null>(null),line=useRef<GoogleLine|null>(null);
  const userMarker=useRef<GoogleMarker|null>(null);
@@ -57,8 +57,8 @@ export default function MapContent({point,onChange,compact=false,route,readOnly=
   }else userMarker.current.position=center;
  },[cameraTarget,ready,state.language]);
  useEffect(()=>{map.current?.setOptions({tilt:0,heading:0,headingInteractionEnabled:!lean,tiltInteractionEnabled:false})},[lean,ready]);
- return <View style={compact?{flex:1,minHeight:260}:{gap:10}}>
-  {React.createElement('div',{ref:host,role:'region','aria-label':t('خريطة Google لاختيار الموقع','Google map to choose a location'),style:{height:compact?'100%':340,minHeight:compact?260:340,width:'100%',borderRadius:compact?0:16,overflow:'hidden',background:colors.surface}})}
+ return <View style={compact?{flex:1,minHeight:minMapHeight}:{gap:10}}>
+  {React.createElement('div',{ref:host,role:'region','aria-label':t('خريطة Google لاختيار الموقع','Google map to choose a location'),style:{height:compact?'100%':340,minHeight:compact?minMapHeight:340,width:'100%',borderRadius:compact?0:16,overflow:'hidden',background:colors.surface}})}
   {(!key||error||!ready)&&<View style={{position:'absolute',left:16,right:16,top:compact?70:30,padding:18,borderRadius:14,gap:12,backgroundColor:colors.background}}>
    {!key||error?<Label>{t('خريطة Google غير متاحة حاليًا. يمكنك إدخال العنوان يدويًا والمحاولة لاحقًا.','Google Maps is not available right now. You can enter an address by hand and try later.')}</Label>:<><ActivityIndicator color={colors.purple}/><Label>{t('جارٍ تحميل خريطة Google…','Loading Google Maps…')}</Label></>}
    {key&&error&&<Button secondary title={t('إعادة المحاولة','Try again')} onPress={()=>setAttempt(value=>value+1)}/>}

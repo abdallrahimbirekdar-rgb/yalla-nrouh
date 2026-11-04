@@ -11,7 +11,7 @@ import {useAuth} from '../auth';
 import {useApp} from '../context';
 import {formatCoordinate,type Coordinate} from '../geo';
 import {type Place} from '../api';
-import {cloudGetToken,cloudSavedPlaces,cloudSavePlaces,type SavedPlace} from '../cloud-api';
+import {cloudSavedPlaces,cloudSavePlaces,type SavedPlace} from '../cloud-api';
 import {Button,Field,Label,Page,Panel,useText} from '../ui';
 export default function LocationPicker(){
  const {target,returnTo}=useLocalSearchParams<{target:string;returnTo?:string}>();
@@ -23,17 +23,17 @@ export default function LocationPicker(){
  const [query,setQuery]=useState(''),[results,setResults]=useState<Place[]>([]),[saved,setSaved]=useState<SavedPlace[]>([]);
  const [message,setMessage]=useState(''),[busy,setBusy]=useState(false),[saving,setSaving]=useState(false),[loaded,setLoaded]=useState(false);
  const [selectionCamera,setSelectionCamera]=useState<CameraTarget>();
- const alive=useRef(true),task=useRef(0);const token=auth.session?.access_token??null;
+ const alive=useRef(true),task=useRef(0);const token=auth.session?.access_token??null;const account=auth.session?.user.id;const accountRef=useRef(account);accountRef.current=account;
  useEffect(()=>{alive.current=true;return()=>{alive.current=false}},[]);
  const loadSaved=useCallback(async()=>{
   if(!token)return;
   setLoaded(false);
-  try{const list=await cloudSavedPlaces(token);if(alive.current&&cloudGetToken()===token){setSaved(list);setLoaded(true)}}
+  try{const list=await cloudSavedPlaces(token);if(alive.current&&accountRef.current===account){setSaved(list);setLoaded(true)}}
   catch{if(alive.current)setMessage(state.language==='ar'?'تعذر تحميل الأماكن المحفوظة. أعد المحاولة.':'Could not load saved places. Try again.')}
- },[token,state.language])
+ },[token,account,state.language])
  useEffect(()=>{void loadSaved()},[loadSaved]); // Account places are fetched from the authenticated user only.
  function goBack(){if(fromCloud)router.replace('/cloud');else router.replace({pathname:'/',params:{booking:'1'}})}
- function choose(next:Coordinate,nextLabel?:string){setPoint(next);setLabel(nextLabel??formatCoordinate(next));setMessage('')}
+ function choose(next:Coordinate,nextLabel?:string){setPoint(next);setLabel(nextLabel??(pickup?t('نقطة الالتقاء على الخريطة','Meeting point on the map'):t('نقطة الوصول على الخريطة','Destination on the map')));setMessage('')}
  async function selectCurrent(){
   const next=await gps.locate();
   if(next&&alive.current){choose(next,t('موقعي الحالي','My current location'));setSelectionCamera({point:next,revision:Date.now()})}
@@ -63,7 +63,7 @@ export default function LocationPicker(){
    const entry:SavedPlace|undefined=point?{id:Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,8),label:label.trim()||formatCoordinate(point),coordinate:point}:undefined;
    const next=removeId?saved.filter(p=>p.id!==removeId):[entry!,...saved].slice(0,20);
    const verified=await cloudSavePlaces(token,next);
-   if(alive.current&&cloudGetToken()===token){setSaved(verified);setMessage(t('تم تحديث الأماكن المحفوظة في حسابك.','Saved places updated in your account.'))}
+   if(alive.current&&accountRef.current===account){setSaved(verified);setMessage(t('تم تحديث الأماكن المحفوظة في حسابك.','Saved places updated in your account.'))}
   }catch{if(alive.current)setMessage(t('لم يتم الحفظ. تحقق من الاتصال أو سجّل الدخول مجددًا ثم حاول.','Could not save. Check internet or sign in again, then retry.'))}
   finally{if(alive.current)setSaving(false)}
  }
@@ -82,7 +82,7 @@ export default function LocationPicker(){
   {(gps.busy||busy)&&<ActivityIndicator accessibilityLabel={t('جارٍ التحميل','Loading')}/>}
   {pickup&&gps.failure&&<View accessibilityRole="alert"><Label>{t('تعذر تحديد موقعك الحالي. تأكد من تشغيل الموقع والسماح بالموقع الدقيق ثم أعد المحاولة.','Could not get your location. Turn on location, allow precise access, then try again.')}</Label><Button secondary title={t('تحديد موقعي مجددًا','Find my location again')} onPress={()=>void selectCurrent()} disabled={gps.busy}/></View>}
   {point&&<Panel>
-   <Label>{formatCoordinate(point)}</Label>
+   <Label muted>{t('تم تحديد النقطة على الخريطة','Point selected on the map')}</Label>
    <Field label={t('اسم المكان أو وصف نقطة الالتقاء','Place name or meeting point')} value={label} onChangeText={setLabel} maxLength={200}/>
    {pickup&&!allowed&&<Label>{t(`يجب أن تكون نقطة الانطلاق ضمن ${MAX_PICKUP_METERS} متر من موقعك الحالي.`,`Pickup must be within ${MAX_PICKUP_METERS} metres of your location.`)}</Label>}
    <Button icon="checkmark-circle-outline" title={pickup?t('تأكيد نقطة الانطلاق','Confirm pickup'):t('تأكيد نقطة الوصول والعودة للحجز','Confirm destination and return to booking')} onPress={()=>void confirm()} disabled={busy||!allowed}/>
@@ -90,7 +90,7 @@ export default function LocationPicker(){
   </Panel>}
   {!pickup&&<Panel>
    <Label large>{t('أماكني المحفوظة','My saved places')}</Label>
-   {!token?<><Label muted>{t('سجّل الدخول لعرض أماكنك وحفظ المنزل والعمل وغيرها.','Sign in to view and save home, work and other places.')}</Label><Button secondary title={t('الدخول إلى حسابي','Sign in to my account')} onPress={()=>router.push({pathname:'/account',params:{next:'destination'}})}/></>:<>
+   {!token?<><Label muted>{t('سجّل الدخول لعرض أماكنك وحفظ المنزل والعمل وغيرها.','Sign in to view and save home, work and other places.')}</Label><Button secondary title={t('الدخول إلى حسابي','Sign in to my account')} onPress={()=>{if(point)setDraft(previous=>({...previous,destination:label.trim()||t('نقطة الوصول على الخريطة','Destination on the map'),destinationPoint:point}));router.push({pathname:'/account',params:{next:'destination'}})}}/></>:<>
     {!loaded?<Button secondary title={t('تحميل الأماكن المحفوظة','Load saved places')} onPress={()=>void loadSaved()}/>:saved.length===0&&<Label muted>{t('لم تحفظ أماكن بعد. اختر نقطة وسمّها ثم اضغط حفظ المكان.','No saved places yet. Choose a point, name it and tap Save place.')}</Label>}
     {saved.map(place=><View key={place.id} style={{gap:6}}><Button secondary icon="bookmark" title={place.label} onPress={()=>{choose(place.coordinate,place.label);setSelectionCamera({point:place.coordinate,revision:Date.now(),isLocation:false})}}/><Button secondary title={t('حذف المكان المحفوظ','Delete saved place')} onPress={()=>void savePlace(place.id)} disabled={saving}/></View>)}
    </>}
