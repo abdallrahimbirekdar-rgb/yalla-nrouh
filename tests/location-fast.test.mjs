@@ -20,20 +20,20 @@ async function withLocationBrowser(browser,run){
  }
 }
 
-test('a fast browser fix is not blocked by an unresponsive Android GPS bridge',async()=>withLocationBrowser({
- permissions:{query:async()=>({state:'granted'})},
- geolocation:{getCurrentPosition:(success,error,options)=>{
-  if(options.enableHighAccuracy){error({code:3});return}
-  assert.equal(options.maximumAge,30000);
-  assert.equal(options.timeout,6500);
-  queueMicrotask(()=>success({coords:{latitude:51.48,longitude:7.21,accuracy:90}}));
- }}
+test('embedded website uses only Android GPS even when web geolocation would ask again',async()=>withLocationBrowser({
+ permissions:{query:()=>{throw Error('must not check browser permission')}},
+ geolocation:{getCurrentPosition:()=>{throw Error('must not request WebView location')}}
 },async host=>{
- let requests=0;host.ReactNativeWebView={postMessage:raw=>{requests++;assert.equal(JSON.parse(raw).type,'location')}};
- const start=Date.now();
+ let requests=0;
+ host.ReactNativeWebView={postMessage:raw=>{
+  const request=JSON.parse(raw);requests++;
+  assert.equal(request.type,'location');assert.equal(request.askPermission,false);
+  queueMicrotask(()=>host.dispatchEvent(new CustomEvent('yalla:native-position',{detail:{
+   id:request.id,point:{latitude:51.48,longitude:7.21},error:null
+  }})));
+ }};
  assert.deepEqual(await siteCurrentPosition(false),{latitude:51.48,longitude:7.21});
  assert.equal(requests,1);
- assert.ok(Date.now()-start<1000,'first fix should not wait for native timeout');
 }));
 
 test('native permission still works without web origin permission',async()=>withLocationBrowser({
@@ -56,4 +56,31 @@ test('automatic location does not ask browser permission after native denial',as
   queueMicrotask(()=>host.dispatchEvent(new CustomEvent('yalla:native-position',{detail:{id:request.id,point:null,error:'permission'}})));
  }};
  await assert.rejects(siteCurrentPosition(false),error=>error instanceof PositionError&&error.code==='permission');
+}));
+
+test('manual location permission is requested only from Android, not WebView',async()=>withLocationBrowser({
+ permissions:{query:()=>{throw Error('must not check browser permission')}},
+ geolocation:{getCurrentPosition:()=>{throw Error('must not ask for website location')}}
+},async host=>{
+ let requests=0;
+ host.ReactNativeWebView={postMessage:raw=>{
+  const request=JSON.parse(raw);requests++;
+  assert.equal(request.askPermission,true);
+  queueMicrotask(()=>host.dispatchEvent(new CustomEvent('yalla:native-position',{detail:{
+   id:request.id,point:{latitude:52.4,longitude:13.1},error:null
+  }})));
+ }};
+ assert.deepEqual(await siteCurrentPosition(true),{latitude:52.4,longitude:13.1});
+ assert.equal(requests,1);
+}));
+
+test('unresponsive Android location bridge fails within a fixed timeout',t=>withLocationBrowser({
+ permissions:{query:()=>{throw Error('browser permission must not be checked')}},
+ geolocation:{getCurrentPosition:()=>{throw Error('browser GPS must not run')}}
+},async host=>{
+ t.mock.timers.enable({apis:['setTimeout']});
+ host.ReactNativeWebView={postMessage:()=>{}};
+ const locating=siteCurrentPosition(false);
+ t.mock.timers.tick(11000);
+ await assert.rejects(locating,error=>error instanceof PositionError&&error.code==='timeout');
 }));
