@@ -46,17 +46,15 @@ export function useCurrentPosition(enabled:boolean){
  useEffect(()=>{alive.current=true;generation.current++;return()=>{alive.current=false}},[]);
  useEffect(()=>{
   if(!enabled)return;
-  let active=true,delayed:ReturnType<typeof setTimeout>|undefined,lastResumeAt=0;
+  let active=true,lastResumeAt=0;
   // Auto-centre at cold start and when the user returns to the app. Never
   // prompt again in the background; only read an already granted permission.
   const start=(onResume=false)=>{
    if(!active||manual.current||!onResume&&located.current)return;
-   if(onResume&&Date.now()-lastResumeAt<1800)return;
-   if(running.current!==null){
-    if(delayed)clearTimeout(delayed);
-    delayed=setTimeout(()=>{delayed=undefined;start(onResume)},350);
-    return;
-   }
+   if(onResume&&Date.now()-lastResumeAt<2500)return;
+   // A resume event during an existing GPS request must NOT queue a second
+   // request. Previously it could restart the spinner immediately afterwards.
+   if(running.current!==null)return;
    if(onResume)lastResumeAt=Date.now();
    void locate(false);
   };
@@ -66,7 +64,7 @@ export function useCurrentPosition(enabled:boolean){
    setCamera({point:recent,revision:id});
   }else start(false);
   const subscription=AppState.addEventListener('change',value=>{if(value==='active')start(true)});
-  if(Platform.OS!=='web')return()=>{active=false;subscription.remove();if(delayed)clearTimeout(delayed)};
+  if(Platform.OS!=='web')return()=>{active=false;subscription.remove()};
   const onNativeGrant=(event:Event)=>{if((event as CustomEvent).detail?.granted===true)start(false)};
   const onWebFix=(event:Event)=>{
    const point=(event as CustomEvent).detail;
@@ -85,7 +83,7 @@ export function useCurrentPosition(enabled:boolean){
   window.addEventListener('yalla:native-visibility',onNativeVisibility);
   document.addEventListener('visibilitychange',onVisibility);
   return()=>{
-   active=false;subscription.remove();if(delayed)clearTimeout(delayed);
+   active=false;subscription.remove();
    window.removeEventListener('yalla:native-location-permission',onNativeGrant);
    window.removeEventListener('yalla:location-ready',onWebFix);
    window.removeEventListener('yalla:native-visibility',onNativeVisibility);
