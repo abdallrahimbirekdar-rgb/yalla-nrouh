@@ -9,7 +9,7 @@ export async function webLocationGranted():Promise<boolean>{
  try{
   if(navigator.permissions?.query){
    const result=await navigator.permissions.query({name:'geolocation'});
-   if(result.state==='denied')return nativeGranted; // An embedded WebView can have native permission even if the origin reports denied.
+   if(result.state==='denied')return false; // A website permission denial is authoritative even inside Android.
    if(result.state==='granted')return true;
   }
  }catch{/* Some Android WebViews do not implement Permissions.query. */}
