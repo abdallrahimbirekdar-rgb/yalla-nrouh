@@ -92,8 +92,8 @@ export default function CloudBeta(){
        <Label>{draft.pickup||t('لم تُحدد نقطة الانطلاق','No pickup selected')}</Label>
        <Label>{draft.destination||t('لم تُحدد نقطة الوصول','No destination selected')}</Label>
        <Label muted>{fullCategory?.[state.language]??draft.category} · {regions[draft.region]?.[state.language==='ar'?0:1]}</Label>
-       <Button secondary title={t('تحديد الانطلاق على الخريطة','Choose pickup on map')} onPress={()=>router.push({pathname:'/location',params:{target:'pickup'}})}/>
-       <Button secondary title={t('تحديد الوصول على الخريطة','Choose destination on map')} onPress={()=>router.push({pathname:'/location',params:{target:'destination'}})}/>
+       <Button secondary title={t('تحديد الانطلاق على الخريطة','Choose pickup on map')} onPress={()=>router.push({pathname:'/location',params:{target:'pickup',returnTo:'cloud'}})}/>
+       <Button secondary title={t('تحديد الوصول على الخريطة','Choose destination on map')} onPress={()=>router.push({pathname:'/location',params:{target:'destination',returnTo:'cloud'}})}/>
        <Button title={t('إرسال طلب اختبار إلى الخادم','Send test request to server')} disabled={busy||!draft.pickupPoint||!draft.destinationPoint} onPress={()=>void run(async()=>{
          const result=await cloudRequestRide(token,draft);setPassengerPin(result.pin);await refresh(token);
        },t('أُرسل طلب الاختبار. احتفظ برمز البدء ذي 6 أرقام.','Test request sent. Keep the 6-digit start PIN.'))}/>
