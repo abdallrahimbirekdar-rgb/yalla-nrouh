@@ -67,7 +67,7 @@ export function useCurrentPosition(enabled:boolean){
   }else start(false);
   const subscription=AppState.addEventListener('change',value=>{if(value==='active')start(true)});
   if(Platform.OS!=='web')return()=>{active=false;subscription.remove();if(delayed)clearTimeout(delayed)};
-  const onNativeGrant=(event:Event)=>{if((event as CustomEvent).detail?.granted===true)start(true)};
+  const onNativeGrant=(event:Event)=>{if((event as CustomEvent).detail?.granted===true)start(false)};
   const onWebFix=(event:Event)=>{
    const point=(event as CustomEvent).detail;
    if(!isCoordinate(point)||manual.current)return;
