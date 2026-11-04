@@ -1,5 +1,6 @@
 import {isCoordinate,type Coordinate} from './geo.ts';
-import {announceWebPosition} from './web-position.ts';
+import {announceWebPosition,getWebPosition,webLocationGranted} from './web-position.ts';
+import {PositionError} from './current-position.ts';
 export type SiteWindow=Window&{ReactNativeWebView?:{postMessage:(message:string)=>void};__YALLA_NATIVE_LOCATION_GRANTED__?:boolean};
 // The website owns its local data. Never block a launch or save while trying
 // to import older APK data; the owner chose to start without that migration.
@@ -37,6 +38,20 @@ export function nativeCurrentPosition(askPermission:boolean):Promise<NativePosit
   try{bridge.postMessage(JSON.stringify({type:'location',id,askPermission}))}
   catch{cleanup();resolve({point:null,error:'unsupported'})}
  });
+}
+/**
+ * Browser GPS on the website, native Expo GPS in the installed WebView.
+ * Never request a fresh permission on automatic location attempts.
+ * Older installed wrappers do not understand this request and fall back to web GPS.
+ */
+export async function siteCurrentPosition(askPermission:boolean):Promise<Coordinate>{
+ if(isNativeWebView()){
+  const result=await nativeCurrentPosition(askPermission);
+  if(result.point)return result.point;
+  if(result.error!=='unsupported')throw new PositionError(result.error??'position');
+ }
+ if(!askPermission&&!await webLocationGranted())throw new PositionError('permission');
+ return getWebPosition();
 }
 export const siteMigrationPending=()=>false;
 export async function loadSiteState(storage:Pick<Storage,'getItem'|'setItem'>,key:string):Promise<string|null>{
