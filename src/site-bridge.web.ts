@@ -3,6 +3,7 @@ export type SiteWindow=Window&{ReactNativeWebView?:{postMessage:(message:string)
 export async function loadSiteState(storage:Pick<Storage,'getItem'|'setItem'>,key:string):Promise<string|null>{
  const saved=storage.getItem(key);const host=window as SiteWindow;const bridge=host.ReactNativeWebView;
  if(!bridge)return saved;
+ document.documentElement?.classList.add('yn-native-app');
  const id=Date.now().toString(36)+'-'+Math.random().toString(36).slice(2);
  const payload=await new Promise<{savedState:string|null;locationGranted:boolean}>((resolve,reject)=>{
   const finish=(event:Event)=>{const value=(event as CustomEvent).detail;if(value?.id!==id||typeof value.locationGranted!=='boolean'||(value.savedState!==null&&typeof value.savedState!=='string'))return;cleanup();resolve(value)};
