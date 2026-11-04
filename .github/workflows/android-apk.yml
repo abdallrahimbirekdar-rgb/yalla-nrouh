@@ -41,6 +41,20 @@ jobs:
         run: npm test
       - name: Generate Android project
         run: npx expo prebuild --platform android --no-install
+      - name: Check embedded Google Maps configuration
+        run: |
+          set -euo pipefail
+          if [[ -z "${GOOGLE_MAPS_ANDROID_API_KEY:-}" ]]; then
+            echo "::warning title=Google Maps not configured::Missing GOOGLE_MAPS_ANDROID_API_KEY repository secret. APK will use the OSM map fallback."
+            echo "### Google Maps: not enabled (OSM fallback)" >> "$GITHUB_STEP_SUMMARY"
+          else
+            if ! grep -q 'com.google.android.geo.API_KEY' android/app/src/main/AndroidManifest.xml; then
+              echo "::error::Google Maps key was provided but not inserted into the Android manifest."
+              exit 1
+            fi
+            echo "### Google Maps: configured in Android manifest" >> "$GITHUB_STEP_SUMMARY"
+            echo "Maps SDK must also be enabled in Google Cloud; test map tiles on an Android phone." >> "$GITHUB_STEP_SUMMARY"
+          fi
       - name: Build test APK
         working-directory: android
         run: ./gradlew :app:assembleRelease -PreactNativeArchitectures=arm64-v8a,armeabi-v7a -Pexpo.useLegacyPackaging=true --no-daemon -Dorg.gradle.jvmargs="-Xmx4g -XX:MaxMetaspaceSize=1g" -Dorg.gradle.workers.max=2
@@ -52,10 +66,21 @@ jobs:
           APK="${APKS[0]}"
           test -s "$APK"
           unzip -t "$APK" >/dev/null
-          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose --print-certs "$APK"
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose --print-certs "$APK" | tee apk-signing.txt
+          CERT_SHA1=$(sed -n 's/^Signer #1 certificate SHA-1 digest: //p' apk-signing.txt | head -n 1)
+          if [[ ! "$CERT_SHA1" =~ ^[0-9a-fA-F]{40}$ ]]; then
+            echo "::error::Could not read APK signing certificate SHA-1."
+            exit 1
+          fi
+          FORMATTED_SHA1=$(printf '%s' "$CERT_SHA1" | sed 's/../&:/g;s/:$//' | tr '[:lower:]' '[:upper:]')
+          APP_VERSION=$(node -p "require('./app.json').expo.version")
+          APP_CODE=$(node -p "require('./app.json').expo.android.versionCode")
           "$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging "$APK" | tee apk-badging.txt
-          grep -E "package: name='com\\.yallanrouh\\.demo' versionCode='8' versionName='0\\.6\\.1'" apk-badging.txt
+          grep -F "package: name='com.yallanrouh.demo' versionCode='$APP_CODE' versionName='$APP_VERSION'" apk-badging.txt
           sha256sum "$APK" | tee apk-build-sha256.txt
+          echo "Android package: \`com.yallanrouh.demo\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "APK signing certificate SHA-1: \`$FORMATTED_SHA1\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "This is a test APK signed with Android Debug; use a production signing certificate before release." >> "$GITHUB_STEP_SUMMARY"
       - name: Upload test APK
         uses: actions/upload-artifact@v4
         with:
@@ -73,9 +98,16 @@ jobs:
           mkdir -p release-apk
           cp "${APKS[0]}" release-apk/yalla-nrouh-test.apk
           (cd release-apk && sha256sum yalla-nrouh-test.apk > yalla-nrouh-test.apk.sha256)
+          APP_VERSION=$(node -p "require('./app.json').expo.version")
+          APP_CODE=$(node -p "require('./app.json').expo.android.versionCode")
+          if [[ -n "${GOOGLE_MAPS_ANDROID_API_KEY:-}" ]]; then
+            MAPS_STATUS="Android Google Maps SDK key configured; check Google Cloud restrictions and Android rendering."
+          else
+            MAPS_STATUS="Google Maps Android SDK key not configured; built-in OSM fallback is active."
+          fi
           if ! gh release view android-test-unified >/dev/null 2>&1; then
-            gh release create android-test-unified --title "Yalla Nrouh Android 0.6.1 (test)" --notes "Test build only; not a live taxi booking service." --prerelease
+            gh release create android-test-unified --title "Yalla Nrouh Android $APP_VERSION (test)" --notes "Test build only; not a live taxi booking service." --prerelease
           fi
           gh release upload android-test-unified release-apk/yalla-nrouh-test.apk release-apk/yalla-nrouh-test.apk.sha256 --clobber
-          printf 'Android test 0.6.1, versionCode 8.\nSource commit: %s\nBuilt via GitHub Actions after automated checks and APK signature verification.\nTest only; not a live taxi booking service.\n' "$GITHUB_SHA" > release-notes.txt
-          gh release edit android-test-unified --title "Yalla Nrouh Android 0.6.1 (test)" --notes-file release-notes.txt --prerelease
+          printf 'Android test %s, versionCode %s.\nSource commit: %s\n%s\nBuilt via GitHub Actions after automated checks and APK signature verification.\nTest only; not a live taxi booking service.\n' "$APP_VERSION" "$APP_CODE" "$GITHUB_SHA" "$MAPS_STATUS" > release-notes.txt
+          gh release edit android-test-unified --title "Yalla Nrouh Android $APP_VERSION (test)" --notes-file release-notes.txt --prerelease
