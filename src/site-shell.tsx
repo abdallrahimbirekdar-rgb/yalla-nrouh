@@ -49,7 +49,8 @@ export default function SiteShell(){
      void (async()=>{
       let delivered=false;
       const send=(point:{latitude:number;longitude:number}|null,error?:string)=>{
-       if(alive.current&&web.current&&AppState.currentState!=='background'&&AppState.currentState!=='inactive')web.current.injectJavaScript(locationScript(message.id,point,error));
+       if(!alive.current||!web.current||AppState.currentState==='background'||AppState.currentState==='inactive')return;
+       web.current.injectJavaScript(locationScript(message.id,point,error));
        if(point)delivered=true;
       };
       try{
