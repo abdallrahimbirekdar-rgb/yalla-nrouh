@@ -6,7 +6,7 @@ import * as Location from 'expo-location';
 import {enableLocalAlerts,notifyLocal} from './alerts';
 import {useApp} from './context';
 import {Button,Label,useText,useTheme} from './ui';
-import {SITE_URL,isSiteUrl,externalLink,buildVersion,readShellMessage,bootstrapScript,resultScript} from './site-shell-policy';
+import {SITE_URL,isSiteUrl,externalLink,buildVersion,readShellMessage,bootstrapScript,resultScript,locationScript} from './site-shell-policy';
 export default function SiteShell(){
  const {ready,state,draft,dispatch}=useApp();const t=useText();const {colors}=useTheme();const web=useRef<WebView>(null);
  const [url,setUrl]=useState(()=>SITE_URL+'?app=android&launch='+Date.now());
@@ -44,6 +44,36 @@ export default function SiteShell(){
     if(message.type==='status'){safe.current=message.safeToReload;canGoBack.current=message.canGoBack;if(message.language&&message.language!==state.language)dispatch({type:'language',language:message.language});if(message.theme&&message.theme!==state.preferences.theme)dispatch({type:'preferences',preferences:{theme:message.theme}});return}
     if(message.type==='refresh'){refresh();return}
     if(message.type==='back-default'){if(canGoBack.current)web.current?.goBack();else BackHandler.exitApp();return}
+    if(message.type==='location'){
+     // Only requests from our approved HTTPS site can reach this native foreground GPS bridge.
+     void (async()=>{
+      let delivered=false;
+      const send=(point:{latitude:number;longitude:number}|null,error?:string)=>{
+       if(alive.current&&web.current)web.current.injectJavaScript(locationScript(message.id,point,error));
+       if(point)delivered=true;
+      };
+      try{
+       if(AppState.currentState!=='active'&&AppState.currentState!==null){send(null,'position');return}
+       let permission=await Location.getForegroundPermissionsAsync();
+       if(!permission.granted&&message.askPermission)permission=await Location.requestForegroundPermissionsAsync();
+       if(!permission.granted){send(null,'permission');return}
+       if(!await Location.hasServicesEnabledAsync()){send(null,'services');return}
+       // A very recent fix paints the map immediately; a fresh fix follows.
+       const cached=await Location.getLastKnownPositionAsync({maxAge:30000,requiredAccuracy:300}).catch(()=>null);
+       if(cached)send({latitude:cached.coords.latitude,longitude:cached.coords.longitude});
+       let timeout:ReturnType<typeof setTimeout>|undefined;
+       try{
+        const fresh=await Promise.race([
+         Location.getCurrentPositionAsync({accuracy:Location.Accuracy.High,mayShowUserSettingsDialog:false}),
+         new Promise<never>((_,reject)=>{timeout=setTimeout(()=>reject(Error('timeout')),12000)}),
+        ]);
+        send({latitude:fresh.coords.latitude,longitude:fresh.coords.longitude});
+       }catch{if(!delivered)send(null,'timeout')}
+       finally{if(timeout)clearTimeout(timeout)}
+      }catch{if(!delivered)send(null,'position')}
+     })();
+     return;
+    }
     if(message.type==='alerts-enable'||message.type==='notify'){const task=message.type==='alerts-enable'?enableLocalAlerts():notifyLocal(message.title,message.body).then(()=>true);void task.then(ok=>{if(alive.current)web.current?.injectJavaScript(resultScript(message.id,ok))}).catch(()=>{if(alive.current)web.current?.injectJavaScript(resultScript(message.id,false))});return}
     loadedVersion.current=message.version;
     void Location.getForegroundPermissionsAsync().then(permission=>{if(alive.current)web.current?.injectJavaScript(bootstrapScript(message.id,message.needsSavedState?saved.current:null,permission.granted))}).catch(()=>{if(alive.current)web.current?.injectJavaScript(bootstrapScript(message.id,message.needsSavedState?saved.current:null,false))});
