@@ -2,6 +2,9 @@ import {type TripDraft} from './domain';
 import {isCoordinate} from './geo';
 
 const API_ROOT='https://gokosprcqpdvqgahvquk.supabase.co';
+let volatileToken:string|null=null;
+export const cloudGetToken=()=>volatileToken;
+export const cloudSignOut=()=>{volatileToken=null};
 /** Supabase publishable key (not a service-role/secret key); safe for public clients. */
 const API_KEY='sb_publishable_0l-T6t_dTDt1OedSTIpLNA_uruCvJ8C';
 
@@ -46,6 +49,7 @@ const rpc=async<T>(name:string,token:string,payload:Record<string,unknown>={})=>
 export async function cloudSignIn(email:string,password:string):Promise<string>{
   const result=await call<{access_token?:string}>('/auth/v1/token?grant_type=password','POST',undefined,{email:email.trim(),password});
   if(!result.access_token)throw new CloudError(401,'login_required');
+  volatileToken=result.access_token;
   return result.access_token;
 }
 export async function cloudSignUp(email:string,password:string):Promise<void>{
