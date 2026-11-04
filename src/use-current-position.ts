@@ -2,8 +2,25 @@ import {useCallback,useEffect,useRef,useState} from 'react';
 import {AppState,Platform} from 'react-native';
 import * as Location from 'expo-location';
 import {currentPosition,PositionError,type PositionFailure} from './current-position';
-import type {Coordinate} from './geo';
-const adapter={permission:()=>Platform.OS==='web'&&typeof window!=='undefined'&&(window as Window&{__YALLA_NATIVE_LOCATION_GRANTED__?:boolean}).__YALLA_NATIVE_LOCATION_GRANTED__===true?Promise.resolve({granted:true}):Location.getForegroundPermissionsAsync(),requestPermission:Location.requestForegroundPermissionsAsync,services:Location.hasServicesEnabledAsync,position:()=>Location.getCurrentPositionAsync({accuracy:Location.Accuracy.Balanced,...(Platform.OS==='web'?{maximumAge:0,timeout:15000}:{})})};
+import {getWebPosition,webLocationGranted} from './web-position';
+import {isCoordinate,type Coordinate} from './geo';
+
+let browserPermissionFix:Coordinate|null=null;
+const adapter={
+ permission:()=>Platform.OS==='web'?webLocationGranted().then(granted=>({granted})):Location.getForegroundPermissionsAsync(),
+ requestPermission:async()=>{
+  if(Platform.OS!=='web')return Location.requestForegroundPermissionsAsync();
+  browserPermissionFix=await getWebPosition();
+  return {granted:true};
+ },
+ services:()=>Platform.OS==='web'?Promise.resolve(true):Location.hasServicesEnabledAsync(),
+ position:async()=>{
+  if(Platform.OS!=='web')return Location.getCurrentPositionAsync({accuracy:Location.Accuracy.Balanced});
+  const fix=browserPermissionFix??await getWebPosition();
+  browserPermissionFix=null;
+  return {coords:fix};
+ },
+};
 export type CameraTarget={point:Coordinate;revision:number};
 export function useCurrentPosition(enabled:boolean){
  const [camera,setCamera]=useState<CameraTarget>();const [busy,setBusy]=useState(false),[failure,setFailure]=useState<PositionFailure|null>(null);
@@ -18,11 +35,20 @@ export function useCurrentPosition(enabled:boolean){
  useEffect(()=>{alive.current=true;generation.current++;return()=>{alive.current=false}},[]);
  useEffect(()=>{
   if(!enabled)return;
-  // The introduction asks first. This automatic path only reads an existing grant.
+  // Only auto-locate after an existing site/native grant; a new grant needs a tap.
   const start=()=>{if(!located.current&&!manual.current)void locate(false)};
-  if(AppState.currentState==='active')start();
+  if(AppState.currentState==='active'||Platform.OS==='web')start();
   const subscription=AppState.addEventListener('change',value=>{if(value==='active')start()});
-  return()=>subscription.remove();
+  if(Platform.OS!=='web')return()=>subscription.remove();
+  const onNativeGrant=(event:Event)=>{if((event as CustomEvent).detail?.granted===true)start()};
+  const onWebFix=(event:Event)=>{
+   const point=(event as CustomEvent).detail;
+   if(!isCoordinate(point)||manual.current)return;
+   const id=++generation.current;located.current=true;setFailure(null);setCamera({point,revision:id});
+  };
+  window.addEventListener('yalla:native-location-permission',onNativeGrant);
+  window.addEventListener('yalla:location-ready',onWebFix);
+  return()=>{subscription.remove();window.removeEventListener('yalla:native-location-permission',onNativeGrant);window.removeEventListener('yalla:location-ready',onWebFix)};
  },[enabled,locate]);
  return {camera,busy,failure,locate:()=>locate(true),chooseManually};
 }
