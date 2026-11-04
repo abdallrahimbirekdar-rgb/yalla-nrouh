@@ -1,5 +1,11 @@
 import {isCoordinate,type Coordinate} from './geo.ts';
-export interface Tariff {base:number;perKm:number;perMinute:number;minimum:number;updatedAt:string}
+export interface Tariff {
+ base:number;perKm:number;perMinute:number;updatedAt:string;
+ /** One means regular pricing; 1.5 means a 50% peak surcharge. */
+ peakMultiplier?:number;
+ /** Previous demo rates only; never applied to new-format fares. */
+ minimum?:number;
+}
 export interface Fix extends Coordinate {time:number;accuracy:number}
 export interface Meter {startedAt:number;endedAt?:number;meters:number;points:Fix[];lastFix?:Fix;incomplete:boolean;tariff:Tariff|null}
 export const GPS_INTERVAL_MS=10000;
@@ -7,7 +13,12 @@ export const GPS_DISTANCE_M=20;
 export const MAX_ROUTE_POINTS=2000;
 export function validTariff(value:unknown):value is Tariff {
  const t=value as Tariff;
- return Boolean(t&&[t.base,t.perKm,t.perMinute,t.minimum].every(n=>typeof n==='number'&&Number.isFinite(n)&&n>=0&&n<=1e12)&&Number.isFinite(Date.parse(t.updatedAt)));
+ return Boolean(
+  t&&[t.base,t.perKm,t.perMinute].every(n=>typeof n==='number'&&Number.isFinite(n)&&n>=0&&n<=1e12)
+  &&(t.peakMultiplier===undefined||typeof t.peakMultiplier==='number'&&Number.isFinite(t.peakMultiplier)&&t.peakMultiplier>=1&&t.peakMultiplier<=10)
+  &&(t.minimum===undefined||typeof t.minimum==='number'&&Number.isFinite(t.minimum)&&t.minimum>=0&&t.minimum<=1e12)
+  &&typeof t.updatedAt==='string'&&Number.isFinite(Date.parse(t.updatedAt))
+ );
 }
 export function distanceMeters(a:Coordinate,b:Coordinate):number {
  const rad=(n:number)=>n*Math.PI/180;
@@ -20,7 +31,13 @@ export function validFix(value:unknown):value is Fix {
  return isCoordinate(p)&&Number.isFinite(p.time)&&Number.isFinite(p.accuracy)&&p.accuracy>=0&&p.accuracy<=50;
 }
 export function newMeter(now:number,tariff:Tariff|null):Meter {
- return {startedAt:now,meters:0,points:[],incomplete:false,tariff:tariff?{...tariff}:null};
+ // Snapshot new-format terms when the ride starts. Old saved rides retain
+ // their previous minimum-fare calculation, but newly started ones use the
+ // owner's exact base + km + minutes, multiplied by peak factor.
+ return {startedAt:now,meters:0,points:[],incomplete:false,tariff:tariff&&validTariff(tariff)?{
+  base:tariff.base,perKm:tariff.perKm,perMinute:tariff.perMinute,
+  peakMultiplier:tariff.peakMultiplier??1,updatedAt:tariff.updatedAt
+ }:null};
 }
 export function recordFix(meter:Meter,fix:Fix,now=Date.now()):Meter {
  if(meter.endedAt!==undefined||!validFix(fix)||fix.time<meter.startedAt||fix.time>now+5000||now-fix.time>30000)return meter;
@@ -39,7 +56,13 @@ export function pauseMeter(meter:Meter):Meter {
 }
 export function priceForRoute(meters:number,minutes:number,tariff:Tariff|null):number|null {
  if(!tariff||!validTariff(tariff)||!Number.isFinite(meters)||meters<0||!Number.isFinite(minutes)||minutes<0)return null;
- return Math.round(Math.max(tariff.minimum,tariff.base+meters/1000*tariff.perKm+minutes*tariff.perMinute));
+ const subtotal=tariff.base+meters/1000*tariff.perKm+minutes*tariff.perMinute;
+ // Legacy trip snapshots keep the minimum in force at the time of the ride.
+ // New tariffs never apply a minimum: the exact requested formula is used.
+ const total=tariff.peakMultiplier===undefined
+  ?Math.max(tariff.minimum??0,subtotal)
+  :subtotal*tariff.peakMultiplier;
+ return Number.isSafeInteger(Math.round(total))?Math.round(total):null;
 }
 export function fareEstimate(meter:Meter,now=Date.now()):number|null {
  if(!meter.tariff)return null;
