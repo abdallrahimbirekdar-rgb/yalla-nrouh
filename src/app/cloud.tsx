@@ -1,4 +1,4 @@
-import React,{useEffect,useState} from 'react';
+import React,{useEffect,useRef,useState} from 'react';
 import {AppState,View} from 'react-native';
 import {router} from 'expo-router';
 import {useApp} from '../context';
@@ -20,27 +20,33 @@ export default function CloudBeta(){
  const [userId,setUserId]=useState(''),[userEmail,setUserEmail]=useState('');
  const [mode,setMode]=useState<'passenger'|'driver'>('passenger');
  const [busy,setBusy]=useState(false),[notice,setNotice]=useState('');
+ const polling=useRef(false);
  const [driver,setDriver]=useState<CloudDriver|null>(null);
  const [isAdmin,setIsAdmin]=useState(false),[staffDrivers,setStaffDrivers]=useState<StaffDriver[]>([]);
  const [rides,setRides]=useState<CloudRide[]>([]),[offers,setOffers]=useState<RidePreview[]>([]);
  const [pin,setPin]=useState(''),[passengerPin,setPassengerPin]=useState('');
  const statusName=(value:string)=>({requested:t('بانتظار السائق','Waiting'),accepted:t('قبل السائق','Accepted'),arrived:t('وصل السائق','Arrived'),riding:t('الرحلة جارية','Riding'),completed:t('انتهت الرحلة','Completed'),cancelled:t('ملغاة','Cancelled')} as Record<string,string>)[value]??value;
  function errorText(error:unknown){
-   const kind=(error as CloudError)?.kind??'';
+   const kind=(error as CloudError)?.kind??(error instanceof Error?error.message:'');
    if(kind==='select_map_points')return t('حدد الانطلاق والوصول على الخريطة قبل إرسال الطلب.','Choose pickup and destination on the map before sending.');
    if(kind==='driver_not_approved')return t('حساب السائق بانتظار مراجعة الإدارة.','Driver account is waiting for approval.');
    if(kind==='too_many_requests'||kind==='23505')return t('يوجد طلب نشط أو تم إرسال طلب قبل لحظات.','You already have an active or recent request.');
    if(kind==='invalid_credentials'||kind==='invalid_grant')return t('تأكد من البريد الإلكتروني وكلمة المرور.','Check your email and password.');
    if(kind==='timeout'||kind==='network')return t('الاتصال ضعيف. تأكد من الإنترنت وأعد المحاولة.','Connection failed. Check your internet and try again.');
+   if(kind==='invalid_pin')return t('رمز الرحلة غير صحيح. تأكد من الرمز ذي الستة أرقام.','Wrong ride PIN. Check the six digits.');
+   if(kind==='pin_locked')return t('تم إيقاف محاولات الرمز لهذا الطلب.','PIN attempts are locked for this ride.');
+   if(kind==='invalid_transition'||kind==='not_allowed')return t('لا يمكن تنفيذ هذه الخطوة في حالة الرحلة الحالية. حدّث البيانات.','This action is not allowed for the current ride. Refresh first.');
    if((error as CloudError)?.status===401)return t('انتهت الجلسة. سجّل الدخول من جديد.','Session ended. Sign in again.');
    return t('لم تكتمل العملية. تحقق من البيانات أو حاول مجددًا.','Could not complete this action. Check the data and try again.');
  }
  async function refresh(current:string){
+   if(cloudGetToken()!==current)return;
    const [me,myRides,myDriver]=await Promise.all([cloudWhoAmI(current),cloudMyRides(current),cloudMyDriver(current)]);
+   const [newOffers,admin]=await Promise.all([myDriver?.approved&&myDriver.online?cloudOpenRides(current):Promise.resolve([]),cloudIsAdmin(current)]);
+   const staff=admin?await cloudStaffDrivers(current):[];
+   if(cloudGetToken()!==current)return;
    setUserId(me.id);setUserEmail(me.email??'');setRides(myRides);setDriver(myDriver);
-   setOffers(myDriver?.approved&&myDriver.online?await cloudOpenRides(current):[]);
-   const admin=await cloudIsAdmin(current);setIsAdmin(admin);
-   setStaffDrivers(admin?await cloudStaffDrivers(current):[]);
+   setOffers(newOffers);setIsAdmin(admin);setStaffDrivers(staff);
  }
  async function run(work:()=>Promise<void>,message?:string){
    if(busy)return;setBusy(true);setNotice('');
@@ -48,6 +54,17 @@ export default function CloudBeta(){
    finally{setBusy(false)}
  }
  useEffect(()=>{if(token)void refresh(token).catch(()=>setNotice(t('تعذر تحديث الجلسة. سجّل الدخول مجددًا إذا لزم الأمر.','Could not load your session. Sign in again if needed.')))},[]);
+ useEffect(()=>{
+   if(!token)return;
+   const tick=()=>{
+     if(busy||polling.current||AppState.currentState!=='active'||cloudGetToken()!==token)return;
+     polling.current=true;
+     void refresh(token).catch(()=>{}).finally(()=>{polling.current=false});
+   };
+   const interval=setInterval(tick,state.preferences.dataSaver?60000:20000);
+   const listener=AppState.addEventListener('change',next=>{if(next==='active')tick()});
+   return ()=>{clearInterval(interval);listener.remove()};
+ },[token,busy,state.preferences.dataSaver]);
  useEffect(()=>{
    if(!token||!driver?.approved||!driver.online)return;
    const interval=setInterval(()=>{if(AppState.currentState==='active')void cloudHeartbeat(token).catch(()=>{})},50000);
@@ -63,6 +80,7 @@ export default function CloudBeta(){
   <Panel>
    <Label large>{t('اختبار الربط الحقيقي','Server connection test')}</Label>
    <Label muted>{t('هذه شاشة تجريبية منفصلة عن الحجز المحلي. لا توجد خدمة سيارات عاملة أو تسعيرة معتمدة أو مدفوعات. لا تستخدم بيانات أشخاص آخرين في الاختبار.','This is separate from the local demo. There are no live drivers, approved fares or payments. Use only your own test data.')}</Label>
+   <Label muted>{t('تتحدث البيانات تلقائيًا أثناء فتح الشاشة: كل دقيقة في وضع توفير البيانات، وكل 20 ثانية في الوضع العادي.','Data refreshes while this screen is open: every minute in data saver mode, or every 20 seconds normally.')}</Label>
   </Panel>
   {!token?
    <Panel>
