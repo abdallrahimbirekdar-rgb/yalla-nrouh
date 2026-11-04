@@ -1,6 +1,11 @@
+## 0.6.3 — Google Maps on both platforms
+- Use Maps JavaScript API on web and the Google SDK on Android, with the shared booking interface and centred logo.
+- Remove active OSM fallback; slow connections keep the Google provider.
+- Require a separate website-restricted Maps JavaScript key for web deployment.
+
 ## 0.6.2 — Automatic maps and balanced branding
 - Open maps automatically, wait offline, and keep selected points through network changes.
-- Use passive connection hints and data saver for lighter map details; bound web tile concurrency without speed-test downloads or prefetching.
+- Use passive connection hints and data saver for lighter map details, without speed-test downloads or prefetching.
 - Centre the approved compact logo in a separate header, leaving the map clear.
 
 # Changes

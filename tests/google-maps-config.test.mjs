@@ -23,7 +23,7 @@ function namedPlugins(config,name){
   return (config.plugins??[]).filter(plugin=>(Array.isArray(plugin)?plugin[0]:plugin)===name);
 }
 
-test('missing Google Maps Android secret leaves native SDK off and OSM available',()=>{
+test('missing Google Maps Android secret leaves SDK unconfigured without inventing a key',()=>{
   withMapsKey(undefined,()=>{
     const config=makeConfig(setup);
     assert.equal(config.extra.googleMapsConfigured,false);

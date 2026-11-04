@@ -9,7 +9,7 @@ on:
         description: 'Require Google Maps SDK key (fail build instead of OSM fallback)'
         required: false
         type: boolean
-        default: false
+        default: true
 
 permissions:
   contents: write
@@ -51,12 +51,8 @@ jobs:
         run: |
           set -euo pipefail
           if [[ -z "${GOOGLE_MAPS_ANDROID_API_KEY:-}" ]]; then
-            if [[ "${{ github.event_name }}" == "workflow_dispatch" && "${{ inputs.require_google_maps }}" == "true" ]]; then
-              echo "::error title=Missing Google Maps key::Add GOOGLE_MAPS_ANDROID_API_KEY in GitHub repository Actions secrets, then rerun this workflow."
-              exit 1
-            fi
-            echo "::warning title=Google Maps not configured::Missing GOOGLE_MAPS_ANDROID_API_KEY repository secret. APK will use the OSM map fallback."
-            echo "### Google Maps: not enabled (OSM fallback)" >> "$GITHUB_STEP_SUMMARY"
+            echo "::error title=Missing Google Maps key::Add GOOGLE_MAPS_ANDROID_API_KEY in GitHub repository Actions secrets. Google Maps is required on both platforms."
+            exit 1
           else
             if ! grep -q 'com.google.android.geo.API_KEY' android/app/src/main/AndroidManifest.xml; then
               echo "::error::Google Maps key was provided but not inserted into the Android manifest."
@@ -113,7 +109,7 @@ jobs:
           if [[ -n "${GOOGLE_MAPS_ANDROID_API_KEY:-}" ]]; then
             MAPS_STATUS="Android Google Maps SDK key configured; check Google Cloud restrictions and Android rendering."
           else
-            MAPS_STATUS="Google Maps Android SDK key not configured; built-in OSM fallback is active."
+            MAPS_STATUS="Google Maps Android SDK key not configured; Google Maps is unavailable."
           fi
           if ! gh release view android-test-unified >/dev/null 2>&1; then
             gh release create android-test-unified --title "Yalla Nrouh Android $APP_VERSION (test)" --notes "Test build only; not a live taxi booking service." --prerelease

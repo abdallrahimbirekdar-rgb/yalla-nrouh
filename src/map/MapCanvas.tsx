@@ -22,5 +22,5 @@ export default function MapCanvas(props:{point:Coordinate|null;onChange:(point:C
   {props.point&&<Label muted>{formatCoordinate(props.point)}</Label>}
   <Label muted>{t('يمكنك متابعة إدخال العنوان يدويًا.','You can still enter an address by hand.')}</Label>
  </View>;
- return <MapContent {...props} lean={policy.lean} tileConcurrency={policy.tileConcurrency} loadTimeoutMs={policy.loadTimeoutMs}/>;
+ return <MapContent {...props} lean={policy.lean} loadTimeoutMs={policy.loadTimeoutMs}/>;
 }

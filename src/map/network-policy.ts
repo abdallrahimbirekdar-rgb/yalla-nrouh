@@ -8,5 +8,5 @@ export function mapNetwork(hints:NetworkHints):MapNetwork {
 }
 export function mapPolicy(network:MapNetwork,dataSaver:boolean){
  const lean=network!=='normal'||dataSaver;
- return {lean,startDelayMs:network==='limited'?900:0,tileConcurrency:network==='offline'?0:lean?4:12,initialZoom:lean?13:14,loadTimeoutMs:network==='limited'?45000:25000};
+ return {lean,startDelayMs:network==='limited'?900:0,loadTimeoutMs:network==='limited'?45000:25000};
 }

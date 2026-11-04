@@ -1,70 +1,53 @@
 import React,{useEffect,useRef,useState} from 'react';
-import {View} from 'react-native';
-import OlMap from 'ol/Map.js';
-import OlView from 'ol/View.js';
-import Feature from 'ol/Feature.js';
-import Point from 'ol/geom/Point.js';
-import LineString from 'ol/geom/LineString.js';
-import VectorLayer from 'ol/layer/Vector.js';
-import VectorSource from 'ol/source/Vector.js';
-import TileLayer from 'ol/layer/Tile.js';
-import OSM from 'ol/source/OSM.js';
-import Translate from 'ol/interaction/Translate.js';
-import Collection from 'ol/Collection.js';
-import {defaults as controls} from 'ol/control/defaults.js';
-import {defaults as interactions} from 'ol/interaction/defaults.js';
-import {Circle as CircleStyle,Fill,Stroke,Style} from 'ol/style.js';
-import {fromLonLat,toLonLat} from 'ol/proj.js';
-import {containsCoordinate} from 'ol/extent.js';
-import 'ol/ol.css';
-import './map.css';
-import {TileQueue} from './tile-queue';
-import type ImageTile from 'ol/ImageTile.js';
-import {isCoordinate,type Coordinate} from '../geo';
+import {ActivityIndicator,View} from 'react-native';
+import {type Coordinate,isCoordinate} from '../geo';
+import {useApp} from '../context';
 import {Button,Label,useText,useTheme} from '../ui';
-
-export default function MapCanvas({point,onChange,compact=false,route,readOnly=false,lean=false,tileConcurrency=12}:{point:Coordinate|null;onChange:(point:Coordinate)=>void;compact?:boolean;route?:Coordinate[];readOnly?:boolean;lean?:boolean;tileConcurrency?:number;loadTimeoutMs?:number}){
-  const t=useText();const {dark}=useTheme();const host=useRef<HTMLDivElement>(null);const map=useRef<OlMap|null>(null);const feature=useRef<Feature<Point>|null>(null);
-  const routeFeature=useRef<Feature<LineString>|null>(null);
-  const tiles=useRef<OSM|null>(null);const previousConcurrency=useRef(tileConcurrency);
-  const queue=useRef<TileQueue|null>(null);const policy=useRef({lean,tileConcurrency});policy.current={lean,tileConcurrency};
-  const choose=useRef(onChange);choose.current=onChange;const current=useRef(point);current.current=point;
-  const [error,setError]=useState(false),[attempt,setAttempt]=useState(0),[ready,setReady]=useState(false);
-  useEffect(()=>{
-    if(!host.current)return;let disposed=false;setError(false);setReady(false);
-    const start=current.current??{latitude:33.5138,longitude:36.2765};
-    const requests=new TileQueue(policy.current.tileConcurrency);queue.current=requests;
-    const source=new OSM({wrapX:false,tileLoadFunction:(tile,url)=>{
-     const image=(tile as ImageTile).getImage() as HTMLImageElement;
-     requests.add(done=>{
-      const finish=()=>{image.removeEventListener('load',finish);image.removeEventListener('error',finish);done()};
-      image.addEventListener('load',finish);image.addEventListener('error',finish);image.src=url;
-     });
-    }});tiles.current=source;const basemap=new TileLayer({source,preload:0,cacheSize:64});const pin=new Feature<Point>();feature.current=pin;
-    const pins=new VectorLayer({source:new VectorSource({features:[pin]}),zIndex:1000,style:[new Style({image:new CircleStyle({radius:13,fill:new Fill({color:'#ff917c'}),stroke:new Stroke({color:'#fff9ef',width:4})})}),new Style({image:new CircleStyle({radius:4,fill:new Fill({color:'#17376c'})})})]});
-    const routePin=new Feature<LineString>();routeFeature.current=routePin;const routeLayer=new VectorLayer({source:new VectorSource({features:[routePin]}),zIndex:500,style:new Style({stroke:new Stroke({color:'#2688e8',width:5})})});
-    const instance=new OlMap({maxTilesLoading:12,pixelRatio:1,target:host.current,layers:[basemap,routeLayer,pins],view:new OlView({center:fromLonLat([start.longitude,start.latitude]),zoom:policy.current.lean?13:14,maxZoom:19,enableRotation:false}),controls:controls({attributionOptions:{collapsible:false}}),interactions:interactions({mouseWheelZoom:false})});map.current=instance;
-    const select=(coordinate:number[])=>{const [longitude,latitude]=toLonLat(coordinate);const next={latitude,longitude};if(isCoordinate(next))choose.current(next)};
-    if(!readOnly)instance.on('singleclick',event=>select(event.coordinate));
-    const movePin=new Translate({features:new Collection([pin]),hitTolerance:14});movePin.on('translateend',()=>{const coordinate=pin.getGeometry()?.getCoordinates();if(coordinate)select(coordinate)});if(!readOnly)instance.addInteraction(movePin);
-    source.on('tileloaderror',()=>{if(!disposed)setError(true)});source.on('tileloadend',()=>{if(!disposed)setError(false)});
-    const resize=new ResizeObserver(()=>instance.updateSize());resize.observe(host.current);setReady(true);
-    return()=>{disposed=true;requests.dispose();queue.current=null;tiles.current=null;resize.disconnect();instance.setTarget(undefined);instance.dispose();map.current=null;feature.current=null};
-  },[attempt,readOnly]);
-  useEffect(()=>{queue.current?.setLimit(tileConcurrency);if(previousConcurrency.current===0&&tileConcurrency>0)tiles.current?.refresh();previousConcurrency.current=tileConcurrency},[tileConcurrency]);
-  useEffect(()=>{
-    const instance=map.current,pin=feature.current;if(!instance||!pin||!ready)return;
-    if(!point){pin.setGeometry(undefined);return}
-    const coordinate=fromLonLat([point.longitude,point.latitude]);pin.setGeometry(new Point(coordinate));
-    if(!containsCoordinate(instance.getView().calculateExtent(instance.getSize()),coordinate))instance.getView().setCenter(coordinate);
-  },[point,ready]);
-  useEffect(()=>{const instance=map.current,f=routeFeature.current;if(!instance||!f||!ready)return;if(!route||route.length<2){f.setGeometry(undefined);return;}const line=new LineString(route.map(p=>fromLonLat([p.longitude,p.latitude])));f.setGeometry(line);instance.getView().fit(line,{padding:[30,30,30,30],maxZoom:16,duration:0});},[route,ready]);
-  if(route)return <View><Label>{t('افتح هذا الطريق في Google Maps باستخدام زر الملاحة.','Open this route in Google Maps with the navigation button.')}</Label></View>;
-  return <View style={compact?{flex:1}:{gap:10}}>
-    {!compact&&!readOnly&&<Label>{t('اضغط على الخريطة لاختيار الموقع، أو اسحب العلامة لتعديله.','Tap the map to choose a location, or drag the pin to adjust it.')}</Label>}
-    {React.createElement('div',{ref:host,className:'yn-location-map'+(dark?' yn-dark-map':''),role:'region',tabIndex:0,'aria-label':t('خريطة اختيار الموقع','Choose a location on the map'),style:{height:compact?'100%':360,minHeight:compact?260:360,width:'100%',borderRadius:compact?0:16,overflow:'hidden',background:dark?'#172027':'#e9e3dc',zIndex:0}})}
-    {!compact&&!readOnly&&<Button secondary icon="locate-outline" title={t('اختيار مركز الخريطة','Select map center')} disabled={!ready} onPress={()=>{const p=map.current?.getView().getCenter();if(p){const [longitude,latitude]=toLonLat(p);if(isCoordinate({latitude,longitude}))choose.current({latitude,longitude})}}}/>}
-    {error&&<View accessibilityRole="alert"><Label>{t('تعذر تحميل تفاصيل الخريطة. تحقق من الإنترنت أو استخدم الإحداثيات أدناه.','Map details could not load. Check your connection or use coordinates below.')}</Label><Button secondary title={t('إعادة تحميل الخريطة','Reload map')} onPress={()=>setAttempt(n=>n+1)}/></View>}
-    {!compact&&<Label muted>{t('OpenStreetMap • اسحب للتنقل واستعمل + و − للتكبير.','OpenStreetMap • Drag to move and use + and − to zoom.')}</Label>}
-  </View>;
+import {loadGoogleMaps,onMapsAuthFailure,webMapsKey,type GoogleMap,type GoogleMaps,type GoogleMarker,type GoogleLine,type LatLng} from './google-web';
+const position=(point:Coordinate):LatLng=>({lat:point.latitude,lng:point.longitude});
+export default function MapContent({point,onChange,compact=false,route,readOnly=false,lean=false}:{point:Coordinate|null;onChange:(point:Coordinate)=>void;compact?:boolean;route?:Coordinate[];readOnly?:boolean;lean?:boolean;loadTimeoutMs?:number}){
+ const {state}=useApp();const t=useText();const {colors,dark}=useTheme();const host=useRef<HTMLDivElement>(null);
+ const map=useRef<GoogleMap|null>(null),api=useRef<GoogleMaps|null>(null),marker=useRef<GoogleMarker|null>(null),line=useRef<GoogleLine|null>(null);
+ const current=useRef(point);current.current=point;const choose=useRef(onChange);choose.current=onChange;
+ const profile=useRef({lean,dark});profile.current={lean,dark};
+ const failed=useRef(false);
+ const [error,setError]=useState(false),[ready,setReady]=useState(false),[attempt,setAttempt]=useState(0);
+ const key=webMapsKey(process.env.EXPO_PUBLIC_GOOGLE_MAPS_WEB_API_KEY);
+ useEffect(()=>{
+  const container=host.current;if(!container||!key)return;let disposed=false;failed.current=false;setError(false);setReady(false);
+  const removeAuthListener=onMapsAuthFailure(()=>{if(!disposed){failed.current=true;setError(true)}});
+  const online=()=>{if(!disposed&&failed.current)setAttempt(value=>value+1)};
+  window.addEventListener('online',online);
+  void loadGoogleMaps(key,state.language).then(maps=>{
+   if(disposed||!host.current)return;api.current=maps;
+   const start=current.current??{latitude:33.5138,longitude:36.2765};
+   const instance=new maps.Map(host.current,{center:position(start),zoom:profile.current.lean?13:14,mapId:process.env.EXPO_PUBLIC_GOOGLE_MAPS_WEB_MAP_ID||'DEMO_MAP_ID',renderingType:'RASTER',mapTypeId:'roadmap',disableDefaultUI:true,zoomControl:true,gestureHandling:'cooperative',clickableIcons:false,tilt:0,heading:0,colorScheme:profile.current.dark?'DARK':'LIGHT'});
+   map.current=instance;
+   const pin=new maps.marker.AdvancedMarkerElement({map:instance,gmpDraggable:!readOnly,title:state.language==='ar'?'الموقع المحدد':'Selected location'});marker.current=pin;
+   const select=(event:{latLng?:{lat:()=>number;lng:()=>number}|null})=>{if(!event.latLng||readOnly)return;const next={latitude:event.latLng.lat(),longitude:event.latLng.lng()};if(isCoordinate(next))choose.current(next)};
+   if(!readOnly){instance.addListener('click',select);pin.addListener('dragend',select)}
+   line.current=new maps.Polyline({map:instance,strokeColor:'#2688e8',strokeWeight:5,clickable:false});
+   setReady(true);
+  }).catch(()=>{if(!disposed){failed.current=true;setError(true)}});
+  return()=>{disposed=true;removeAuthListener();window.removeEventListener('online',online);if(marker.current){api.current?.event.clearInstanceListeners(marker.current);marker.current.map=null}line.current?.setMap(null);if(map.current)api.current?.event.clearInstanceListeners(map.current);map.current=null;marker.current=null;line.current=null;container.replaceChildren()};
+ },[key,state.language,readOnly,attempt]);
+ useEffect(()=>{
+  const instance=map.current,pin=marker.current;if(!ready||!instance||!pin)return;
+  pin.position=point?position(point):undefined;
+  if(point&&instance.getBounds()&&!instance.getBounds()?.contains(position(point)))instance.setCenter(position(point));
+ },[point,ready]);
+ useEffect(()=>{
+  if(!ready||!map.current||!api.current||!line.current)return;
+  const path=route?.map(position)??[];line.current.setPath(path);
+  if(path.length>1){const bounds=new api.current.LatLngBounds();path.forEach(p=>bounds.extend(p));map.current.fitBounds(bounds,30)}
+ },[route,ready]);
+ useEffect(()=>{map.current?.setOptions({tilt:0,heading:0,headingInteractionEnabled:!lean,tiltInteractionEnabled:false})},[lean,ready]);
+ return <View style={compact?{flex:1,minHeight:260}:{gap:10}}>
+  {React.createElement('div',{ref:host,role:'region','aria-label':t('خريطة Google لاختيار الموقع','Google map to choose a location'),style:{height:compact?'100%':340,minHeight:compact?260:340,width:'100%',borderRadius:compact?0:16,overflow:'hidden',background:colors.surface}})}
+  {(!key||error||!ready)&&<View style={{position:'absolute',left:16,right:16,top:compact?70:30,padding:18,borderRadius:14,gap:12,backgroundColor:colors.background}}>
+   {!key||error?<Label>{t('خريطة Google غير متاحة حاليًا. يمكنك إدخال العنوان يدويًا والمحاولة لاحقًا.','Google Maps is not available right now. You can enter an address by hand and try later.')}</Label>:<><ActivityIndicator color={colors.purple}/><Label>{t('جارٍ تحميل خريطة Google…','Loading Google Maps…')}</Label></>}
+   {key&&error&&<Button secondary title={t('إعادة المحاولة','Try again')} onPress={()=>setAttempt(value=>value+1)}/>}
+  </View>}
+  {!compact&&!readOnly&&ready&&<Button secondary title={t('اختيار مركز الخريطة','Select map center')} onPress={()=>{const center=map.current?.getCenter();if(center){const next={latitude:center.lat(),longitude:center.lng()};if(isCoordinate(next))onChange(next)}}}/>}
+ </View>;
 }

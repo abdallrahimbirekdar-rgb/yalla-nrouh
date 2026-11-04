@@ -15,6 +15,8 @@ concurrency:
 jobs:
   deploy:
     env:
+      EXPO_PUBLIC_GOOGLE_MAPS_WEB_API_KEY: ${{ secrets.GOOGLE_MAPS_WEB_API_KEY }}
+      EXPO_PUBLIC_GOOGLE_MAPS_WEB_MAP_ID: ${{ vars.GOOGLE_MAPS_WEB_MAP_ID }}
       EXPO_PUBLIC_GOOGLE_ROUTES_PROXY: ${{ vars.GOOGLE_ROUTES_PROXY_URL }}
     runs-on: ubuntu-latest
     steps:
