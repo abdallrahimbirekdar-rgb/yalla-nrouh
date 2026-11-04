@@ -8,6 +8,7 @@ const nativeHead='<meta name="yalla-site-version" content="'+revision+'"><style>
 const html=readFileSync('dist-pages/index.html','utf8').replace('</head>',nativeHead+'</head>');
 writeFileSync('dist-pages/version.json',JSON.stringify({version:revision}));
 const banner=readFileSync('scripts/android-download.html','utf8');
-writeFileSync('dist-pages/index.html',html.replace('<body>','<body>'+banner));
+const recovery=readFileSync('scripts/startup-recovery.html','utf8');
+writeFileSync('dist-pages/index.html',html.replace('<body>','<body>'+banner).replace('</body>',recovery+'</body>'));
 copyFileSync('dist-pages/index.html','dist-pages/404.html');
 writeFileSync('dist-pages/.nojekyll','');

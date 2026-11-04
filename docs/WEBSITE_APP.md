@@ -48,3 +48,9 @@ The home booking flow now uses the account's server rides. `/review` calculates 
 Android 0.9.0 / code 18 rebuilds the wrapper for shared, bounded GPS tasks, shared native permission prompts, a website-readiness loading signal, a 30-second navigation recovery deadline and router-aware hardware back. A new APK is needed for these native changes. Subsequent website interface changes keep the established live-website delivery model.
 
 Automated checks cover persistence and refresh without password storage, rejecting stale-account requests, GPS request sharing/timeouts, pickup limits, server quotas and auth, saved places and safe refresh state. Physical Android acceptance and actual email delivery are separate checks; do not claim those passed remotely.
+
+
+## Cached-document startup recovery
+A cached Pages document can reference the previous hashed JavaScript bundle after a deployment. Deleting that bundle can leave only the download banner and a blank app. The web workflow now retains published files and restores the last six published asset archives before deployment, while never restoring old HTML over the new build. A regression test verifies old bundles remain available, new files win, and current HTML is preserved.
+
+The HTML shows a bounded startup/retry message until React mounts. Web fonts load without blocking account/map rendering. No automatic page reload erases an unfinished edit; retry is a user action and stored data stays intact.

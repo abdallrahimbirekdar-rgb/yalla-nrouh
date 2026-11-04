@@ -35,10 +35,12 @@ jobs:
         run: npm test
       - name: Export website for GitHub Pages
         run: node scripts/export-github-pages.cjs
+      - name: Retain recently published assets for cached pages
+        run: node scripts/retain-web-assets.cjs
       - name: Publish gh-pages branch
         uses: peaceiris/actions-gh-pages@v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: ./dist-pages
-          keep_files: false
+          keep_files: true
           enable_jekyll: false

@@ -76,3 +76,7 @@ The primary website is now a single server-backed beta booking flow. Keep a visi
 `/review` calculates a Google route and shared-tariff estimate, revalidates the 500-metre pickup radius, then sends the confirmed request to the server. `/cloud` is My rides / Driver mode, not a separate experimental login screen. Do not restore local fake bookings as the main flow. `/admin` must require both a signed-in session and server-verified admin access. Rates are shared database settings and driver approvals use the protected RPC. Never reintroduce public demo-admin controls or client-only email authorization.
 
 Native GPS requests share bounded jobs through `position-jobs.ts`; include that input in Android workflow filters. Native back first closes web modals, then dispatches a default event for the web router before exiting. The native loading cover ends on the website readiness status instead of waiting for every map asset, with a bounded navigation deadline. Site refresh safety includes known server ride state and unfinished drafts; an automatic current-position-only draft must not permanently disable refresh.
+
+
+## Keep cached website documents usable
+Do not delete earlier hashed web bundles during publication. The Pages workflow retains published files and restores recent asset history with `scripts/retain-web-assets.cjs`; current HTML must always win. Keep `startup-recovery.html` as a bounded startup/retry fallback and do not block web rendering on font downloads. This prevents old cached HTML from becoming a blank WebView after updates.
