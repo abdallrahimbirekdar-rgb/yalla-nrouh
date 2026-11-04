@@ -7,6 +7,7 @@ import {createLatestWriter,emptyDraft,readSaved} from './persistence';
 import {GPS_DISTANCE_M,GPS_INTERVAL_MS} from './meter';
 import {useConnection,type Connection} from './connectivity';
 import {notifyLocal} from './alerts';
+import {isNativeWebView,siteCurrentFix,siteCurrentPosition} from './site-bridge';
 type InternalAction=Action|{type:'hydrate';state:AppState};
 type AppContext={state:AppState;dispatch:React.Dispatch<Action>;draft:TripDraft;setDraft:React.Dispatch<React.SetStateAction<TripDraft>>;ready:boolean;loadError:boolean;recoveryNotice:boolean;saveError:boolean;alertError:boolean;retry:()=>void;retrySave:()=>void;connection:Connection;trackingId:string|null;trackingError:boolean;startTracking:(id:string)=>Promise<void>;stopTracking:()=>void;foreground:boolean};
 const Context=createContext<AppContext|null>(null);
@@ -34,11 +35,39 @@ export function AppProvider({children}:{children:React.ReactNode}){
   if(!trackingId||!trackingAllowed)return;
   if(!foreground){dispatch({type:'pauseTracking',id:trackingId});return;}
   let alive=true,subscription:Location.LocationSubscription|undefined;
+  if(Platform.OS==='web'&&isNativeWebView()){
+   // The installed Android app must never call browser geolocation: that
+   // prompts for a second origin permission. Metering uses the native bridge
+   // with genuine timestamps and accuracy, only while in the foreground.
+   let next:ReturnType<typeof setTimeout>|undefined;
+   const sample=async()=>{
+    try{
+     const fix=await siteCurrentFix(false);
+     if(alive)dispatch({type:'fix',id:trackingId,fix,now:Date.now()});
+    }catch{
+     if(alive){setTrackingError(true);setTrackingId(null);dispatch({type:'pauseTracking',id:trackingId});}
+     return;
+    }
+    if(alive)next=setTimeout(()=>{void sample()},GPS_INTERVAL_MS);
+   };
+   void sample();
+   return()=>{alive=false;if(next)clearTimeout(next)};
+  }
   Location.watchPositionAsync({accuracy:Location.Accuracy.Balanced,timeInterval:GPS_INTERVAL_MS,distanceInterval:GPS_DISTANCE_M,mayShowUserSettingsDialog:false},position=>{if(alive)dispatch({type:'fix',id:trackingId,fix:{latitude:position.coords.latitude,longitude:position.coords.longitude,accuracy:position.coords.accuracy??Infinity,time:position.timestamp},now:Date.now()});},()=>{if(alive){setTrackingError(true);setTrackingId(null);dispatch({type:'pauseTracking',id:trackingId});}}).then(result=>{if(alive)subscription=result;else result.remove();}).catch(()=>{if(alive){setTrackingError(true);setTrackingId(null);dispatch({type:'pauseTracking',id:trackingId});}});
   return()=>{alive=false;subscription?.remove();};
  },[trackingId,trackingAllowed,foreground]);
  useEffect(()=>{if(trackingId&&!trackingAllowed)setTrackingId(null);},[trackingId,trackingAllowed]);
- async function startTracking(id:string){const generation=++startGeneration.current;setTrackingError(false);try{if(!latest.current.state.driver.approved||!latest.current.state.trips.some(t=>t.id===id&&t.status==='riding'))return;const permission=await Location.requestForegroundPermissionsAsync();if(generation!==startGeneration.current||!mounted.current)return;if(!permission.granted||!await Location.hasServicesEnabledAsync())throw Error();if(generation===startGeneration.current&&mounted.current)setTrackingId(id);}catch{if(generation===startGeneration.current&&mounted.current)setTrackingError(true);}}
+ async function startTracking(id:string){const generation=++startGeneration.current;setTrackingError(false);try{
+  if(!latest.current.state.driver.approved||!latest.current.state.trips.some(t=>t.id===id&&t.status==='riding'))return;
+  if(Platform.OS==='web'&&isNativeWebView()){
+   // Confirms consent and that GPS works using the same Android permission.
+   await siteCurrentPosition(true);
+  }else{
+   const permission=await Location.requestForegroundPermissionsAsync();
+   if(!permission.granted||!await Location.hasServicesEnabledAsync())throw Error();
+  }
+  if(generation===startGeneration.current&&mounted.current)setTrackingId(id);
+ }catch{if(generation===startGeneration.current&&mounted.current)setTrackingError(true);}}
  function stopTracking(){startGeneration.current++;if(trackingId)dispatch({type:'pauseTracking',id:trackingId});setTrackingId(null);}
  const previousStatuses=useRef<Record<string,string>|null>(null);
  useEffect(()=>{if(!ready)return;const next=Object.fromEntries(state.trips.map(t=>[t.id,t.status]));const previous=previousStatuses.current;previousStatuses.current=next;if(!previous||!state.preferences.notifications)return;
