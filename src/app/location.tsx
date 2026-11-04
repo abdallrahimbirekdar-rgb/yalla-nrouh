@@ -1,7 +1,7 @@
 import React,{useEffect,useRef,useState} from 'react';
 import {ActivityIndicator,Platform,View} from 'react-native';
 import {announceWebPosition} from '../web-position';
-import {siteCurrentPosition} from '../site-bridge.web';
+import {siteCurrentPosition} from '../site-bridge';
 import {router,useLocalSearchParams} from 'expo-router';
 import * as Location from 'expo-location';
 import MapCanvas from '../map/MapCanvas';
