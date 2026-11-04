@@ -18,28 +18,40 @@ import {fromLonLat,toLonLat} from 'ol/proj.js';
 import {containsCoordinate} from 'ol/extent.js';
 import 'ol/ol.css';
 import './map.css';
+import {TileQueue} from './tile-queue';
+import type ImageTile from 'ol/ImageTile.js';
 import {isCoordinate,type Coordinate} from '../geo';
 import {Button,Label,useText,useTheme} from '../ui';
 
-export default function MapCanvas({point,onChange,compact=false,route,readOnly=false}:{point:Coordinate|null;onChange:(point:Coordinate)=>void;compact?:boolean;route?:Coordinate[];readOnly?:boolean}){
+export default function MapCanvas({point,onChange,compact=false,route,readOnly=false,lean=false,tileConcurrency=12}:{point:Coordinate|null;onChange:(point:Coordinate)=>void;compact?:boolean;route?:Coordinate[];readOnly?:boolean;lean?:boolean;tileConcurrency?:number;loadTimeoutMs?:number}){
   const t=useText();const {dark}=useTheme();const host=useRef<HTMLDivElement>(null);const map=useRef<OlMap|null>(null);const feature=useRef<Feature<Point>|null>(null);
   const routeFeature=useRef<Feature<LineString>|null>(null);
+  const tiles=useRef<OSM|null>(null);const previousConcurrency=useRef(tileConcurrency);
+  const queue=useRef<TileQueue|null>(null);const policy=useRef({lean,tileConcurrency});policy.current={lean,tileConcurrency};
   const choose=useRef(onChange);choose.current=onChange;const current=useRef(point);current.current=point;
   const [error,setError]=useState(false),[attempt,setAttempt]=useState(0),[ready,setReady]=useState(false);
   useEffect(()=>{
     if(!host.current)return;let disposed=false;setError(false);setReady(false);
     const start=current.current??{latitude:33.5138,longitude:36.2765};
-    const source=new OSM({wrapX:false});const basemap=new TileLayer({source,preload:0,cacheSize:64});const pin=new Feature<Point>();feature.current=pin;
+    const requests=new TileQueue(policy.current.tileConcurrency);queue.current=requests;
+    const source=new OSM({wrapX:false,tileLoadFunction:(tile,url)=>{
+     const image=(tile as ImageTile).getImage() as HTMLImageElement;
+     requests.add(done=>{
+      const finish=()=>{image.removeEventListener('load',finish);image.removeEventListener('error',finish);done()};
+      image.addEventListener('load',finish);image.addEventListener('error',finish);image.src=url;
+     });
+    }});tiles.current=source;const basemap=new TileLayer({source,preload:0,cacheSize:64});const pin=new Feature<Point>();feature.current=pin;
     const pins=new VectorLayer({source:new VectorSource({features:[pin]}),zIndex:1000,style:[new Style({image:new CircleStyle({radius:13,fill:new Fill({color:'#ff917c'}),stroke:new Stroke({color:'#fff9ef',width:4})})}),new Style({image:new CircleStyle({radius:4,fill:new Fill({color:'#17376c'})})})]});
     const routePin=new Feature<LineString>();routeFeature.current=routePin;const routeLayer=new VectorLayer({source:new VectorSource({features:[routePin]}),zIndex:500,style:new Style({stroke:new Stroke({color:'#2688e8',width:5})})});
-    const instance=new OlMap({target:host.current,layers:[basemap,routeLayer,pins],view:new OlView({center:fromLonLat([start.longitude,start.latitude]),zoom:13,maxZoom:19,enableRotation:false}),controls:controls({attributionOptions:{collapsible:false}}),interactions:interactions({mouseWheelZoom:false})});map.current=instance;
+    const instance=new OlMap({maxTilesLoading:12,pixelRatio:1,target:host.current,layers:[basemap,routeLayer,pins],view:new OlView({center:fromLonLat([start.longitude,start.latitude]),zoom:policy.current.lean?13:14,maxZoom:19,enableRotation:false}),controls:controls({attributionOptions:{collapsible:false}}),interactions:interactions({mouseWheelZoom:false})});map.current=instance;
     const select=(coordinate:number[])=>{const [longitude,latitude]=toLonLat(coordinate);const next={latitude,longitude};if(isCoordinate(next))choose.current(next)};
     if(!readOnly)instance.on('singleclick',event=>select(event.coordinate));
     const movePin=new Translate({features:new Collection([pin]),hitTolerance:14});movePin.on('translateend',()=>{const coordinate=pin.getGeometry()?.getCoordinates();if(coordinate)select(coordinate)});if(!readOnly)instance.addInteraction(movePin);
     source.on('tileloaderror',()=>{if(!disposed)setError(true)});source.on('tileloadend',()=>{if(!disposed)setError(false)});
     const resize=new ResizeObserver(()=>instance.updateSize());resize.observe(host.current);setReady(true);
-    return()=>{disposed=true;resize.disconnect();instance.setTarget(undefined);instance.dispose();map.current=null;feature.current=null};
+    return()=>{disposed=true;requests.dispose();queue.current=null;tiles.current=null;resize.disconnect();instance.setTarget(undefined);instance.dispose();map.current=null;feature.current=null};
   },[attempt,readOnly]);
+  useEffect(()=>{queue.current?.setLimit(tileConcurrency);if(previousConcurrency.current===0&&tileConcurrency>0)tiles.current?.refresh();previousConcurrency.current=tileConcurrency},[tileConcurrency]);
   useEffect(()=>{
     const instance=map.current,pin=feature.current;if(!instance||!pin||!ready)return;
     if(!point){pin.setGeometry(undefined);return}

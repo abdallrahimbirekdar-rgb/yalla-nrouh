@@ -1,3 +1,8 @@
+## 0.6.2 — Automatic maps and balanced branding
+- Open maps automatically, wait offline, and keep selected points through network changes.
+- Use passive connection hints and data saver for lighter map details; bound web tile concurrency without speed-test downloads or prefetching.
+- Centre the approved compact logo in a separate header, leaving the map clear.
+
 # Changes
 
 ## 0.3.0
