@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {siteCurrentPosition} from '../src/site-bridge.web.ts';
+import {siteCurrentPosition,siteCurrentFix} from '../src/site-bridge.web.ts';
 import {PositionError} from '../src/current-position.ts';
 
 async function withLocationBrowser(browser,run){
@@ -83,4 +83,32 @@ test('unresponsive Android location bridge fails within a fixed timeout',t=>with
  const locating=siteCurrentPosition(false);
  t.mock.timers.tick(11000);
  await assert.rejects(locating,error=>error instanceof PositionError&&error.code==='timeout');
+}));
+
+test('Android ride tracking accepts only accurate native GPS metadata',async()=>withLocationBrowser({
+ permissions:{query:()=>{throw Error('must not check browser permission')}},
+ geolocation:{getCurrentPosition:()=>{throw Error('must not use browser GPS for rides')}}
+},async host=>{
+ const now=Date.now();
+ host.ReactNativeWebView={postMessage:raw=>{
+  const request=JSON.parse(raw);assert.equal(request.track,true);assert.equal(request.askPermission,false);
+  queueMicrotask(()=>host.dispatchEvent(new CustomEvent('yalla:native-position',{detail:{
+   id:request.id,point:{latitude:51.5,longitude:7.2},
+   fix:{accuracy:15,time:now},error:null
+  }})));
+ }};
+ assert.deepEqual(await siteCurrentFix(false),{latitude:51.5,longitude:7.2,accuracy:15,time:now});
+}));
+
+test('Android ride tracking rejects coarse GPS instead of inventing paid distance',async()=>withLocationBrowser({
+ geolocation:{getCurrentPosition:()=>{throw Error('browser GPS must never be used for ride tracking')}}
+},async host=>{
+ host.ReactNativeWebView={postMessage:raw=>{
+  const request=JSON.parse(raw);assert.equal(request.track,true);
+  queueMicrotask(()=>host.dispatchEvent(new CustomEvent('yalla:native-position',{detail:{
+   id:request.id,point:{latitude:51.5,longitude:7.2},
+   fix:{accuracy:400,time:Date.now()},error:null
+  }})));
+ }};
+ await assert.rejects(siteCurrentFix(false),error=>error instanceof PositionError&&error.code==='position');
 }));
