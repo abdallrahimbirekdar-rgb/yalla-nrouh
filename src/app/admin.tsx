@@ -1,9 +1,13 @@
-import React,{useState} from 'react';
+import React,{useEffect,useState} from 'react';
+import {cloudGetToken,cloudIsAdmin,cloudFareSettings,cloudUpdateFareSettings} from '../cloud-api';
 import {router} from 'expo-router';
 import {useApp} from '../context';
 import {parseAmount,priceForRoute,suggestedNewSypTariff,type Tariff} from '../meter';
 import {Button,Field,Label,Page,Panel,useText} from '../ui';
 export default function Admin(){const {state,dispatch}=useApp();const t=useText();const [base,setBase]=useState(state.tariff?String(state.tariff.base):''),[perKm,setPerKm]=useState(state.tariff?String(state.tariff.perKm):''),[perMinute,setPerMinute]=useState(state.tariff?String(state.tariff.perMinute):''),[peak,setPeak]=useState(String(state.tariff?.peakMultiplier??1)),[phone,setPhone]=useState(state.preferences.smsNumber),[message,setMessage]=useState('');
+ const token=cloudGetToken();const [staff,setStaff]=useState(false),[sharedBusy,setSharedBusy]=useState(false);
+ useEffect(()=>{let alive=true;if(token)void cloudIsAdmin(token).then(value=>{if(alive)setStaff(value)}).catch(()=>{});return()=>{alive=false}},[token]);
+ async function sharedRates(publish:boolean){if(!token||!staff||sharedBusy)return;setSharedBusy(true);try{if(publish){if(!previewTariff)return;await cloudUpdateFareSettings(token,previewTariff)}const rates=await cloudFareSettings(token);setBase(String(rates.base));setPerKm(String(rates.perKm));setPerMinute(String(rates.perMinute));setPeak(String(rates.peakMultiplier??1));dispatch({type:'tariff',tariff:rates});setMessage(publish?t('تم نشر التسعيرة المشتركة لجميع حسابات التطبيق.','Shared rates saved for all app accounts.'):t('تم تحميل التسعيرة المشتركة.','Shared rates loaded.'))}catch{setMessage(t('تعذر تحديث التسعيرة المشتركة. تحقق من الاتصال وصلاحيات حساب الإدارة.','Could not update shared rates. Check internet and your admin account.'))}finally{setSharedBusy(false)}}
  const values=[base,perKm,perMinute,peak].map(parseAmount);
  const validInputs=values.every(value=>value!==null)&&values[3]!>=1&&values[3]!<=10;
  const previewTariff:Tariff|null=validInputs?{base:values[0]!,perKm:values[1]!,perMinute:values[2]!,peakMultiplier:values[3]!,updatedAt:new Date().toISOString()}:null;
@@ -34,6 +38,7 @@ export default function Admin(){const {state,dispatch}=useApp();const t=useText(
   {example!==null&&<Label>{t('مثال توضيحي: رحلة 5 كم و10 دقائق','Example: a 5 km, 10 minute ride')}: {example.toLocaleString('en-US')} {t('ل.س','SYP')}</Label>}
   <Button secondary title={t('تطبيق ثوابت مقترحة لليرة الجديدة','Use suggested new-SYP rates')} onPress={applySuggestedTariff}/>
   <Button title={t('حفظ ثوابت التسعير','Save fare settings')} onPress={saveTariff} disabled={!validInputs}/>
+  {staff&&<Panel><Label>{t('التسعيرة المشتركة — حساب إدارة موثّق','Shared rates — verified admin')}</Label><Button secondary title={t('تحميل التسعيرة المشتركة','Load shared rates')} onPress={()=>void sharedRates(false)} disabled={sharedBusy}/><Button title={t('نشر هذه الثوابت لجميع المستخدمين','Save these rates for all users')} onPress={()=>void sharedRates(true)} disabled={sharedBusy||!validInputs}/></Panel>}
   <Label muted>{t('هذه إعدادات محلية تجريبية لا تصل إلى باقي المستخدمين. تُثبت الثوابت عند بدء الرحلة ولا تتغير للرحلات السابقة. الدفع نقدًا فقط.','These are local demo settings, not shared with other users. Rates are fixed when a ride starts. Cash only.')}</Label>
  </Panel>
  <Panel><Field label={t('رقم استقبال الرسائل للتجربة — اختياري','SMS recipient for testing — optional')} value={phone} onChangeText={setPhone} keyboardType="phone-pad" maxLength={16}/><Button secondary title={t('حفظ رقم الرسائل','Save SMS number')} onPress={savePhone}/><Label muted>{t('هذا لا يربط بوابة رسائل ولا يجعل الطلبات مقبولة تلقائيًا.','This does not connect an SMS service or accept requests on its own.')}</Label></Panel>

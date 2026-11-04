@@ -1,7 +1,7 @@
 import {isCoordinate,type Coordinate} from './geo.ts';
 export interface Place {id:string;label:string;coordinate:Coordinate}
 export class ServiceError extends Error {
-  code:'not_configured'|'invalid_url'|'network'|'timeout'|'response'|'unauthorized'|'busy';
+  code:'not_configured'|'invalid_url'|'network'|'timeout'|'response'|'unauthorized'|'busy'|'not_enabled'|'no_route';
   constructor(code:ServiceError['code']){super(code);this.code=code;this.name='ServiceError'}
 }
 export function normalizeServiceUrl(value:string|undefined):string|null {

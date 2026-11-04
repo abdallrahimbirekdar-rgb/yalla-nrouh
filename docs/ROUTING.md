@@ -54,3 +54,15 @@ Existing saved ride snapshots without a peak factor retain their *previous* mini
 - https://developers.google.com/maps/documentation/routes/usage-and-billing
 - https://developers.google.com/maps/documentation/urls/get-started
 - https://developers.google.com/maps/documentation/routes/policies
+
+
+## Fare service prepared on 2026-11-04
+The authenticated `fare-route` Supabase Edge Function is deployed at the Yalla Nrouh project; the client defaults to `https://gokosprcqpdvqgahvquk.supabase.co/functions/v1/fare-route` and posts `/v1/google/routes` with the signed-in user's access token. No new APK is required.
+
+The service verifies the session, validates coordinates, requires `GOOGLE_ROUTES_API_KEY` from Edge Function secrets, consumes a shared atomic quota, reads the central tariff, and requests a traffic-unaware driving route with no alternatives. Route geometry stays in memory. Rate limits are 100 Google requests per UTC day project-wide, 10 per account/day, and 3 seconds between an account's calls. These limits are not a guarantee of free usage; the Google Cloud project's own quota must cover all its keys/services. Missing key/auth/quota/route returns an error and never an invented price.
+
+The remote schema change is preserved in `backend/fare-setup.sql`. `fare_settings` is readable by authenticated users, and updateable only through the existing staff-admin check. `google_route_usage` is inaccessible to end users; its invoker RPC is executable by service_role only. SQL checks confirmed ordinary users cannot update rates, cannot call the quota RPC or read counters, and immediate repeats are denied. Checks were rolled back without keeping test records.
+
+Admin signs in through Account, then opens Admin to load/publish shared constants. The server quote returns its central tariff alongside route data; account refresh also loads these rates into the local demo, whose meter snapshots terms at ride start. This does not create a production server-side metered charge or payment system.
+
+Activation remains conditional on a valid server-only Google Routes key and enabled Routes API/billing for its Google Cloud project. Add `GOOGLE_ROUTES_API_KEY` in this project's Edge Function secrets. It must allow Routes API and must not be Android/package- or browser-referrer-restricted. Use suitable server restrictions and a hard Google quota. Do not reuse or expose a server key in the website bundle. The Places search separately requires Places API (New) and permission on the website-restricted Maps key. Confirm both with successful real requests; mock tests do not prove Google activation.

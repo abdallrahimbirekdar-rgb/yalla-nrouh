@@ -11,13 +11,13 @@ import {
   cloudAcceptRide,cloudAdvanceRide,cloudCancelRide,cloudGetToken,cloudHeartbeat,
   cloudMyDriver,cloudMyRides,cloudOpenRides,cloudPassengerPin,cloudRegisterDriver,cloudReleaseRide,
   cloudRequestRide,cloudSetDriverOnline,cloudSignIn,cloudSignOut,cloudSignUp,cloudWhoAmI,
-  cloudIsAdmin,cloudStaffDrivers,cloudApproveDriver,
+  cloudIsAdmin,cloudStaffDrivers,cloudApproveDriver,cloudFareSettings,
   type CloudDriver,type CloudRide,type RidePreview,type StaffDriver,type CloudError
 } from '../cloud-api';
 
 const liveStatuses=['requested','accepted','arrived','riding'];
 export default function CloudBeta(){
- const {draft,state}=useApp();const t=useText();
+ const {draft,state,dispatch}=useApp();const t=useText();
  const [token,setToken]=useState<string|null>(()=>cloudGetToken());
  const [email,setEmail]=useState(''),[password,setPassword]=useState('');
  const [userId,setUserId]=useState(''),[userEmail,setUserEmail]=useState('');
@@ -45,10 +45,11 @@ export default function CloudBeta(){
  }
  async function refresh(current:string){
    if(cloudGetToken()!==current)return;
-   const [me,myRides,myDriver]=await Promise.all([cloudWhoAmI(current),cloudMyRides(current),cloudMyDriver(current)]);
+   const [me,myRides,myDriver,tariff]=await Promise.all([cloudWhoAmI(current),cloudMyRides(current),cloudMyDriver(current),cloudFareSettings(current)]);
    const [newOffers,admin]=await Promise.all([myDriver?.approved&&myDriver.online?cloudOpenRides(current):Promise.resolve([]),cloudIsAdmin(current)]);
    const staff=admin?await cloudStaffDrivers(current):[];
    if(cloudGetToken()!==current)return;
+   dispatch({type:'tariff',tariff});
    setUserId(me.id);setUserEmail(me.email??'');setRides(myRides);setDriver(myDriver);
    setOffers(newOffers);setIsAdmin(admin);setStaffDrivers(staff);
  }
@@ -116,6 +117,7 @@ export default function CloudBeta(){
        <Label muted>{fullCategory?.[state.language]??draft.category} · {regions[draft.region]?.[state.language==='ar'?0:1]}</Label>
        <Button secondary title={t('تحديد الانطلاق على الخريطة','Choose pickup on map')} onPress={()=>router.push({pathname:'/location',params:{target:'pickup',returnTo:'cloud'}})}/>
        <Button secondary title={t('تحديد الوصول على الخريطة','Choose destination on map')} onPress={()=>router.push({pathname:'/location',params:{target:'destination',returnTo:'cloud'}})}/>
+       <RoutePanel from={draft.pickupPoint} to={draft.destinationPoint} estimate title={t('حساب قيمة الأجرة قبل الطلب','Check fare before booking')}/>
        <Button title={t('إرسال طلب اختبار إلى الخادم','Send test request to server')} disabled={busy||!draft.pickupPoint||!draft.destinationPoint} onPress={()=>void run(async()=>{
          const current=await siteCurrentPosition(false);if(!pickupAllowed(draft.pickupPoint,current))throw Error('pickup_distance');
          const result=await cloudRequestRide(token,draft);setPassengerPin(result.pin);setPinRideId(result.ride_id);await refresh(token);

@@ -120,3 +120,15 @@ test('saved places validate coordinates and do not report success after a failed
   await assert.rejects(()=>cloudSavePlaces(token,[]),e=>e instanceof CloudError&&e.status===401);
  });
 });
+
+test('central fare settings read numeric server values and block non-admin updates',async()=>{
+ const {cloudFareSettings,cloudUpdateFareSettings}=await import('../src/cloud-api.ts');
+ await withFetch(async(url,options)=>{
+  if(url.includes('/rpc/is_staff_admin'))return reply(false);
+  assert.equal(options.method,'GET');
+  return reply([{base:'50',per_km:'60',per_minute:'10',peak_multiplier:'1',updated_at:'2026-11-04T00:00:00Z'}]);
+ },async()=>{
+  const tariff=await cloudFareSettings(token);assert.equal(tariff.perKm,60);
+  await assert.rejects(()=>cloudUpdateFareSettings(token,tariff),e=>e instanceof CloudError&&e.kind==='not_admin');
+ });
+});

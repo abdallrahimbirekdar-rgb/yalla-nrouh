@@ -1,4 +1,5 @@
 import type {TripDraft} from './domain.ts';
+import {validTariff,type Tariff} from './meter.ts';
 import {isCoordinate} from './geo.ts';
 
 const API_ROOT='https://gokosprcqpdvqgahvquk.supabase.co';
@@ -26,7 +27,7 @@ const headers=(token?:string):Record<string,string>=>({
   apikey:API_KEY,'Content-Type':'application/json',
   ...(token?{Authorization:'Bearer '+token}:{})
 });
-async function call<T>(path:string,method:'GET'|'POST'|'PUT',token?:string,body?:unknown):Promise<T>{
+async function call<T>(path:string,method:'GET'|'POST'|'PUT'|'PATCH',token?:string,body?:unknown):Promise<T>{
   const controller=new AbortController(), timeout=setTimeout(()=>controller.abort(),12000);
   try{
     const response=await fetch(API_ROOT+path,{method,headers:headers(token),body:body===undefined?undefined:JSON.stringify(body),signal:controller.signal,credentials:'omit'});
@@ -114,4 +115,18 @@ export async function cloudSavePlaces(token:string,places:SavedPlace[]):Promise<
  const verified=parseSavedPlaces(user.user_metadata?.yalla_saved_places);
  if(JSON.stringify(verified)!==JSON.stringify(clean))throw new CloudError(500,'bad_response');
  return verified;
+}
+
+export async function cloudFareSettings(token:string):Promise<Tariff>{
+ requireToken(token);
+ const rows=await call<{base:number;per_km:number;per_minute:number;peak_multiplier:number;updated_at:string}[]>('/rest/v1/fare_settings?id=eq.true&select=base,per_km,per_minute,peak_multiplier,updated_at','GET',token);
+ const row=rows[0];const tariff=row?{base:Number(row.base),perKm:Number(row.per_km),perMinute:Number(row.per_minute),peakMultiplier:Number(row.peak_multiplier),updatedAt:row.updated_at}:null;
+ if(!validTariff(tariff))throw new CloudError(500,'bad_response');return tariff;
+}
+export async function cloudUpdateFareSettings(token:string,tariff:Tariff):Promise<void>{
+ requireToken(token);if(!validTariff(tariff))throw new CloudError(400,'invalid_tariff');
+ if(!await cloudIsAdmin(token))throw new CloudError(403,'not_admin');
+ await call('/rest/v1/fare_settings?id=eq.true','PATCH',token,{base:tariff.base,per_km:tariff.perKm,per_minute:tariff.perMinute,peak_multiplier:tariff.peakMultiplier??1,updated_at:new Date().toISOString()});
+ const actual=await cloudFareSettings(token);
+ if(['base','perKm','perMinute','peakMultiplier'].some(key=>actual[key as keyof Tariff]!==tariff[key as keyof Tariff]))throw new CloudError(500,'bad_response');
 }
