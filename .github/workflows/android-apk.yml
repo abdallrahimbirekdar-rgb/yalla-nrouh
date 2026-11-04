@@ -14,6 +14,9 @@ concurrency:
 
 jobs:
   android-apk:
+    env:
+      GOOGLE_MAPS_ANDROID_API_KEY: ${{ secrets.GOOGLE_MAPS_ANDROID_API_KEY }}
+      EXPO_PUBLIC_GOOGLE_ROUTES_PROXY: ${{ vars.GOOGLE_ROUTES_PROXY_URL }}
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:

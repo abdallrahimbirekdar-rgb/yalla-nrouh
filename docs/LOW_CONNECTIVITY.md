@@ -1,3 +1,5 @@
+> Version 0.6.0 update: the owner selected Google Maps. Free external Google navigation is active; native Google SDK is wired but awaits its key. The prior map picker is a labelled temporary fallback. Google route content is not cached to disk, and no public OSRM route fallback is enabled. See ROUTING.md for current behavior.
+
 # Low-connectivity build 0.5.1
 
 ## Implemented

@@ -14,6 +14,8 @@ concurrency:
 
 jobs:
   deploy:
+    env:
+      EXPO_PUBLIC_GOOGLE_ROUTES_PROXY: ${{ vars.GOOGLE_ROUTES_PROXY_URL }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout

@@ -16,3 +16,10 @@ test('map tap and marker drag both send selected coordinates to the native form'
  markerEvents.dragend();assert.deepEqual(sent[1],{type:'point',point:{latitude:34,longitude:37}});
  context.window.updatePoint({latitude:35,longitude:38});assert.deepEqual(Array.from(markerPosition),[35,38]);assert.equal(sent.length,2);
 });
+test('read-only route map draws a road line and disables location selection',()=>{
+ const events={},drawn=[];let fits=0,removed=0;const map={setView(){return this;},on(name,handler){events[name]=handler;},fitBounds(){fits++;},removeLayer(){removed++;}};
+ const layer={addTo(){return this;},getBounds(){return {};}};
+ const context={L:{map:()=>map,divIcon:()=>({}),tileLayer:()=>({addTo(){}}),polyline:points=>{drawn.push(points);return layer;}},window:{}};
+ const script=Array.from(mapHtml(null,true,false,true).matchAll(/<script>([\s\S]*?)<\/script>/g)).at(-1)[1];vm.runInNewContext(script,context);
+ assert.equal(events.click,undefined);context.window.updateRoute([{latitude:33.5,longitude:36.2},{latitude:33.51,longitude:36.3}]);assert.equal(fits,1);assert.deepEqual(JSON.parse(JSON.stringify(drawn[0])),[[33.5,36.2],[33.51,36.3]]);context.window.updateRoute([]);assert.equal(removed,1);
+});

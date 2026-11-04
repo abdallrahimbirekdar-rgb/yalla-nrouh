@@ -37,11 +37,14 @@ export function pauseMeter(meter:Meter):Meter {
  const {lastFix:_,...rest}=meter;
  return {...rest,incomplete:true};
 }
+export function priceForRoute(meters:number,minutes:number,tariff:Tariff|null):number|null {
+ if(!tariff||!validTariff(tariff)||!Number.isFinite(meters)||meters<0||!Number.isFinite(minutes)||minutes<0)return null;
+ return Math.round(Math.max(tariff.minimum,tariff.base+meters/1000*tariff.perKm+minutes*tariff.perMinute));
+}
 export function fareEstimate(meter:Meter,now=Date.now()):number|null {
  if(!meter.tariff)return null;
  const minutes=Math.max(0,((meter.endedAt??now)-meter.startedAt)/60000);
- const t=meter.tariff;
- return Math.round(Math.max(t.minimum,t.base+meter.meters/1000*t.perKm+minutes*t.perMinute));
+ return priceForRoute(meter.meters,minutes,meter.tariff);
 }
 export function validMeter(value:unknown):value is Meter {
  const m=value as Meter;

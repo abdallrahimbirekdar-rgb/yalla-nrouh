@@ -16,8 +16,8 @@ export const regions = [
 ];
 export interface TripDraft {pickup:string;destination:string;region:number;intercity:boolean;category:RideType;pickupPoint?:Coordinate;destinationPoint?:Coordinate}
 export interface Trip extends TripDraft {id:string;createdAt:string;status:TripStatus;fare:null;pin:string;rating?:number;feedback?:string;cancelReason?:'passenger'|'driver';updatedAt:string;meter?:Meter}
-export interface Preferences {theme:'system'|'light'|'dark';dataSaver:boolean;notifications:boolean;smsNumber:string}
-export const defaultPreferences:Preferences={theme:'system',dataSaver:true,notifications:false,smsNumber:''};
+export interface Preferences {theme:'system'|'light'|'dark';dataSaver:boolean;notifications:boolean;smsNumber:string;permissionsIntroSeen:boolean}
+export const defaultPreferences:Preferences={theme:'system',dataSaver:true,notifications:false,smsNumber:'',permissionsIntroSeen:false};
 export interface AppState {preferences:Preferences;tariff:Tariff|null;version:1;language:Language;trips:Trip[];driver:{approved:boolean;online:boolean};activeTripId:string|null}
 export const initialState:AppState={preferences:defaultPreferences,tariff:null,version:1,language:'ar',trips:[],driver:{approved:false,online:false},activeTripId:null};
 export const isActive=(trip:Trip)=>!['completed','cancelled'].includes(trip.status);
@@ -32,7 +32,7 @@ export function validateDraft(draft:TripDraft):string|null {
 }
 export type Action = {type:'preferences';preferences:Partial<Preferences>}|{type:'tariff';tariff:Tariff}|{type:'fix';id:string;fix:Fix;now:number}|{type:'pauseTracking';id:string}|{type:'language';language:Language}|{type:'approve';approved:boolean}|{type:'online'}|{type:'create';draft:TripDraft;id:string;now:string;pin:string}|{type:'transition';id:string;to:TripStatus;actor:'passenger'|'driver';now:string;pin?:string}|{type:'rate';id:string;rating:number;feedback:string};
 export function reduce(state:AppState,action:Action):AppState {
-  if(action.type==='preferences'){const p={...state.preferences,...action.preferences};if(!['system','light','dark'].includes(p.theme)||typeof p.dataSaver!=='boolean'||typeof p.notifications!=='boolean'||typeof p.smsNumber!=='string'||p.smsNumber!==''&&!/^\+?\d{7,15}$/.test(p.smsNumber))return state;return {...state,preferences:p};}
+  if(action.type==='preferences'){const p={...state.preferences,...action.preferences};if(!['system','light','dark'].includes(p.theme)||typeof p.dataSaver!=='boolean'||typeof p.notifications!=='boolean'||typeof p.permissionsIntroSeen!=='boolean'||typeof p.smsNumber!=='string'||p.smsNumber!==''&&!/^\+?\d{7,15}$/.test(p.smsNumber))return state;return {...state,preferences:p};}
   if(action.type==='tariff')return validTariff(action.tariff)?{...state,tariff:{...action.tariff}}:state;
   if(action.type==='language')return {...state,language:action.language};
   if(action.type==='approve')return {...state,driver:{approved:action.approved,online:action.approved&&state.driver.online}};
@@ -70,6 +70,6 @@ export function restoreState(raw:unknown):AppState|null {
   }
   const active=s.trips.filter(isActive);if(active.length>1)return null;
   const preferences={...defaultPreferences,...s.preferences};
-  if(!['system','light','dark'].includes(preferences.theme)||typeof preferences.dataSaver!=='boolean'||typeof preferences.notifications!=='boolean'||typeof preferences.smsNumber!=='string'||preferences.smsNumber!==''&&!/^\+?\d{7,15}$/.test(preferences.smsNumber)||s.tariff!==undefined&&s.tariff!==null&&!validTariff(s.tariff))return null;
+  if(!['system','light','dark'].includes(preferences.theme)||typeof preferences.dataSaver!=='boolean'||typeof preferences.notifications!=='boolean'||typeof preferences.permissionsIntroSeen!=='boolean'||typeof preferences.smsNumber!=='string'||preferences.smsNumber!==''&&!/^\+?\d{7,15}$/.test(preferences.smsNumber)||s.tariff!==undefined&&s.tariff!==null&&!validTariff(s.tariff))return null;
   return {...s,preferences,tariff:s.tariff??null,trips:s.trips.map(t=>t.status==='riding'&&t.meter?{...t,meter:pauseMeter(t.meter)}:t),driver:{approved:s.driver.approved,online:false},activeTripId:active[0]?.id??null};
 }

@@ -1,12 +1,16 @@
-## Update 0.5.1 — low-connectivity mode
+## Google navigation and permissions — 0.6.0
+
+One unified passenger/driver APK. Google Maps URLs provide free external directions/navigation without an API key. The app includes foreground-permission onboarding and native Google Maps SDK wiring, which stays inactive until a restricted Android SDK key is configured. The temporary OSM picker remains labelled until that setup is done. No paid Google Routes request is sent by default. In-app road-distance/price estimates require the configured project backend, a server-side Google Routes key, billing and enforced quotas. See [Google Maps setup and price calculation](docs/ROUTING.md).
+
+## Update 0.6.0 — low-connectivity mode
 
 Data saver, persistent booking drafts, local route recording, dark/system theme, opt-in local alerts, manual SMS composer, and local demo fare settings are available. The application is still a single-device demo; booking synchronization, automatic SMS, remote driver updates, and local payment providers are not connected. See [low-connectivity behavior and limits](docs/LOW_CONNECTIVITY.md).
 
-Android release builds target Android 7+ and publish one universal ARM64/ARM32 APK containing both passenger and driver modes. Actual APK sizes are measured after building; physical-device testing remains required. Native maps no longer require a Google Maps key.
+Android release builds target Android 7+ and publish one universal ARM64/ARM32 APK containing both passenger and driver modes. Actual APK sizes are measured after building; physical-device testing remains required. Embedded native Google Maps requires a restricted SDK key; external Google navigation works without one.
 
 # يلا نروح — Yalla Nrouh
 
-مشروع تطبيق أصلي لأندرويد وآيفون ونسخة ويب، بالعربية والإنكليزية. الإصدار **0.5.1 تجربة محلية**: لا يطلب سيارة فعلية ولا يسجل حسابات حقيقية. يمكنه قراءة موقع الجهاز في المقدمة بعد ضغط زر الموقع والموافقة على إذن النظام.
+مشروع تطبيق أصلي لأندرويد وآيفون ونسخة ويب، بالعربية والإنكليزية. الإصدار **0.6.0 تجربة محلية**: لا يطلب سيارة فعلية ولا يسجل حسابات حقيقية. يمكنه قراءة موقع الجهاز في المقدمة بعد ضغط زر الموقع والموافقة على إذن النظام.
 
 ## التصميم الجديد
 
@@ -20,7 +24,7 @@ Android release builds target Android 7+ and publish one universal ARM64/ARM32 A
 - اعتماد سائق تجريبي من الإدارة ثم تشغيل استقبال الطلبات.
 - قبول الطلب، تسجيل الوصول، التحقق من رمز بدء الرحلة، بدء الرحلة وإنهاؤها.
 - إلغاء قبل بدء الرحلة، وتقييم واحد بعد اكتمالها، وسجل الرحلات.
-- اختيار نقاط الرحلة على خريطة الهاتف، أو باستخدام GPS عند الطلب، أو إدخال الإحداثيات يدويًا. خرائط OpenStreetMap على الهاتف والمتصفح دون مفتاح Google.
+- اختيار نقاط الرحلة على خريطة الهاتف، أو باستخدام GPS عند الطلب، أو إدخال الإحداثيات يدويًا. الملاحة عبر Google Maps، مع خريطة اختيار مؤقتة حتى تفعيل مفتاح Google داخل التطبيق.
 - عميل بحث بالعناوين جاهز للربط بخادم؛ لا توجد خدمة بحث منشورة أو متصلة افتراضيًا.
 - شاشة حالة الخدمات في الإدارة لتمييز الجاهز عن غير المرتبط.
 - حفظ محلي على الجهاز مع التحقق من البيانات عند الاستعادة وإيقاف استقبال الطلبات تلقائيًا بعد إعادة التشغيل.

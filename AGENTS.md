@@ -54,3 +54,6 @@ Data saver defaults on; keep map mounting explicit in this mode. Respect saved d
 
 ## One application
 The owner requested one APK containing both passenger and driver modes. Publish one unified ARM64 + ARM32 APK and one website download button. Keep passenger/driver mode choices clearly visible together in the menu. Do not publish separate architecture or role downloads.
+
+## Google Maps and permissions (0.6.0)
+The owner chose Google Maps when its initial use can be free. Use official Maps URLs for free external navigation now. Native Google Maps SDK is selected only when the restricted Android key is configured at build time. Until then retain an explicitly labelled temporary OSM location picker to avoid breaking manual/map selection. Do not represent it as an activated Google map. Do not use a public OSRM routing fallback. Google Routes estimates require the configured project backend and billing/quota setup. Never put a Routes server key in the client or cache Google route content on disk. Draw Google route content only on Google maps; otherwise show attributed text and the Google Maps navigation link. Ask for foreground permission via a user-initiated explanation; never assume installation grants it. Keep denial/manual entry usable. Do not bill the driver's journey to pickup.
