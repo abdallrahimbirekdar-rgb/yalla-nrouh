@@ -10,6 +10,23 @@ Official Maps URLs open directions or navigation in the Google Maps app, or the 
 
 A Google Cloud project and active billing setup are required by Google for SDK setup, even where Maps SDK map loads are no-charge. No billing account, API key or quota is created by this change. Maps SDK free map loads do not imply all Google products are free. The owner must supply/authorize the project setup before it can be activated.
 
+## تفعيل خرائط Google الأصلية في APK التجريبي
+
+هذا الإعداد خاص **بعرض الخريطة داخل تطبيق Android** باستخدام `react-native-maps`، ولا يفعّل وحده حساب المسافة أو رسم طرق القيادة. المفتاح **غير موجود حاليًا** في إعدادات GitHub، لذلك يعود التطبيق إلى OpenStreetMap حتى إضافته.
+
+1. افتح [Google Cloud Console](https://console.cloud.google.com/apis/credentials) وأنشئ مشروعًا للخرائط، أو اختر مشروعًا تملكه. تأكد من تفعيل الفوترة حسب متطلبات Google، ثم فعّل خدمة **Maps SDK for Android** فقط.
+2. أنشئ **API key** خاصًا بنسخة Android. في **API restrictions** اختر **Restrict key** ثم **Maps SDK for Android**. في **Application restrictions** اختر **Android apps** وأضف:
+   - Package name: `com.yallanrouh.demo`
+   - SHA-1 لتوقيع APK الحالي (Android Debug للاختبار فقط): `5E:8F:16:06:2E:A3:CD:2C:4A:0D:54:78:76:BA:A6:F3:8C:AB:F6:25`
+3. داخل [GitHub Actions secrets](https://github.com/abdallrahimbirekdar-rgb/yalla-nrouh/settings/secrets/actions)، اختر **New repository secret**، واجعل الاسم `GOOGLE_MAPS_ANDROID_API_KEY` والقيمة مفتاح Google الذي أنشأته. **لا تضع المفتاح في المستودع أو المحادثة**.
+4. إضافة Secret لا تشغّل البناء تلقائيًا. من [Build Android test APK](https://github.com/abdallrahimbirekdar-rgb/yalla-nrouh/actions/workflows/android-apk.yml)، اختر **Run workflow** على `main`.
+5. تأكد من ظهور **Google Maps: configured in Android manifest** في ملخص البناء، ثم افحص نجاح APK والتوقيع وانشره. ثبّت أحدث APK واختبر تحميل مربعات الخريطة والتحريك وتحديد موقع الانطلاق والوصول على هاتف Android متصل بالإنترنت.
+6. عند ظهور خريطة فارغة، راجع Maps SDK والفوترة وتقييد المفتاح بالاسم وبصمة توقيع الملف الذي ثُبّت فعلًا. ملخص GitHub Actions يعرض SHA-1 لكل بناء، دون نشر مفتاح Google. بعد تعذّر التحميل، يتيح التطبيق استخدام خريطة بديلة.
+
+**تنبيه التوقيع:** ملف الاختبار الحالي موقّع بشهادة Android Debug، ولا تصلح للنشر التجاري أو إصدار Google Play. استخدم توقيع إصدار ثابتًا وخاصًا بالتطبيق للإنتاج، وأضف بصمته الجديدة إلى قيود المفتاح قبل توزيع النسخة النهائية.
+
+**التكلفة:** تُدرج Google خدمة **Maps SDK** للهواتف ضمن الخدمات ذات الاستخدام غير المحدود دون رسوم للخريطة الأساسية، لكن إعداد مشروع Google Maps لا يزال يتطلب تفعيل الفوترة. خدمات **Places / Routes / Street View** مستقلة وقد تكون مدفوعة، ولا يفعّل هذا التعديل أيًا منها تلقائيًا. راجع [قائمة الأسعار الرسمية](https://developers.google.com/maps/billing-and-pricing/pricing) قبل تفعيل خدمات أخرى.
+
 ## Optional Google Routes backend contract
 The app never calls Routes REST with an embedded server key and has no public OSRM fallback. No route API request is sent when `EXPO_PUBLIC_GOOGLE_ROUTES_PROXY` is unset. To prepare the CI value, set repository variable `GOOGLE_ROUTES_PROXY_URL` to the protected project backend base URL, after the authenticated booking backend is available.
 
