@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   cloudSignIn,cloudSignOut,cloudSignUp,cloudGetToken,cloudWhoAmI,
-  cloudRequestRide,cloudCancelRide,CloudError
+  cloudRequestRide,cloudCancelRide,cloudReleaseRide,CloudError
 } from '../src/cloud-api.ts';
 
 const token='test-access-token-for-requests';
@@ -80,4 +80,14 @@ test('failed network calls return a network error without a false success',async
  await withFetch(async()=>{throw Error('connection lost')},async()=>{
    await assert.rejects(()=>cloudWhoAmI(token),e=>e instanceof CloudError&&e.kind==='network');
  });
+});
+
+test('driver release uses the assigned-ride RPC, not unrestricted table writes',async()=>{
+ const id='00000000-0000-4000-8000-000000000001';
+ await withFetch(async (url,options)=>{
+   assert.match(url,/\/rest\/v1\/rpc\/release_ride$/);
+   assert.equal(options.headers.Authorization,'Bearer '+token);
+   assert.deepEqual(JSON.parse(options.body),{p_ride_id:id});
+   return reply(true);
+ },async()=>assert.equal(await cloudReleaseRide(token,id),true));
 });
