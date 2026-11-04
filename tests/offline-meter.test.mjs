@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {initialState,reduce} from '../src/domain.ts';
 import {createLatestWriter,readSaved,emptyDraft} from '../src/persistence.ts';
-import {recordFix,newMeter,pauseMeter,fareEstimate,parseAmount} from '../src/meter.ts';
+import {recordFix,newMeter,pauseMeter,fareEstimate,priceForRoute,parseAmount,validTariff} from '../src/meter.ts';
 const start=Date.parse('2026-11-04T10:00:00Z');
 const tariff={base:1000,perKm:2000,perMinute:100,minimum:1500,updatedAt:new Date(start).toISOString()};
 const fix=(seconds,latitude=33.5,accuracy=5)=>({latitude,longitude:36.2,time:start+seconds*1000,accuracy});
@@ -37,8 +37,30 @@ test('pricing snapshot is fixed for the ride and completed estimate does not kee
  const m=newMeter(start,tariff);tariff.base=9000;assert.equal(m.tariff.base,1000);tariff.base=1000;
  assert.equal(fareEstimate({...m,meters:2000,endedAt:start+600000},start+3600000),6000);
  assert.equal(fareEstimate(newMeter(start,null),start),null);
- assert.equal(fareEstimate(m,start),1500);
+ assert.equal(fareEstimate(m,start),1000); // New rides use the owner's formula without a minimum.
 });
+test('fare follows (base + km rate + minute rate) times peak multiplier exactly',()=>{
+ const rate={base:1000,perKm:2000,perMinute:100,peakMultiplier:1.5,updatedAt:new Date(start).toISOString()};
+ // (1,000 + 2 × 2,000 + 10 × 100) × 1.5 = 9,000 SYP
+ assert.equal(priceForRoute(2000,10,rate),9000);
+ assert.equal(priceForRoute(2000,10,{...rate,peakMultiplier:1}),6000);
+ assert.equal(priceForRoute(0,0,rate),1500);
+ assert.equal(priceForRoute(2000,10,{...rate,peakMultiplier:2}),12000);
+ assert.equal(priceForRoute(2000,10,{...rate,peakMultiplier:0.5}),null);
+ assert.equal(validTariff({...rate,peakMultiplier:11}),false);
+ const ride=newMeter(start,rate);rate.base=999999;
+ assert.equal(fareEstimate({...ride,meters:2000,endedAt:start+10*60000}),9000);
+ rate.base=1000;
+});
+
+test('old completed rides keep their legacy minimum; new rides use the new formula',()=>{
+ const old={base:1000,perKm:2000,perMinute:100,minimum:1500,updatedAt:new Date(start).toISOString()};
+ assert.equal(validTariff(old),true);
+ assert.equal(priceForRoute(0,0,old),1500);
+ assert.equal(priceForRoute(0,0,newMeter(start,old).tariff),1000);
+ assert.equal(readSaved(JSON.stringify({storageVersion:2,state:{...initialState,tariff:old},draft:emptyDraft})).state.tariff.minimum,1500);
+});
+
 test('ride and route recover after restart without bridging the last GPS fix',()=>{
  const draft={...emptyDraft,pickup:'داريا',destination:'دمشق'};let s=reduce(initialState,{type:'create',draft,id:'offline',now:new Date(start).toISOString(),pin:'1234'});
  s=reduce(s,{type:'approve',approved:true});s=reduce(s,{type:'online'});
