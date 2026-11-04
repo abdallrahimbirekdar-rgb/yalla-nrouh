@@ -1,5 +1,5 @@
 import {type TripDraft} from './domain';
-import {isCoordinate} from './geo';
+import {isCoordinate} from './geo.ts';
 
 const API_ROOT='https://gokosprcqpdvqgahvquk.supabase.co';
 let volatileToken:string|null=null;
@@ -18,7 +18,9 @@ export interface CloudDriver {user_id:string;region:number;category:string;appro
 export interface RidePreview {ride_id:string;region:number;category:string;created_at:string;pickup_lat_approx:number;pickup_lng_approx:number}
 export interface StaffDriver {user_id:string;region:number;category:string;approved:boolean;online:boolean;created_at:string}
 export class CloudError extends Error {
-  constructor(public readonly status:number,public readonly kind:string){super(kind);this.name='CloudError'}
+  readonly status:number;
+  readonly kind:string;
+  constructor(status:number,kind:string){super(kind);this.status=status;this.kind=kind;this.name='CloudError'}
 }
 const headers=(token?:string):Record<string,string>=>({
   apikey:API_KEY,'Content-Type':'application/json',
