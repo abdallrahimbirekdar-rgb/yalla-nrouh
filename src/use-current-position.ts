@@ -71,7 +71,10 @@ export function useCurrentPosition(enabled:boolean){
   const onWebFix=(event:Event)=>{
    const point=(event as CustomEvent).detail;
    if(!isCoordinate(point)||manual.current)return;
-   const id=++generation.current;located.current=true;setFailure(null);setCamera({point,revision:id});
+   // A native fix can arrive as an event before the request promise resolves.
+   // Finish the pending UI state here so the button never remains spinning.
+   const id=++generation.current;running.current=null;located.current=true;
+   setBusy(false);setFailure(null);setCamera({point,revision:id});
   };
   const onNativeVisibility=(event:Event)=>{
    if((event as CustomEvent).detail?.active===true)start(true);
