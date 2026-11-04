@@ -33,7 +33,7 @@ export function nativeCurrentPosition(askPermission:boolean):Promise<NativePosit
    resolve({point,error});
   };
   const cleanup=()=>{clearTimeout(timer);window.removeEventListener('yalla:native-position',finish)};
-  const timer=setTimeout(()=>{cleanup();resolve({point:null,error:'unsupported'})},14000);
+  const timer=setTimeout(()=>{cleanup();resolve({point:null,error:'unsupported'})},11000);
   window.addEventListener('yalla:native-position',finish);
   try{bridge.postMessage(JSON.stringify({type:'location',id,askPermission}))}
   catch{cleanup();resolve({point:null,error:'unsupported'})}
@@ -46,9 +46,21 @@ export function nativeCurrentPosition(askPermission:boolean):Promise<NativePosit
  */
 export async function siteCurrentPosition(askPermission:boolean):Promise<Coordinate>{
  if(isNativeWebView()){
+  // Prefer Android's foreground GPS bridge. Older installed APKs, however, may
+  // not have this bridge, and some devices may fail to return a native fix.
+  // In either case give the live website a chance to get a browser GPS fix.
   const result=await nativeCurrentPosition(askPermission);
   if(result.point)return result.point;
-  if(result.error!=='unsupported')throw new PositionError(result.error??'position');
+  if(result.error==='services')throw new PositionError('services');
+  // Automatic launch may only use an already granted location permission.
+  // A button press is explicit permission intent and may show the browser prompt.
+  if(!askPermission&&!await webLocationGranted()){
+   throw new PositionError(result.error==='permission'?'permission':result.error==='timeout'?'timeout':'permission');
+  }
+  try{return await getWebPosition(12000)}
+  catch(error){
+   throw error instanceof PositionError?error:new PositionError('position');
+  }
  }
  if(!askPermission&&!await webLocationGranted())throw new PositionError('permission');
  return getWebPosition();
