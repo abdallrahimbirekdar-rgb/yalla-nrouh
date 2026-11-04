@@ -1,4 +1,4 @@
-import {newMeter,pauseMeter,recordFix,validMeter,validTariff,type Fix,type Meter,type Tariff} from './meter.ts';
+import {newMeter,pauseMeter,recordFix,validMeter,validTariff,suggestedNewSypTariff,type Fix,type Meter,type Tariff} from './meter.ts';
 import {isCoordinate,sameCoordinate,type Coordinate} from './geo.ts';
 export type Language = 'ar' | 'en';
 export type RideType = 'classic' | 'comfort' | 'yellow' | 'vip' | 'ladies-classic' | 'ladies-comfort';
@@ -19,7 +19,7 @@ export interface Trip extends TripDraft {id:string;createdAt:string;status:TripS
 export interface Preferences {theme:'system'|'light'|'dark';dataSaver:boolean;notifications:boolean;smsNumber:string;permissionsIntroSeen:boolean}
 export const defaultPreferences:Preferences={theme:'system',dataSaver:true,notifications:false,smsNumber:'',permissionsIntroSeen:false};
 export interface AppState {preferences:Preferences;tariff:Tariff|null;version:1;language:Language;trips:Trip[];driver:{approved:boolean;online:boolean};activeTripId:string|null}
-export const initialState:AppState={preferences:defaultPreferences,tariff:null,version:1,language:'ar',trips:[],driver:{approved:false,online:false},activeTripId:null};
+export const initialState:AppState={preferences:defaultPreferences,tariff:{...suggestedNewSypTariff},version:1,language:'ar',trips:[],driver:{approved:false,online:false},activeTripId:null};
 export const isActive=(trip:Trip)=>!['completed','cancelled'].includes(trip.status);
 export function validateDraft(draft:TripDraft):string|null {
   if(!draft.pickup.trim()||!draft.destination.trim())return 'addresses';
@@ -71,5 +71,5 @@ export function restoreState(raw:unknown):AppState|null {
   const active=s.trips.filter(isActive);if(active.length>1)return null;
   const preferences={...defaultPreferences,...s.preferences};
   if(!['system','light','dark'].includes(preferences.theme)||typeof preferences.dataSaver!=='boolean'||typeof preferences.notifications!=='boolean'||typeof preferences.permissionsIntroSeen!=='boolean'||typeof preferences.smsNumber!=='string'||preferences.smsNumber!==''&&!/^\+?\d{7,15}$/.test(preferences.smsNumber)||s.tariff!==undefined&&s.tariff!==null&&!validTariff(s.tariff))return null;
-  return {...s,preferences,tariff:s.tariff??null,trips:s.trips.map(t=>t.status==='riding'&&t.meter?{...t,meter:pauseMeter(t.meter)}:t),driver:{approved:s.driver.approved,online:false},activeTripId:active[0]?.id??null};
+  return {...s,preferences,tariff:s.tariff??{...suggestedNewSypTariff},trips:s.trips.map(t=>t.status==='riding'&&t.meter?{...t,meter:pauseMeter(t.meter)}:t),driver:{approved:s.driver.approved,online:false},activeTripId:active[0]?.id??null};
 }
