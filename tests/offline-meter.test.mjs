@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {initialState,reduce} from '../src/domain.ts';
 import {createLatestWriter,readSaved,emptyDraft} from '../src/persistence.ts';
-import {recordFix,newMeter,pauseMeter,fareEstimate,priceForRoute,parseAmount,validTariff} from '../src/meter.ts';
+import {recordFix,newMeter,pauseMeter,fareEstimate,priceForRoute,parseAmount,validTariff,suggestedNewSypTariff} from '../src/meter.ts';
 const start=Date.parse('2026-11-04T10:00:00Z');
 const tariff={base:1000,perKm:2000,perMinute:100,minimum:1500,updatedAt:new Date(start).toISOString()};
 const fix=(seconds,latitude=33.5,accuracy=5)=>({latitude,longitude:36.2,time:start+seconds*1000,accuracy});
@@ -15,6 +15,19 @@ test('old saved data migrates with data saver and notifications off, partial dra
  assert.deepEqual(readSaved(JSON.stringify({storageVersion:2,state:initialState,draft:{...draft,pickupPoint:{latitude:999,longitude:1}}})).draft,emptyDraft);
  assert.throws(()=>readSaved('not json'));
 });
+test('new Syrian pound rates are usable immediately, without changing existing custom tariffs',()=>{
+ assert.deepEqual({base:initialState.tariff.base,perKm:initialState.tariff.perKm,perMinute:initialState.tariff.perMinute,peakMultiplier:initialState.tariff.peakMultiplier},{base:50,perKm:60,perMinute:10,peakMultiplier:1});
+ assert.equal(validTariff(suggestedNewSypTariff),true);
+ assert.equal(priceForRoute(5000,10,initialState.tariff),450);
+ assert.equal(priceForRoute(5000,10,{...suggestedNewSypTariff,peakMultiplier:1.5}),675);
+ // Previously saved custom prices remain unchanged.
+ const custom={base:75,perKm:90,perMinute:7,peakMultiplier:1,updatedAt:new Date(start).toISOString()};
+ assert.deepEqual(readSaved(JSON.stringify({storageVersion:2,state:{...initialState,tariff:custom},draft:emptyDraft})).state.tariff,custom);
+ // Older installations with no fare configured receive the new suggested values.
+ const restored=readSaved(JSON.stringify({storageVersion:2,state:{...initialState,tariff:null},draft:emptyDraft}));
+ assert.equal(priceForRoute(5000,10,restored.state.tariff),450);
+});
+
 test('GPS filters fast callbacks, poor accuracy, stale data and stationary drift',()=>{
  const first=recordFix(newMeter(start,tariff),fix(0),start);
  assert.equal(recordFix(first,fix(5,33.51),start+5000),first);
