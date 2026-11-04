@@ -21,7 +21,7 @@ export default function MapContent({point,onChange,compact=false,route,readOnly=
  },[route,ready]);
  if(!configured||fallback)return <View style={{flex:compact?1:undefined,gap:8}}>
   {!compact&&<Label muted>{configured?t('خريطة بديلة عند تعذر تحميل Google Maps.','Alternative map because Google Maps did not load.'):t('خريطة مؤقتة حتى تفعيل Google Maps داخل التطبيق.','Temporary map until Google Maps is enabled in the app.')}</Label>}
-  <KeylessMap point={point} onChange={onChange} compact={compact} readOnly={readOnly} route={route}/>
+  {route&&route.length>1?<Label muted>{t('عرض مسار Google متاح فقط على خريطة Google المفعّلة. استخدم زر الملاحة لفتح الطريق.','Google route details are shown only on an enabled Google map. Use the navigation button to open directions.')}</Label>:<KeylessMap point={point} onChange={onChange} compact={compact} readOnly={readOnly}/>}
   {fallback&&<Button secondary title={t('العودة إلى خريطة Google','Return to Google Maps')} onPress={()=>{setFallback(false);setReady(false);setTilesLoaded(false);setSlow(false)}}/>}
  </View>;
  return <View style={{height:compact?'100%':340,borderRadius:compact?0:16,overflow:'hidden',backgroundColor:colors.surface}}>
