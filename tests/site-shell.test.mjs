@@ -4,8 +4,8 @@ import vm from 'node:vm';
 import {initialState} from '../src/domain.ts';
 import {loadRecoverable,readSaved,emptyDraft} from '../src/persistence.ts';
 const oldState=JSON.stringify({storageVersion:2,state:initialState,draft:emptyDraft});
-import {isSiteUrl,externalLink,readShellMessage,bootstrapScript} from '../src/site-shell-policy.ts';
-import {loadSiteState,nativeAction,siteMigrationPending} from '../src/site-bridge.web.ts';
+import {isSiteUrl,externalLink,readShellMessage,bootstrapScript,locationScript} from '../src/site-shell-policy.ts';
+import {loadSiteState,nativeAction,nativeCurrentPosition,siteMigrationPending} from '../src/site-bridge.web.ts';
 test('only the exact HTTPS site origin and project path stay inside the app',()=>{
  assert.equal(isSiteUrl('https://abdallrahimbirekdar-rgb.github.io/yalla-nrouh/?app=android'),true);
  assert.equal(isSiteUrl('https://abdallrahimbirekdar-rgb.github.io/yalla-nrouh/driver'),true);
@@ -16,6 +16,19 @@ test('only the exact HTTPS site origin and project path stay inside the app',()=
 test('native bridge accepts only bounded typed messages, not arbitrary commands',()=>{
  for(const value of ['null','{}','bad','{"type":"eval","code":"doSomething()"}','{"type":"status","safeToReload":"yes","canGoBack":true}',JSON.stringify({type:'notify',id:'ok',title:'x',body:'x'.repeat(1001)})])assert.equal(readShellMessage(value),null);
  assert.deepEqual(readShellMessage('{"type":"status","safeToReload":false,"canGoBack":true}'),{type:'status',safeToReload:false,canGoBack:true});
+});
+test('GPS bridge accepts only typed permission requests with bounded IDs',()=>{
+ assert.deepEqual(readShellMessage('{"type":"location","id":"gps-1","askPermission":false}'),{type:'location',id:'gps-1',askPermission:false});
+ assert.equal(readShellMessage('{"type":"location","id":"gps-1","askPermission":"yes"}'),null);
+ assert.equal(readShellMessage('{"type":"location","id":"<script>","askPermission":true}'),null);
+});
+test('GPS response is serialized safely and invalid coordinates are removed',()=>{
+ let payload;
+ const context={window:{dispatchEvent:event=>{payload=event.detail}},CustomEvent:class{constructor(_name,options){this.detail=options.detail}}};
+ vm.runInNewContext(locationScript('gps-1',{latitude:51.48,longitude:7.21}),context);
+ assert.equal(payload.id,'gps-1');assert.equal(payload.point.latitude,51.48);assert.equal(payload.point.longitude,7.21);
+ vm.runInNewContext(locationScript('gps-2',{latitude:120,longitude:200}),context);
+ assert.equal(payload.point,null);
 });
 test('saved data is injected as data and cannot execute JavaScript',()=>{
  const text='</script>"});globalThis.pwned=true;//';let detail;
@@ -43,6 +56,28 @@ test('the website keeps its own data and never imports an old APK state',()=>wit
  assert.equal(await loadSiteState(storage,'state'),'newer-web-state');
  assert.equal(storage.getItem('state'),'newer-web-state');
  assert.equal(requests[1].needsSavedState,false);
+}));
+test('native foreground location answers a website request without writing to storage',()=>withBrowser(async(host,storage)=>{
+ host.ReactNativeWebView={postMessage:raw=>{
+  const request=JSON.parse(raw);
+  assert.equal(request.type,'location');assert.equal(request.askPermission,false);
+  queueMicrotask(()=>host.dispatchEvent(new CustomEvent('yalla:native-position',{
+   detail:{id:request.id,point:{latitude:51.48,longitude:7.21},error:null}
+  })));
+ }};
+ const response=await nativeCurrentPosition(false);
+ assert.deepEqual(response,{point:{latitude:51.48,longitude:7.21},error:null});
+ assert.equal(storage.getItem('state'),null);
+}));
+test('native location permission rejection is explicit',()=>withBrowser(async(host)=>{
+ host.ReactNativeWebView={postMessage:raw=>{
+  const request=JSON.parse(raw);
+  assert.equal(request.askPermission,true);
+  queueMicrotask(()=>host.dispatchEvent(new CustomEvent('yalla:native-position',{
+   detail:{id:request.id,point:null,error:'permission'}
+  })));
+ }};
+ assert.deepEqual(await nativeCurrentPosition(true),{point:null,error:'permission'});
 }));
 test('notification actions wait for their matching response',()=>withBrowser(async(host)=>{
  host.ReactNativeWebView={postMessage:raw=>{const message=JSON.parse(raw);queueMicrotask(()=>{host.dispatchEvent(new CustomEvent('yalla:native-result',{detail:{id:'wrong-id',ok:true}}));host.dispatchEvent(new CustomEvent('yalla:native-result',{detail:{id:message.id,ok:false}}))})}};
