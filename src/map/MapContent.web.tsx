@@ -32,7 +32,7 @@ export default function MapContent({point,onChange,compact=false,route,readOnly=
    const select=(event:{latLng?:{lat:()=>number;lng:()=>number}|null})=>{if(!event.latLng||readOnly)return;const next={latitude:event.latLng.lat(),longitude:event.latLng.lng()};if(isCoordinate(next))choose.current(next)};
    if(!readOnly){instance.addListener('click',select);pin.addListener('dragend',select)}
    line.current=new maps.Polyline({map:instance,strokeColor:'#2688e8',strokeWeight:5,clickable:false});
-   clearTimeout(pending);setReady(true);
+   clearTimeout(pending);failed.current=false;setError(false);setReady(true);
   }).catch(()=>{if(!disposed){clearTimeout(pending);failed.current=true;setError(true)}});
   return()=>{disposed=true;clearTimeout(pending);removeAuthListener();window.removeEventListener('online',online);if(marker.current){api.current?.event.clearInstanceListeners(marker.current);marker.current.map=null}if(userMarker.current)userMarker.current.map=null;userMarker.current=null;line.current?.setMap(null);if(map.current)api.current?.event.clearInstanceListeners(map.current);map.current=null;marker.current=null;line.current=null;container.replaceChildren()};
  },[key,state.language,readOnly,attempt,loadTimeoutMs]);
