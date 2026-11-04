@@ -8,6 +8,10 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: yalla-nrouh-android-build
+  cancel-in-progress: true
+
 jobs:
   android-apk:
     runs-on: ubuntu-latest
