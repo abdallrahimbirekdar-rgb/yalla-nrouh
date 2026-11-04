@@ -52,7 +52,7 @@ jobs:
           test -n "$APK"
           mkdir -p release-apk
           cp "$APK" release-apk/yalla-nrouh-test.apk
-          if ! gh release view android-test-latest >/dev/null 2>&1; then
-            gh release create android-test-latest --title "Yalla Nrouh Android test (latest)" --notes "Test build only; not a live taxi booking service." --prerelease
+          if ! gh release view android-test-unified >/dev/null 2>&1; then
+            gh release create android-test-unified --title "Yalla Nrouh Android test (latest)" --notes "Test build only; not a live taxi booking service." --prerelease
           fi
-          gh release upload android-test-latest release-apk/yalla-nrouh-test.apk --clobber
+          gh release upload android-test-unified release-apk/yalla-nrouh-test.apk --clobber
