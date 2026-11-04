@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {getWebPosition,webLocationGranted} from '../src/web-position.ts';
+import {getWebPosition,recentWebPosition,webLocationGranted} from '../src/web-position.ts';
 async function withBrowser(browser,work,host={}){
  const descriptor=Object.getOwnPropertyDescriptor(globalThis,'navigator');
  const oldWindow=globalThis.window;
@@ -37,4 +37,12 @@ test('browser location returns valid coordinates and maps denied and timed-out e
  await assert.rejects(getWebPosition(),e=>e.code==='timeout');
  geo.getCurrentPosition=(success)=>success({coords:{latitude:111,longitude:36.27}});
  await assert.rejects(getWebPosition(),e=>e.code==='position');
+}));
+
+test('first approved location is ready while the home map mounts',()=>withBrowser({
+ geolocation:{getCurrentPosition:(success)=>success({coords:{latitude:33.512,longitude:36.276}})},
+},async()=>{
+ const point=await getWebPosition();
+ assert.deepEqual(recentWebPosition(12000),point);
+ assert.equal(recentWebPosition(-1),null);
 }));
