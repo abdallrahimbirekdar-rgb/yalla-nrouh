@@ -1,5 +1,5 @@
 import React,{createContext,useContext,useEffect,useReducer,useRef,useState} from 'react';
-import {AppState as DeviceState} from 'react-native';
+import {AppState as DeviceState,Platform} from 'react-native';
 import * as Location from 'expo-location';
 import {type Action,type AppState,initialState,reduce,type TripDraft} from './domain';
 import {load,save} from './storage';
@@ -23,6 +23,11 @@ export function AppProvider({children}:{children:React.ReactNode}){
  useEffect(()=>{let alive=true;setLoadError(false);load().then(raw=>{if(!alive)return;const saved=readSaved(raw);dispatch({type:'hydrate',state:saved.state});setDraft(saved.draft);setReady(true);}).catch(()=>{if(alive)setLoadError(true)});return()=>{alive=false}},[attempt]);
  useEffect(()=>{if(ready)void writer.current?.enqueue(JSON.stringify({storageVersion:2,state,draft}));},[state,draft,ready]);
  useEffect(()=>{const listener=DeviceState.addEventListener('change',value=>{setForeground(value==='active');if(value!=='active'&&ready){void writer.current?.enqueue(JSON.stringify({storageVersion:2,...latest.current}));}});return()=>listener.remove();},[ready]);
+ useEffect(()=>{
+  if(Platform.OS!=='web')return;
+  const visibility=(event:Event)=>{const active=(event as CustomEvent).detail?.active;if(typeof active!=='boolean')return;setForeground(active);if(!active&&ready)void writer.current?.enqueue(JSON.stringify({storageVersion:2,...latest.current}))};
+  window.addEventListener('yalla:native-visibility',visibility);return()=>window.removeEventListener('yalla:native-visibility',visibility);
+ },[ready]);
  const ride=state.trips.find(t=>t.id===trackingId);const trackingAllowed=ride?.status==='riding'&&state.driver.approved;
  useEffect(()=>{
   if(!trackingId||!trackingAllowed)return;

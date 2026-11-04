@@ -60,3 +60,12 @@ The owner chose Google Maps when its initial use can be free. Use official Maps 
 
 ## Google Maps parity (0.6.3)
 The owner requires the same Google Maps provider and shared booking interface on web and Android. Do not switch to OpenStreetMap on slow connections or missing keys. Web uses Maps JavaScript API with a separate website-restricted public key from GOOGLE_MAPS_WEB_API_KEY in Actions (EXPO_PUBLIC_GOOGLE_MAPS_WEB_API_KEY in the web bundle). Android retains its package/SHA-1 restricted SDK key. If Google is unavailable keep manual entry and an honest error. Google controls its own tile delivery; passive connectivity hints reduce optional details without claiming a measured download speed.
+
+## Website-backed Android (0.8.0)
+The owner explicitly chose the Sooq Daraya model: the Android home screen must load the live HTTPS website in a WebView. Do not add Expo Update, EXPO_TOKEN, an Expo account dependency or a separate OTA publishing system. The existing Expo toolchain remains only the build framework; it is not a user account/service requirement.
+
+Edit `src/app/index.web.tsx` and `_layout.web.tsx` for website UI. `index.tsx` is the installed wrapper entry and `_layout.tsx` is the native host. Ordinary website changes are deployed by the web workflow and appear at a fresh app open or safe Refresh page; do not bump APK version/versionCode for those changes. Build a new APK only for wrapper/native inputs, permissions, dependencies, icons or app config.
+
+Keep the top-level WebView restricted to the exact site origin/project path. Preserve HTTPS, foreground geolocation, local notifications, external navigation and hardware back. Use the narrow typed bridge only; never execute arbitrary messages. Bootstrap migration must not overwrite existing website storage. Never force a page refresh during a ride, unfinished draft, failed save or non-home edit screen. Pass native app visibility to the website so foreground GPS pauses in the background. Native JS can still require a new APK because the installed wrapper is bundled.
+
+Read docs/WEBSITE_APP.md for delivery and physical-device acceptance. Do not promise full offline page loading; cache reuse and locally saved data are retained, but a fresh website document needs a connection.

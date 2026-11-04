@@ -3,6 +3,27 @@ name: Build Android test APK
 on:
   push:
     branches: [main]
+    paths:
+      - 'app.json'
+      - 'app.config.ts'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'eas.json'
+      - 'plugins/**'
+      - 'assets/app-icon-approved.png'
+      - 'assets/adaptive-approved.png'
+      - 'assets/monochrome-approved.png'
+      - 'assets/logo-approved.png'
+      - 'src/site-shell.tsx'
+      - 'src/site-shell-policy.ts'
+      - 'src/permissions-intro.tsx'
+      - 'src/alerts.ts'
+      - 'src/storage.ts'
+      - 'src/app/index.tsx'
+      - 'src/app/_layout.tsx'
+      - 'scripts/patch-gradle-resolver.cjs'
+      - 'scripts/trim-symbol-font-loader.cjs'
+      - '.github/workflows/android-apk.yml'
   workflow_dispatch:
     inputs:
       require_google_maps:
@@ -106,11 +127,7 @@ jobs:
           (cd release-apk && sha256sum yalla-nrouh-test.apk > yalla-nrouh-test.apk.sha256)
           APP_VERSION=$(node -p "require('./app.json').expo.version")
           APP_CODE=$(node -p "require('./app.json').expo.android.versionCode")
-          if [[ -n "${GOOGLE_MAPS_ANDROID_API_KEY:-}" ]]; then
-            MAPS_STATUS="Android Google Maps SDK key configured; check Google Cloud restrictions and Android rendering."
-          else
-            MAPS_STATUS="Google Maps Android SDK key not configured; Google Maps is unavailable."
-          fi
+          MAPS_STATUS="Website-backed Android app: live Google Maps website, foreground location, and website UI updates without another APK."
           if ! gh release view android-test-unified >/dev/null 2>&1; then
             gh release create android-test-unified --title "Yalla Nrouh Android $APP_VERSION (test)" --notes "Test build only; not a live taxi booking service." --prerelease
           fi

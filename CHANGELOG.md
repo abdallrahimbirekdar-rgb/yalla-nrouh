@@ -1,3 +1,11 @@
+## 0.8.0 — Android opens the live website
+- Switch Android's home screen to the published website in a WebView, matching the Sooq Daraya update model. Install this transition APK once; ordinary website changes then appear on a fresh app open or safe Refresh page action.
+- Keep the closer current-location zoom, native foreground location permission, local notifications, Android back navigation and external map/phone links.
+- Import the old native saved state only when website storage is empty. Preserve newer website data.
+- Check the published site version on resume and offer refresh without interrupting a ride or unfinished data.
+- Keep website HTML fresh and reuse cached hashed assets. Initial website loading needs connectivity.
+- No Expo Update account, publishing token or OTA service is required. Automatic APK builds are limited to wrapper/native inputs.
+
 ## 0.6.5 — Closer current-location view
 - Zoom the home current-location camera to street/building level (19) on Android and web, including the My current location button.
 

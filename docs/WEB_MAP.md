@@ -1,3 +1,5 @@
+> Current Android behavior from 0.8.0: the installed app opens the live Google Maps website in a WebView. See WEBSITE_APP.md. Native-screen details below describe the earlier 0.6.x builds. No Expo Update service is used.
+
 # Google Maps on web and Android (0.6.3)
 
 Both platforms share the same booking screen, compact centred approved logo, automatic map mounting, manual addresses, map selection and driver/passenger menu. Web uses the official Maps JavaScript API. Android uses Maps SDK for Android. Connection changes never switch to OpenStreetMap. Google controls actual tile quality/downloads; the app uses passive network hints and reduces optional details, without speed-test downloads.

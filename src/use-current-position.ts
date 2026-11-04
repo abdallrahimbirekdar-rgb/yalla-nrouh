@@ -3,7 +3,7 @@ import {AppState,Platform} from 'react-native';
 import * as Location from 'expo-location';
 import {currentPosition,PositionError,type PositionFailure} from './current-position';
 import type {Coordinate} from './geo';
-const adapter={permission:Location.getForegroundPermissionsAsync,requestPermission:Location.requestForegroundPermissionsAsync,services:Location.hasServicesEnabledAsync,position:()=>Location.getCurrentPositionAsync({accuracy:Location.Accuracy.Balanced,...(Platform.OS==='web'?{maximumAge:0,timeout:15000}:{})})};
+const adapter={permission:()=>Platform.OS==='web'&&typeof window!=='undefined'&&(window as Window&{__YALLA_NATIVE_LOCATION_GRANTED__?:boolean}).__YALLA_NATIVE_LOCATION_GRANTED__===true?Promise.resolve({granted:true}):Location.getForegroundPermissionsAsync(),requestPermission:Location.requestForegroundPermissionsAsync,services:Location.hasServicesEnabledAsync,position:()=>Location.getCurrentPositionAsync({accuracy:Location.Accuracy.Balanced,...(Platform.OS==='web'?{maximumAge:0,timeout:15000}:{})})};
 export type CameraTarget={point:Coordinate;revision:number};
 export function useCurrentPosition(enabled:boolean){
  const [camera,setCamera]=useState<CameraTarget>();const [busy,setBusy]=useState(false),[failure,setFailure]=useState<PositionFailure|null>(null);
