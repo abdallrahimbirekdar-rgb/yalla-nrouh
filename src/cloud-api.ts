@@ -1,4 +1,4 @@
-import {type TripDraft} from './domain';
+import type {TripDraft} from './domain.ts';
 import {isCoordinate} from './geo.ts';
 
 const API_ROOT='https://gokosprcqpdvqgahvquk.supabase.co';
