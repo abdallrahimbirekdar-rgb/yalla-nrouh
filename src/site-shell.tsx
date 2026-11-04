@@ -32,7 +32,7 @@ export default function SiteShell(){
   {(available||notice!=='')&&<View style={{padding:10,gap:8}}><Label muted>{notice||t('تتوفر نسخة جديدة من الموقع.','A new website version is ready.')}</Label>{available&&<Button secondary title={t('تحديث العرض','Refresh page')} onPress={refresh}/>}</View>}
   <WebView ref={web} source={{uri:url}} style={{flex:1,backgroundColor:colors.background}}
    originWhitelist={['https://abdallrahimbirekdar-rgb.github.io']}
-   javaScriptEnabled domStorageEnabled geolocationEnabled cacheEnabled cacheMode="LOAD_DEFAULT" mixedContentMode="never" allowFileAccess={false} allowFileAccessFromFileURLs={false} allowUniversalAccessFromFileURLs={false}
+   javaScriptEnabled domStorageEnabled geolocationEnabled={false} cacheEnabled cacheMode="LOAD_DEFAULT" mixedContentMode="never" allowFileAccess={false} allowFileAccessFromFileURLs={false} allowUniversalAccessFromFileURLs={false}
    setSupportMultipleWindows={false} javaScriptCanOpenWindowsAutomatically={false}
    onShouldStartLoadWithRequest={request=>{if(request.isTopFrame===false)return true;if(isSiteUrl(request.url))return true;if(externalLink(request.url))void Linking.openURL(request.url).catch(()=>setNotice(t('تعذر فتح الرابط الخارجي.','Could not open the link.')));return false}}
    onOpenWindow={event=>{const target=event.nativeEvent.targetUrl;if(externalLink(target))void Linking.openURL(target).catch(()=>setNotice(t('تعذر فتح الرابط.','Could not open the link.')))}}
@@ -48,9 +48,9 @@ export default function SiteShell(){
      // Only requests from our approved HTTPS site can reach this native foreground GPS bridge.
      void (async()=>{
       let delivered=false;
-      const send=(point:{latitude:number;longitude:number}|null,error?:string)=>{
+      const send=(point:{latitude:number;longitude:number}|null,error?:string,fix?:{accuracy:number|null;time:number})=>{
        if(!alive.current||!web.current||AppState.currentState==='background'||AppState.currentState==='inactive')return;
-       web.current.injectJavaScript(locationScript(message.id,point,error));
+       web.current.injectJavaScript(locationScript(message.id,point,error,fix));
        if(point)delivered=true;
       };
       try{
@@ -59,24 +59,40 @@ export default function SiteShell(){
        if(!permission.granted&&message.askPermission)permission=await Location.requestForegroundPermissionsAsync();
        if(!permission.granted){send(null,'permission');return}
        if(!await Location.hasServicesEnabledAsync()){send(null,'services');return}
-       // Show a recent reasonably accurate fix immediately. High-accuracy
-       // satellite locks can take a long time indoors, so never block the map
-       // on one. Follow up with a bounded balanced fix, then improve accuracy.
-       const cached=await Location.getLastKnownPositionAsync({maxAge:60000,requiredAccuracy:250}).catch(()=>null);
-       if(cached)send({latitude:cached.coords.latitude,longitude:cached.coords.longitude});
+       // Bounded last-known lookup: even a stalled cache read must not hold
+       // the first GPS fix. Ride tracking only accepts measured accuracy.
+       const track=message.track===true;
+       const allowed=(position:Location.LocationObject)=>!track||(typeof position.coords.accuracy==='number'&&position.coords.accuracy<=50);
+       const transmit=(position:Location.LocationObject)=>send(
+        {latitude:position.coords.latitude,longitude:position.coords.longitude},
+        undefined,{accuracy:position.coords.accuracy,time:position.timestamp}
+       );
+       let cacheTimer:ReturnType<typeof setTimeout>|undefined;
+       let cached:Location.LocationObject|null=null;
+       try{
+        cached=await Promise.race([
+         Location.getLastKnownPositionAsync({maxAge:track?30000:60000,requiredAccuracy:track?50:250}).catch(()=>null),
+         new Promise<null>(resolve=>{cacheTimer=setTimeout(()=>resolve(null),1200)}),
+        ]);
+       }finally{if(cacheTimer)clearTimeout(cacheTimer)}
+       if(cached&&allowed(cached))transmit(cached);
        let timeout:ReturnType<typeof setTimeout>|undefined;
        let fresh:Location.LocationObject|null=null;
        try{
         fresh=await Promise.race([
-         Location.getCurrentPositionAsync({accuracy:Location.Accuracy.Balanced,mayShowUserSettingsDialog:false}),
-         new Promise<never>((_,reject)=>{timeout=setTimeout(()=>reject(Error('timeout')),7500)}),
+         Location.getCurrentPositionAsync({
+          accuracy:track?Location.Accuracy.High:Location.Accuracy.Balanced,
+          mayShowUserSettingsDialog:false,
+         }),
+         new Promise<never>((_,reject)=>{timeout=setTimeout(()=>reject(Error('timeout')),track?9500:7500)}),
         ]);
-        send({latitude:fresh.coords.latitude,longitude:fresh.coords.longitude});
+        if(allowed(fresh))transmit(fresh);
+        else if(!delivered)send(null,'position');
        }catch{if(!delivered)send(null,'timeout')}
        finally{if(timeout)clearTimeout(timeout)}
-       // Only refine an already displayed position, never make the passenger
-       // wait for a high-accuracy fix before first map display.
-       if(delivered&&(fresh?.coords.accuracy??cached?.coords.accuracy??Infinity)>65){
+       // Passenger map: do not wait for a satellite lock before centring.
+       // Driver fixes already use high accuracy for safe metering.
+       if(!track&&delivered&&(fresh?.coords.accuracy??cached?.coords.accuracy??Infinity)>65){
         let refineTimeout:ReturnType<typeof setTimeout>|undefined;
         try{
          const precise=await Promise.race([
@@ -84,8 +100,8 @@ export default function SiteShell(){
           new Promise<never>((_,reject)=>{refineTimeout=setTimeout(()=>reject(Error('timeout')),9500)}),
          ]);
          if(precise.coords.accuracy===null||fresh?.coords.accuracy===null||!fresh||precise.coords.accuracy<=fresh.coords.accuracy)
-          send({latitude:precise.coords.latitude,longitude:precise.coords.longitude});
-        }catch{/* Keep the first valid position available. */}
+          transmit(precise);
+        }catch{/* Keep the first valid location. */}
         finally{if(refineTimeout)clearTimeout(refineTimeout)}
        }
       }catch{if(!delivered)send(null,'position')}
