@@ -72,3 +72,11 @@ Map startup now starts high-accuracy foreground GPS immediately (20-second bound
 Approved driver status is loaded from the existing RLS-protected driver_accounts record with the signed-in session. Approved drivers open the driver dashboard, with a current-location map, availability and assigned trips. Booking, passenger tabs and saved destination controls are hidden for drivers; sign-out, settings and server-verified admin access remain available. Account role loading blocks the booking UI until verification succeeds.
 
 Regression coverage adds concurrent GPS consumer cancellation and clean retry. Physical-device acceptance remains outstanding: upgrade in place, first launch, indoor/outdoor GPS, permission/provider settings, background/resume, approved-driver login and a two-account test trip.
+
+
+## Navigation startup and request latency
+The website displays a recent measured device position immediately (<=10 seconds / <=250 m), without reacquiring native GPS. Map display and road preview are separated from turn guidance: only a <=50 m fix no older than 15 seconds enables current turn instructions. Driver metering keeps its original stricter native fix path. A GPS failure stops the failed attempt instead of starting another spinner every ten seconds. Location and road calculation now have separate elapsed-time labels and specific errors with a location-settings action.
+
+When the driver position is available, request summaries use one Google computeRoutes call with pickup as an intermediate stop. The two returned legs preserve driver-to-pickup road distance/ETA and passenger-trip distance/duration/fare separately. The existing two-point API remains backward compatible. Initial pending cards use the latest measured position when queued work actually starts, and route plans pass to accepted-ride navigation in component memory. Existing daily quotas are preserved.
+
+Tests assert zero bridge/provider calls for a valid measured startup position, map-only handling of approximate fixes, exclusion of stale fixes from turn guidance, one Google request for both legs, and fare exclusion of the driver's pickup journey. These checks do not measure GPS reception, Google latency, or mobile throughput on a physical device. Field validation in Germany and Syria remains outstanding.

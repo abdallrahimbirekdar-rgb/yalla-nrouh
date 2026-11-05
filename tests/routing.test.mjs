@@ -13,3 +13,13 @@ test('invalid Google route responses cannot become a road or fare estimate',()=>
 test('no paid route request is sent until an explicit proxy is configured',async()=>{let count=0;const client=createRoutingClient(undefined,async()=>{count++;throw Error();});await assert.rejects(client.route(from,to),{code:'not_configured'});assert.equal(count,0);});
 test('configured route proxy gets a POST with no server API key in the app',async()=>{const realNow=Date.now;let seen;Date.now=()=>100000;try{const client=createRoutingClient('https://example.com',async(url,options)=>{seen={url,options};return new Response(JSON.stringify(response),{status:200});});await client.route(from,to);assert.equal(seen.url,'https://example.com/v1/google/routes');assert.equal(seen.options.method,'POST');assert.equal(seen.options.credentials,'omit');assert.deepEqual(JSON.parse(seen.options.body),{origin:from,destination:to,languageCode:'ar'});assert.equal(seen.options.headers['X-Goog-Api-Key'],undefined);await assert.rejects(client.route(from,to),{code:'busy'});}finally{Date.now=realNow;}});
 test('price preview shares the configured minimum/base/km/minute formula with the meter',()=>{const t={base:1000,perKm:2000,perMinute:100,minimum:1500,updatedAt:new Date().toISOString()};assert.equal(priceForRoute(8000,20,t),19000);assert.equal(priceForRoute(0,0,t),1500);assert.equal(priceForRoute(8000,20,null),null);});
+
+test('one driver summary response keeps pickup and passenger road distances separate',async()=>{
+ const {parseDriverOffer}=await import('../src/routing.ts');
+ const driver={latitude:33.49,longitude:36.24};
+ const leg=(meters,duration,first,last)=>({distanceMeters:meters,duration,polyline:{geoJsonLinestring:{type:'LineString',coordinates:[[first.longitude,first.latitude],[last.longitude,last.latitude]]}},steps:[{distanceMeters:meters,navigationInstruction:{instructions:'Continue'}}]});
+ const data={routes:[{legs:[leg(2000,'300s',driver,from),leg(8000,'1200s',from,to)]}],tariff:{base:50,perKm:60,perMinute:10,peakMultiplier:1,updatedAt:'2026-11-05T00:00:00Z'}};
+ const parsed=parseDriverOffer(data,driver,from,to);assert.equal(parsed.pickup.meters,2000);assert.equal(parsed.trip.meters,8000);assert.equal(priceForRoute(parsed.trip.meters,parsed.trip.seconds/60,parsed.trip.tariff),730);
+ let calls=0;const client=createRoutingClient('https://example.com',async(_url,options)=>{calls++;assert.deepEqual(JSON.parse(options.body).pickup,from);return Response.json(data)});
+ const result=await client.driverOffer(driver,from,to);assert.equal(calls,1);assert.equal(result.pickup.seconds,300);assert.equal(result.trip.seconds,1200);
+});

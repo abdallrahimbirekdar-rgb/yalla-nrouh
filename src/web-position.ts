@@ -27,9 +27,12 @@ export function recentWebPosition(maxAgeMs=12000):Coordinate|null{
 
 // Pickup validation uses the provider timestamp and measured accuracy, not
 // the time a selected map pin or a cached document was displayed.
-export function recentVerifiedWebPosition(maxAgeMs=15000,maxAccuracy=250):Coordinate|null{
+export function recentMeasuredWebPosition(maxAgeMs=15000,maxAccuracy=250):(Coordinate&{accuracy:number;time:number})|null{
  const fix=recentFix;
- return fix&&typeof fix.time==='number'&&Number.isFinite(fix.time)&&Date.now()-fix.time>=-3000&&Date.now()-fix.time<=maxAgeMs&&typeof fix.accuracy==='number'&&Number.isFinite(fix.accuracy)&&fix.accuracy>=0&&fix.accuracy<=maxAccuracy?fix.point:null;
+ return fix&&typeof fix.time==='number'&&Number.isFinite(fix.time)&&Date.now()-fix.time>=-3000&&Date.now()-fix.time<=maxAgeMs&&typeof fix.accuracy==='number'&&Number.isFinite(fix.accuracy)&&fix.accuracy>=0&&fix.accuracy<=maxAccuracy?{...fix.point,accuracy:fix.accuracy,time:fix.time}:null;
+}
+export function recentVerifiedWebPosition(maxAgeMs=15000,maxAccuracy=250):Coordinate|null{
+ const fix=recentMeasuredWebPosition(maxAgeMs,maxAccuracy);return fix?{latitude:fix.latitude,longitude:fix.longitude}:null;
 }
 
 // First paint uses a recent, reasonably fast network/GPS fix rather than

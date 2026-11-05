@@ -16,8 +16,20 @@ export function parseRoute(value:unknown,from:Coordinate,to:Coordinate):RoutePla
 }
 let lastRequest=0;
 // A protected server proxy is required. Never put a Routes server key in the app.
-export function createRoutingClient(proxyUrl:string|undefined,fetcher:typeof fetch=fetch,timeout=15000){return {async route(from:Coordinate,to:Coordinate,signal?:AbortSignal,language='ar',token?:string):Promise<RoutePlan>{
- const base=normalizeServiceUrl(proxyUrl);if(!base)throw new ServiceError('not_configured');if(!isCoordinate(from)||!isCoordinate(to))throw new ServiceError('response');if(Date.now()-lastRequest<1500)throw new ServiceError('busy');lastRequest=Date.now();
+export function parseDriverOffer(value:unknown,driver:Coordinate,pickup:Coordinate,destination:Coordinate):{pickup:RoutePlan;trip:RoutePlan}{
+ const data=value as {routes?:{legs?:unknown[]}[];tariff?:unknown};const legs=data?.routes?.[0]?.legs;
+ if(!Array.isArray(legs)||legs.length!==2)throw new ServiceError('response');
+ const leg=(index:number,from:Coordinate,to:Coordinate)=>{const part=legs[index] as Record<string,unknown>;return parseRoute({routes:[{...part,legs:[part]}],...(data.tariff?{tariff:data.tariff}:{})},from,to)};
+ return {pickup:leg(0,driver,pickup),trip:leg(1,pickup,destination)};
+}
+export function createRoutingClient(proxyUrl:string|undefined,fetcher:typeof fetch=fetch,timeout=15000){
+ async function request(from:Coordinate,to:Coordinate,signal?:AbortSignal,language='ar',token?:string,pickup?:Coordinate):Promise<unknown>{
+ const base=normalizeServiceUrl(proxyUrl);if(!base)throw new ServiceError('not_configured');if(!isCoordinate(from)||!isCoordinate(to)||pickup!==undefined&&!isCoordinate(pickup))throw new ServiceError('response');if(Date.now()-lastRequest<1500)throw new ServiceError('busy');lastRequest=Date.now();
  const controller=new AbortController();const cancel=()=>controller.abort();signal?.addEventListener('abort',cancel,{once:true});if(signal?.aborted)cancel();const timer=setTimeout(cancel,timeout);
- try{const response=await fetcher(base+'/v1/google/routes',{method:'POST',headers:{'Content-Type':'application/json',Accept:'application/json',...(token?{Authorization:'Bearer '+token}:{})},body:JSON.stringify({origin:from,destination:to,languageCode:language}),credentials:'omit',redirect:'error',signal:controller.signal});if(!response.ok){if(response.status===401)throw new ServiceError('unauthorized');if(response.status===429)throw new ServiceError('busy');if(response.status===503)throw new ServiceError('not_configured');if(response.status===502)throw new ServiceError('not_enabled');if(response.status===422)throw new ServiceError('no_route');throw new ServiceError('network');}return parseRoute(await response.json(),from,to);}catch(error){if(error instanceof ServiceError)throw error;throw new ServiceError('network');}finally{clearTimeout(timer);signal?.removeEventListener('abort',cancel);}
- }};}
+ try{const response=await fetcher(base+'/v1/google/routes',{method:'POST',headers:{'Content-Type':'application/json',Accept:'application/json',...(token?{Authorization:'Bearer '+token}:{})},body:JSON.stringify({origin:from,destination:to,languageCode:language,...(pickup?{pickup}:{})}),credentials:'omit',redirect:'error',signal:controller.signal});if(!response.ok){if(response.status===401)throw new ServiceError('unauthorized');if(response.status===429)throw new ServiceError('busy');if(response.status===503)throw new ServiceError('not_configured');if(response.status===502)throw new ServiceError('not_enabled');if(response.status===422)throw new ServiceError('no_route');throw new ServiceError('network');}return response.json();}catch(error){if(error instanceof ServiceError)throw error;throw new ServiceError('network');}finally{clearTimeout(timer);signal?.removeEventListener('abort',cancel);}
+ }
+ return {
+  async route(from:Coordinate,to:Coordinate,signal?:AbortSignal,language='ar',token?:string):Promise<RoutePlan>{return parseRoute(await request(from,to,signal,language,token),from,to)},
+  async driverOffer(driver:Coordinate,pickup:Coordinate,destination:Coordinate,signal?:AbortSignal,language='ar',token?:string){return parseDriverOffer(await request(driver,destination,signal,language,token,pickup),driver,pickup,destination)},
+ };
+}

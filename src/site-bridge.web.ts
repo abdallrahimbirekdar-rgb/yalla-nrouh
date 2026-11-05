@@ -1,5 +1,5 @@
 import {isCoordinate,type Coordinate} from './geo.ts';
-import {announceWebPosition,getWebPosition,refineWebPosition,webLocationGranted} from './web-position.ts';
+import {announceWebPosition,getWebPosition,recentMeasuredWebPosition,refineWebPosition,webLocationGranted} from './web-position.ts';
 import {PositionError} from './current-position.ts';
 import type {Fix} from './meter.ts';
 export type SiteWindow=Window&{ReactNativeWebView?:{postMessage:(message:string)=>void};__YALLA_NATIVE_LOCATION_GRANTED__?:boolean;__YALLA_NATIVE_AUTOFIX__?:{point:Coordinate;time:number}};
@@ -101,7 +101,9 @@ export async function siteCurrentPosition(askPermission:boolean,signal?:AbortSig
     ]);
     if(signal?.aborted)throw new PositionError('position');
     controller.abort();
-    announceWebPosition(point);
+    const measured=recentMeasuredWebPosition(20000,250);
+    const same=measured&&Math.abs(measured.latitude-point.latitude)<0.000001&&Math.abs(measured.longitude-point.longitude)<0.000001;
+    announceWebPosition(point,same?{accuracy:measured.accuracy,time:measured.time}:undefined);
     return point;
    }catch{/* Preserve the native error if both paths fail. */}
   }

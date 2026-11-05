@@ -48,3 +48,11 @@ test('fare proxy returns road data and central rates without exposing secrets',a
 test('Google authorization errors remain errors instead of fake fares',async()=>{
  const app=host({googleStatus:403});const result=await app.run();assert.equal(result.status,502);assert.equal((await result.json()).error,'google_not_enabled');
 });
+
+test('driver summary sends one Google request with a stop at pickup and two road legs',async()=>{
+ const app=host();const pickup={latitude:33.52,longitude:36.28};assert.equal((await app.run({...input,pickup})).status,200);
+ const outgoing=app.requests.filter(r=>r.url.includes('routes.googleapis.com'));assert.equal(outgoing.length,1);
+ const body=JSON.parse(outgoing[0].options.body);assert.deepEqual(body.intermediates,[{location:{latLng:pickup}}]);
+ assert.match(outgoing[0].options.headers['X-Goog-FieldMask'],/routes.legs.duration/);
+ assert.equal((await app.run({...input,pickup:{latitude:999,longitude:0}})).status,400);
+});
