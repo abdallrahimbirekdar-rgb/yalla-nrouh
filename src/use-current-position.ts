@@ -67,7 +67,10 @@ export function useCurrentPosition(enabled:boolean){
   }else start(false);
   const subscription=AppState.addEventListener('change',value=>{if(value==='active')start(true)});
   if(Platform.OS!=='web')return()=>{active=false;subscription.remove()};
-  const onNativeGrant=(event:Event)=>{if((event as CustomEvent).detail?.granted===true)start(false)};
+  // Diagnostics repeat the current permission after every GPS attempt. Only
+  // a real permission transition may restart a failed automatic request.
+  let permissionGranted=(window as Window&{__YALLA_NATIVE_LOCATION_GRANTED__?:boolean}).__YALLA_NATIVE_LOCATION_GRANTED__===true;
+  const onNativeGrant=(event:Event)=>{const granted=(event as CustomEvent).detail?.granted===true;const newlyGranted=granted&&!permissionGranted;permissionGranted=granted;if(newlyGranted)start(false)};
   const onWebFix=(event:Event)=>{
    const point=(event as CustomEvent).detail;
    if(!isCoordinate(point)||manual.current)return;
