@@ -2,6 +2,7 @@ import React,{useEffect,useRef,useState} from 'react';
 import {ActivityIndicator,View} from 'react-native';
 import {cloudCurrentToken,cloudDriverRidePreview,type RidePreview} from './cloud-api';
 import {createRoutingClient,type RoutePlan} from './routing';
+import {ServiceError} from './api';
 import {routeScheduler} from './route-scheduler';
 import {offerRouteCache} from './offer-route-cache';
 import {distanceMeters,navigationProgress} from './navigation-progress';
@@ -25,7 +26,15 @@ export default function DriverOffer({offer,position,disabled,onAccept}:{offer:Ri
    const key=JSON.stringify([owner,id,state.language]);
    const cached=attempt===0?offerRouteCache.get(key,from,to):null;
    if(cached){setPlan(cached.trip);setPickupPlan(cached.pickup);return}
-   const next=await routeScheduler.run(async()=>{const client=createRoutingClient(process.env.EXPO_PUBLIC_GOOGLE_ROUTES_PROXY||'https://gokosprcqpdvqgahvquk.supabase.co/functions/v1/fare-route');const driver=currentPosition.current;return driver?client.driverOffer(driver,from,to,controller.signal,state.language,token):{trip:await client.route(from,to,controller.signal,state.language,token),pickup:null}},controller.signal);
+   const client=createRoutingClient(process.env.EXPO_PUBLIC_GOOGLE_ROUTES_PROXY||'https://gokosprcqpdvqgahvquk.supabase.co/functions/v1/fare-route');
+   const driver=currentPosition.current;
+   const tripOnly=async()=>({trip:await routeScheduler.run(()=>client.route(from,to,controller.signal,state.language,token),controller.signal),pickup:null});
+   const next=driver
+    ? await routeScheduler.run(()=>client.driverOffer(driver,from,to,controller.signal,state.language,token),controller.signal).catch(error=>{
+      if(!(error instanceof ServiceError)||!['response','no_route'].includes(error.code))throw error;
+      return tripOnly();
+     })
+    : await tripOnly();
    if(live){offerRouteCache.set(key,next);setPlan(next.trip);setPickupPlan(next.pickup)}
   })().catch(e=>{if(live)setError((e as {code?:string;kind?:string}).code??(e as {kind?:string}).kind??'network')}).finally(()=>{if(live)setBusy(false)});
   return()=>{live=false;controller.abort()};

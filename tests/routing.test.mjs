@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {parseRoute,createRoutingClient} from '../src/routing.ts';
+import {parseDriverOffer,parseRoute,createRoutingClient} from '../src/routing.ts';
 import {googleDirections} from '../src/google-links.ts';
 import {priceForRoute} from '../src/meter.ts';
 const from={latitude:33.46,longitude:36.23},to={latitude:33.51,longitude:36.29};
@@ -15,11 +15,25 @@ test('configured route proxy gets a POST with no server API key in the app',asyn
 test('price preview shares the configured minimum/base/km/minute formula with the meter',()=>{const t={base:1000,perKm:2000,perMinute:100,minimum:1500,updatedAt:new Date().toISOString()};assert.equal(priceForRoute(8000,20,t),19000);assert.equal(priceForRoute(0,0,t),1500);assert.equal(priceForRoute(8000,20,null),null);});
 
 test('one driver summary response keeps pickup and passenger road distances separate',async()=>{
- const {parseDriverOffer}=await import('../src/routing.ts');
  const driver={latitude:33.49,longitude:36.24};
  const leg=(meters,duration,first,last)=>({distanceMeters:meters,duration,polyline:{geoJsonLinestring:{type:'LineString',coordinates:[[first.longitude,first.latitude],[last.longitude,last.latitude]]}},steps:[{distanceMeters:meters,navigationInstruction:{instructions:'Continue'}}]});
  const data={routes:[{legs:[leg(2000,'300s',driver,from),leg(8000,'1200s',from,to)]}],tariff:{base:50,perKm:60,perMinute:10,peakMultiplier:1,updatedAt:'2026-11-05T00:00:00Z'}};
  const parsed=parseDriverOffer(data,driver,from,to);assert.equal(parsed.pickup.meters,2000);assert.equal(parsed.trip.meters,8000);assert.equal(priceForRoute(parsed.trip.meters,parsed.trip.seconds/60,parsed.trip.tariff),730);
  let calls=0;const client=createRoutingClient('https://example.com',async(_url,options)=>{calls++;assert.deepEqual(JSON.parse(options.body).pickup,from);return Response.json(data)});
  const result=await client.driverOffer(driver,from,to);assert.equal(calls,1);assert.equal(result.pickup.seconds,300);assert.equal(result.trip.seconds,1200);
+});
+
+test('a zero or incomplete driver approach preserves the passenger route',()=>{
+ const route=response.routes[0];
+ const trip={...route,steps:route.legs[0].steps};
+ const parse=approach=>parseDriverOffer({routes:[{legs:[approach,trip]}]},from,from,to);
+ const arrived=parse({duration:'0s'});
+ assert.equal(arrived.pickup.meters,0);
+ assert.equal(arrived.pickup.seconds,0);
+ assert.equal(arrived.trip.meters,8000);
+ for(const approach of [null,{}, {distanceMeters:900,duration:'200s'}]){
+  const partial=parse(approach);
+  assert.equal(partial.pickup,null);
+  assert.deepEqual(partial.trip,arrived.trip);
+ }
 });

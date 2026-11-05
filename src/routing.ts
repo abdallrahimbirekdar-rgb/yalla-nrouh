@@ -16,11 +16,26 @@ export function parseRoute(value:unknown,from:Coordinate,to:Coordinate):RoutePla
 }
 let lastRequest=0;
 // A protected server proxy is required. Never put a Routes server key in the app.
-export function parseDriverOffer(value:unknown,driver:Coordinate,pickup:Coordinate,destination:Coordinate):{pickup:RoutePlan;trip:RoutePlan}{
- const data=value as {routes?:{legs?:unknown[]}[];tariff?:unknown};const legs=data?.routes?.[0]?.legs;
+export function parseDriverOffer(value:unknown,driver:Coordinate,pickup:Coordinate,destination:Coordinate):{pickup:RoutePlan|null;trip:RoutePlan}{
+ const data=value as {routes?:{legs?:unknown[]}[];tariff?:unknown};
+ const legs=data?.routes?.[0]?.legs;
  if(!Array.isArray(legs)||legs.length!==2)throw new ServiceError('response');
- const leg=(index:number,from:Coordinate,to:Coordinate)=>{const part=legs[index] as Record<string,unknown>;return parseRoute({routes:[{...part,legs:[part]}],...(data.tariff?{tariff:data.tariff}:{})},from,to)};
- return {pickup:leg(0,driver,pickup),trip:leg(1,pickup,destination)};
+ const leg=(index:number,from:Coordinate,to:Coordinate)=>{
+  const part=legs[index] as Record<string,unknown>|null;
+  if(!part||typeof part!=='object')throw new ServiceError('response');
+  return parseRoute({routes:[{...part,legs:[part]}],tariff:data.tariff},from,to);
+ };
+ const trip=leg(1,pickup,destination);
+ const approach=legs[0] as {distanceMeters?:unknown;duration?:unknown}|null;
+ // Google can omit the zero distance and geometry when the driver is already at pickup.
+ if(approach?.duration==='0s'&&(approach.distanceMeters===undefined||approach.distanceMeters===0)){
+  return {pickup:{from:{...driver},to:{...pickup},meters:0,seconds:0,points:[{...pickup}],steps:[],provider:'Google Maps'},trip};
+ }
+ try{return {pickup:leg(0,driver,pickup),trip}}
+ catch(error){
+  if(!(error instanceof ServiceError)||error.code!=='response')throw error;
+  return {pickup:null,trip};
+ }
 }
 export function createRoutingClient(proxyUrl:string|undefined,fetcher:typeof fetch=fetch,timeout=15000){
  async function request(from:Coordinate,to:Coordinate,signal?:AbortSignal,language='ar',token?:string,pickup?:Coordinate):Promise<unknown>{
