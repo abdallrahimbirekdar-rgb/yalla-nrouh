@@ -13,7 +13,7 @@ function listenNativePosition(host:SiteWindow){
  nativePositionHosts.add(host);
  host.addEventListener('yalla:native-position',event=>{
   const point=(event as CustomEvent).detail?.point;
-  if((event as CustomEvent).detail?.id===latestNativeGpsId&&isCoordinate(point))announceWebPosition(point);
+  if((event as CustomEvent).detail?.id===latestNativeGpsId&&isCoordinate(point))announceWebPosition(point,(event as CustomEvent).detail?.fix);
  });
  // Native can obtain GPS even if the webpage -> Android message never arrives.
  // Keep a recent result available when React mounts after the native event.

@@ -55,7 +55,7 @@ test('a browser GPS implementation that never calls back cannot leave an endless
 test('Android browser fallback rejects imprecise or stale fixes before racing native GPS',()=>withBrowser({
  geolocation:{getCurrentPosition:success=>success({coords:{latitude:51.5,longitude:7.2,accuracy:1800},timestamp:Date.now()})},
 },async()=>{
- await assert.rejects(getWebPosition(6500,250),e=>e.code==='position');
+ await assert.rejects(getWebPosition(6500,250),e=>e.code==='accuracy');
  navigator.geolocation.getCurrentPosition=success=>success({coords:{latitude:51.5,longitude:7.2,accuracy:20},timestamp:Date.now()-60000});
  await assert.rejects(getWebPosition(6500,250),e=>e.code==='position');
  navigator.geolocation.getCurrentPosition=success=>success({coords:{latitude:51.5,longitude:7.2,accuracy:20},timestamp:Date.now()});

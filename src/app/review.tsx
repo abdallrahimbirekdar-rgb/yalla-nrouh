@@ -5,6 +5,8 @@ import {useAuth} from '../auth';
 import {cloudCurrentToken,cloudRequestRide} from '../cloud-api';
 import {authErrorMessage} from '../auth-errors';
 import {siteCurrentPosition} from '../site-bridge';
+import {pickupPosition,pickupPositionMessage} from '../pickup-position';
+import {PositionError} from '../current-position';
 import {pickupAllowed} from '../pickup-policy';
 import {validateDraft} from '../domain';
 import {Summary} from '../components';
@@ -14,9 +16,9 @@ export default function Review(){
  const {draft,state,setDraft}=useApp();const auth=useAuth();const t=useText();const [busy,setBusy]=useState(false),[error,setError]=useState(''),[quoted,setQuoted]=useState(false);const invalid=validateDraft(draft)||!draft.pickupPoint||!draft.destinationPoint;
  async function confirm(){
   if(busy||invalid||!quoted)return;setBusy(true);setError('');
-  try{const current=await siteCurrentPosition(false);if(!pickupAllowed(draft.pickupPoint,current)){setError(t('نقطة الانطلاق يجب أن تكون ضمن ٥٠٠ متر من موقعك الحالي. عدّلها ثم حاول.','Pickup must be within 500 metres of your location. Change it and try again.'));return}
+  try{const current=await pickupPosition(siteCurrentPosition);if(!pickupAllowed(draft.pickupPoint,current)){setError(t('نقطة الانطلاق يجب أن تكون ضمن ٥٠٠ متر من موقعك الحالي. عدّلها ثم حاول.','Pickup must be within 500 metres of your location. Change it and try again.'));return}
    await cloudRequestRide(await cloudCurrentToken(),draft);setDraft(previous=>({...previous,pickup:'',destination:'',pickupPoint:undefined,destinationPoint:undefined}));router.replace('/cloud');
-  }catch(e){setError((e as {kind?:string})?.kind==='too_many_requests'||(e as {kind?:string})?.kind==='23505'?t('لديك طلب نشط بالفعل. افتح رحلاتي لمتابعته.','You already have an active request. Open My rides.'):authErrorMessage(e,state.language==='ar'))}finally{setBusy(false)}
+  }catch(e){if(e instanceof PositionError){setError(pickupPositionMessage(e,state.language==='ar'));return}setError((e as {kind?:string})?.kind==='too_many_requests'||(e as {kind?:string})?.kind==='23505'?t('لديك طلب نشط بالفعل. افتح رحلاتي لمتابعته.','You already have an active request. Open My rides.'):authErrorMessage(e,state.language==='ar'))}finally{setBusy(false)}
  }
  return <Page title={t('راجع رحلتك','Review your ride')}>
   {invalid?<Panel><Label>{t('حدد نقطتي الانطلاق والوصول أولًا.','Choose pickup and destination first.')}</Label><Button title={t('اختيار النقاط','Choose points')} onPress={()=>router.replace('/')}/></Panel>:<>

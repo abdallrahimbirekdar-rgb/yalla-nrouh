@@ -20,9 +20,16 @@ export async function webLocationGranted():Promise<boolean>{
 // do not depend on old native JavaScript bundled into an installed APK.
 // A position just approved in the permission screen is kept only in memory.
 // This avoids losing the first GPS fix while the booking screen mounts.
-let recentFix:{point:Coordinate;at:number}|null=null;
+let recentFix:{point:Coordinate;at:number;accuracy?:number;time?:number}|null=null;
 export function recentWebPosition(maxAgeMs=12000):Coordinate|null{
  return recentFix&&Date.now()-recentFix.at<=maxAgeMs?recentFix.point:null;
+}
+
+// Pickup validation uses the provider timestamp and measured accuracy, not
+// the time a selected map pin or a cached document was displayed.
+export function recentVerifiedWebPosition(maxAgeMs=15000,maxAccuracy=250):Coordinate|null{
+ const fix=recentFix;
+ return fix&&typeof fix.time==='number'&&Number.isFinite(fix.time)&&Date.now()-fix.time>=-3000&&Date.now()-fix.time<=maxAgeMs&&typeof fix.accuracy==='number'&&Number.isFinite(fix.accuracy)&&fix.accuracy>=0&&fix.accuracy<=maxAccuracy?fix.point:null;
 }
 
 // First paint uses a recent, reasonably fast network/GPS fix rather than
@@ -32,13 +39,14 @@ export function getWebPosition(timeout=7000,maxAccuracy?:number,highAccuracy=fal
  return new Promise((resolve,reject)=>{
   let settled=false;
   const timer=setTimeout(()=>{settled=true;reject(new PositionError('timeout'))},timeout+500);
-  const fail=(code:'permission'|'timeout'|'position')=>{if(settled)return;settled=true;clearTimeout(timer);reject(new PositionError(code))};
+  const fail=(code:'permission'|'accuracy'|'timeout'|'position')=>{if(settled)return;if(code==='permission')recentFix=null;settled=true;clearTimeout(timer);reject(new PositionError(code))};
   try{navigator.geolocation.getCurrentPosition(result=>{
    const point={latitude:result.coords.latitude,longitude:result.coords.longitude};
    if(!isCoordinate(point)){fail('position');return}
-   if(maxAccuracy!==undefined&&(typeof result.coords.accuracy!=='number'||!Number.isFinite(result.coords.accuracy)||result.coords.accuracy<0||result.coords.accuracy>maxAccuracy||!Number.isFinite(result.timestamp)||Date.now()-result.timestamp>20000||result.timestamp>Date.now()+3000)){fail('position');return}
-   recentFix={point,at:Date.now()};
-   if(settled){if(typeof document!=='undefined'&&document.visibilityState==='visible')announceWebPosition(point);return}
+   if(maxAccuracy!==undefined&&(typeof result.coords.accuracy!=='number'||!Number.isFinite(result.coords.accuracy)||result.coords.accuracy<0||result.coords.accuracy>maxAccuracy)){fail('accuracy');return}
+   if(maxAccuracy!==undefined&&(!Number.isFinite(result.timestamp)||Date.now()-result.timestamp>20000||result.timestamp>Date.now()+3000)){fail('position');return}
+   recentFix={point,at:Date.now(),accuracy:result.coords.accuracy,time:result.timestamp};
+   if(settled){if(typeof document!=='undefined'&&document.visibilityState==='visible')announceWebPosition(point,{accuracy:result.coords.accuracy,time:result.timestamp});return}
    settled=true;clearTimeout(timer);resolve(point);
   },error=>fail(error.code===1?'permission':error.code===3?'timeout':'position'),{enableHighAccuracy:highAccuracy,maximumAge:highAccuracy?0:12000,timeout});}
   catch{fail('position')}
@@ -54,11 +62,11 @@ export function refineWebPosition(){
   refining=false;
   if(typeof document!=='undefined'&&document.visibilityState==='hidden')return;
   const point={latitude:result.coords.latitude,longitude:result.coords.longitude};
-  if(isCoordinate(point))announceWebPosition(point);
+  if(isCoordinate(point))announceWebPosition(point,{accuracy:result.coords.accuracy??Infinity,time:result.timestamp});
  },()=>{refining=false},{enableHighAccuracy:true,maximumAge:0,timeout:11000});
 }
-export function announceWebPosition(point:Coordinate){
+export function announceWebPosition(point:Coordinate,fix?:{accuracy:number;time:number}){
  if(!isCoordinate(point))return;
- recentFix={point,at:Date.now()};
+ recentFix={point,at:Date.now(),...(fix?{accuracy:fix.accuracy,time:fix.time}:{})};
  if(typeof window!=='undefined')window.dispatchEvent(new CustomEvent('yalla:location-ready',{detail:point}));
 }

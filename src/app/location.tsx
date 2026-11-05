@@ -2,6 +2,8 @@ import React,{useCallback,useEffect,useRef,useState} from 'react';
 import {ActivityIndicator,Platform,View} from 'react-native';
 import {router,useLocalSearchParams} from 'expo-router';
 import {siteCurrentPosition} from '../site-bridge';
+import {pickupPosition,pickupPositionMessage} from '../pickup-position';
+import {PositionError} from '../current-position';
 import {recentWebPosition} from '../web-position';
 import {type CameraTarget,useCurrentPosition} from '../use-current-position';
 import {pickupAllowed,MAX_PICKUP_METERS} from '../pickup-policy';
@@ -51,10 +53,10 @@ export default function LocationPicker(){
   if(!point||busy)return;setBusy(true);setMessage('');
   try{
    // Recheck the actual phone position at confirmation, never a selected pin.
-   if(pickup){const current=await siteCurrentPosition(false);if(!pickupAllowed(point,current)){setMessage(t('نقطة الانطلاق تبعد أكثر من ٥٠٠ متر عن موقعك الحالي. اختر نقطة أقرب.','Pickup is more than 500 metres away. Choose a closer point.'));return}}
+   if(pickup){const current=await pickupPosition(siteCurrentPosition);if(!pickupAllowed(point,current)){setMessage(t('نقطة الانطلاق تبعد أكثر من ٥٠٠ متر عن موقعك الحالي. اختر نقطة أقرب.','Pickup is more than 500 metres away. Choose a closer point.'));return}}
    if(!alive.current)return;
    setDraft(previous=>({...previous,...(pickup?{pickup:label.trim()||formatCoordinate(point),pickupPoint:point}:{destination:label.trim()||formatCoordinate(point),destinationPoint:point})}));goBack();
-  }catch{if(alive.current)setMessage(t('نحتاج موقعك الحالي للتحقق من مسافة الانطلاق. فعّل الموقع والإذن ثم أعد المحاولة.','We need your location to check pickup distance. Turn on location and allow access.'))}
+  }catch(error){if(alive.current)setMessage(pickupPositionMessage(error,state.language==='ar'))}
   finally{if(alive.current)setBusy(false)}
  }
  async function savePlace(removeId?:string){
@@ -80,12 +82,13 @@ export default function LocationPicker(){
   </Panel>}
   <MapCanvas point={point} initialCenter={initialCenter.current} cameraTarget={selectionCamera??gps.camera} onChange={next=>{gps.chooseManually();choose(next)}}/>
   {(gps.busy||busy)&&<ActivityIndicator accessibilityLabel={t('جارٍ التحميل','Loading')}/>}
-  {pickup&&gps.failure&&<View accessibilityRole="alert"><Label>{t('تعذر تحديد موقعك الحالي. تأكد من تشغيل الموقع والسماح بالموقع الدقيق ثم أعد المحاولة.','Could not get your location. Turn on location, allow precise access, then try again.')}</Label><Button secondary title={t('تحديد موقعي مجددًا','Find my location again')} onPress={()=>void selectCurrent()} disabled={gps.busy}/></View>}
+  {pickup&&gps.failure&&<View accessibilityRole="alert"><Label>{pickupPositionMessage(new PositionError(gps.failure),state.language==='ar')}</Label><Button secondary title={t('تحديد موقعي مجددًا','Find my location again')} onPress={()=>void selectCurrent()} disabled={gps.busy}/></View>}
   {point&&<Panel>
    <Label muted>{t('تم تحديد النقطة على الخريطة','Point selected on the map')}</Label>
    <Field label={t('اسم المكان أو وصف نقطة الالتقاء','Place name or meeting point')} value={label} onChangeText={setLabel} maxLength={200}/>
-   {pickup&&!allowed&&<Label>{t(`يجب أن تكون نقطة الانطلاق ضمن ${MAX_PICKUP_METERS} متر من موقعك الحالي.`,`Pickup must be within ${MAX_PICKUP_METERS} metres of your location.`)}</Label>}
-   <Button icon="checkmark-circle-outline" title={pickup?t('تأكيد نقطة الانطلاق','Confirm pickup'):t('تأكيد نقطة الوصول والعودة للحجز','Confirm destination and return to booking')} onPress={()=>void confirm()} disabled={busy||!allowed}/>
+   {pickup&&!current&&<Label muted>{t('سيُقرأ موقع الهاتف عند التأكيد للتحقق من مسافة الانطلاق.','Your phone location will be read at confirmation to check pickup distance.')}</Label>}
+   {pickup&&current&&!allowed&&<Label>{t(`يجب أن تكون نقطة الانطلاق ضمن ${MAX_PICKUP_METERS} متر من موقعك الحالي.`,`Pickup must be within ${MAX_PICKUP_METERS} metres of your location.`)}</Label>}
+   <Button icon="checkmark-circle-outline" title={pickup?t('تأكيد نقطة الانطلاق','Confirm pickup'):t('تأكيد نقطة الوصول والعودة للحجز','Confirm destination and return to booking')} onPress={()=>void confirm()} disabled={busy}/>
    {!pickup&&token&&<Button secondary icon="bookmark-outline" title={t('حفظ المكان في حسابي','Save place to my account')} onPress={()=>void savePlace()} disabled={saving||!loaded}/>}
   </Panel>}
   {!pickup&&<Panel>
