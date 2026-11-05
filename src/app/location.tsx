@@ -103,6 +103,8 @@ export default function LocationPicker(){
    <Button icon="search" title={t('بحث عن المكان','Search places')} onPress={()=>void search()} disabled={busy||query.trim().length<3}/>
    {results.length>0&&<Label muted>{t('نتائج Google Maps — اختر نتيجة ثم عدّل النقطة إن أردت','Google Maps results — choose one, then move the point if needed')}</Label>}
    {results.map(place=><Button key={place.id} secondary title={place.label} onPress={()=>{choose(place.coordinate,place.label);setSelectionCamera({point:place.coordinate,revision:Date.now(),isLocation:false});setResults([])}}/>)}
+   {point&&<Label muted>{t('الوجهة المختارة: ','Selected destination: ')}{label||formatCoordinate(point)}</Label>}
+   <Button icon="checkmark-circle-outline" title={t('تأكيد نقطة الوصول والعودة للحجز','Confirm destination and return to booking')} onPress={()=>void confirm()} disabled={busy||!point}/>
   </Panel>}
   <MapCanvas readOnly={pickup} point={point} initialCenter={initialCenter.current} cameraTarget={selectionCamera??gps.camera} onChange={next=>{if(!pickup){gps.chooseManually();choose(next)}}}/>
   {(gps.busy||busy)&&<ActivityIndicator accessibilityLabel={t('جارٍ التحميل','Loading')}/>}
@@ -110,7 +112,7 @@ export default function LocationPicker(){
   {point&&<Panel>
    <Label muted>{t('تم تحديد النقطة على الخريطة','Point selected on the map')}</Label>
    {pickup?<Label>{t('موقعي الحالي','My current location')}</Label>:<Field label={t('اسم المكان','Place name')} value={label} onChangeText={setLabel} maxLength={200}/>}
-   <Button icon="checkmark-circle-outline" title={pickup?t('تأكيد نقطة الانطلاق','Confirm pickup'):t('تأكيد نقطة الوصول والعودة للحجز','Confirm destination and return to booking')} onPress={()=>void confirm()} disabled={busy}/>
+   {pickup&&<Button icon="checkmark-circle-outline" title={t('تأكيد نقطة الانطلاق','Confirm pickup')} onPress={()=>void confirm()} disabled={busy}/>}
    {!pickup&&token&&<Button secondary icon="bookmark-outline" title={t('حفظ المكان في حسابي','Save place to my account')} onPress={()=>void savePlace()} disabled={saving||!loaded}/>}
   </Panel>}
   {!pickup&&<Panel>
