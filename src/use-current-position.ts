@@ -37,7 +37,8 @@ export function useCurrentPosition(enabled:boolean){
   request.current?.abort();const controller=new AbortController();request.current=controller;
   const id=++generation.current;running.current=id;setBusy(true);setFailure(null);
   try{
-   const point=await positionDeadline(signal=>Platform.OS==='web'?webPositionRequest(ask,signal):currentPosition(adapter,ask),controller,ask?45000:22000);
+   const received=await positionDeadline(signal=>Platform.OS==='web'?webPositionRequest(ask,signal):currentPosition(adapter,ask),controller,ask?45000:22000);
+   const point=Platform.OS==='web'?recentWebPosition()??received:received;
    if(alive.current&&id===generation.current){located.current=true;setCamera({point,revision:++cameraRevision.current})}
    if(alive.current&&!controller.signal.aborted)return point;
   }catch(error){

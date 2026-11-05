@@ -61,3 +61,19 @@ test('Android browser fallback rejects imprecise or stale fixes before racing na
  navigator.geolocation.getCurrentPosition=success=>success({coords:{latitude:51.5,longitude:7.2,accuracy:20},timestamp:Date.now()});
  assert.deepEqual(await getWebPosition(6500,250),{latitude:51.5,longitude:7.2});
 }));
+
+test('re-announcing the same phone point preserves its measurement without making an old fix fresh',async()=>{
+ const {announceWebPosition,recentMeasuredWebPosition,clearWebPosition}=await import('../src/web-position.ts');
+ const point={latitude:51.5,longitude:7.2};clearWebPosition();const time=Date.now();
+ announceWebPosition(point,{accuracy:20,time});announceWebPosition(point);
+ assert.equal(recentMeasuredWebPosition().time,time);assert.equal(recentMeasuredWebPosition().accuracy,20);
+ clearWebPosition();announceWebPosition(point,{accuracy:20,time:Date.now()-60000});announceWebPosition(point);
+ assert.equal(recentMeasuredWebPosition(),null);
+});
+
+test('a late older GPS result cannot replace the shared newer phone location',async()=>{
+ const {announceWebPosition,recentMeasuredWebPosition,clearWebPosition}=await import('../src/web-position.ts');clearWebPosition();
+ const time=Date.now();announceWebPosition({latitude:51.5,longitude:7.2},{accuracy:20,time});
+ announceWebPosition({latitude:51.4,longitude:7.1},{accuracy:20,time:time-5000});
+ assert.equal(recentMeasuredWebPosition().latitude,51.5);assert.equal(recentMeasuredWebPosition().time,time);
+});

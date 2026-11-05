@@ -21,6 +21,7 @@ export async function webLocationGranted():Promise<boolean>{
 // A position just approved in the permission screen is kept only in memory.
 // This avoids losing the first GPS fix while the booking screen mounts.
 let recentFix:{point:Coordinate;at:number;accuracy?:number;time?:number}|null=null;
+export function clearWebPosition(){recentFix=null}
 export function recentWebPosition(maxAgeMs=12000):Coordinate|null{
  return recentFix&&Date.now()-recentFix.at<=maxAgeMs?recentFix.point:null;
 }
@@ -37,20 +38,23 @@ export function recentVerifiedWebPosition(maxAgeMs=15000,maxAccuracy=250):Coordi
 
 // First paint uses a recent, reasonably fast network/GPS fix rather than
 // waiting for a fresh high-accuracy satellite lock (slow indoors).
-export function getWebPosition(timeout=7000,maxAccuracy?:number,highAccuracy=false):Promise<Coordinate>{
+export function getWebPosition(timeout=7000,maxAccuracy?:number,highAccuracy=false,signal?:AbortSignal):Promise<Coordinate>{
  if(typeof navigator==='undefined'||!navigator.geolocation)return Promise.reject(new PositionError('position'));
  return new Promise((resolve,reject)=>{
   let settled=false;
-  const timer=setTimeout(()=>{settled=true;reject(new PositionError('timeout'))},timeout+500);
-  const fail=(code:'permission'|'accuracy'|'timeout'|'position')=>{if(settled)return;if(code==='permission')recentFix=null;settled=true;clearTimeout(timer);reject(new PositionError(code))};
+  const timer=setTimeout(()=>fail('timeout'),timeout+500);
+  const fail=(code:'permission'|'accuracy'|'timeout'|'position')=>{if(settled)return;if(code==='permission')clearWebPosition();settled=true;clearTimeout(timer);signal?.removeEventListener('abort',cancel);reject(new PositionError(code))};
+  const cancel=()=>fail('position');
+  if(signal?.aborted){cancel();return}signal?.addEventListener('abort',cancel,{once:true});
   try{navigator.geolocation.getCurrentPosition(result=>{
+   if(signal?.aborted||settled&&typeof document!=='undefined'&&document.visibilityState==='hidden')return;
    const point={latitude:result.coords.latitude,longitude:result.coords.longitude};
    if(!isCoordinate(point)){fail('position');return}
    if(maxAccuracy!==undefined&&(typeof result.coords.accuracy!=='number'||!Number.isFinite(result.coords.accuracy)||result.coords.accuracy<0||result.coords.accuracy>maxAccuracy)){fail('accuracy');return}
    if(maxAccuracy!==undefined&&(!Number.isFinite(result.timestamp)||Date.now()-result.timestamp>20000||result.timestamp>Date.now()+3000)){fail('position');return}
-   recentFix={point,at:Date.now(),accuracy:result.coords.accuracy,time:result.timestamp};
-   if(settled){if(typeof document!=='undefined'&&document.visibilityState==='visible')announceWebPosition(point,{accuracy:result.coords.accuracy,time:result.timestamp});return}
-   settled=true;clearTimeout(timer);resolve(point);
+   announceWebPosition(point,{accuracy:result.coords.accuracy,time:result.timestamp});
+   if(settled)return;
+   settled=true;clearTimeout(timer);signal?.removeEventListener('abort',cancel);resolve(point);
   },error=>fail(error.code===1?'permission':error.code===3?'timeout':'position'),{enableHighAccuracy:highAccuracy,maximumAge:highAccuracy?0:12000,timeout});}
   catch{fail('position')}
  });
@@ -70,6 +74,8 @@ export function refineWebPosition(){
 }
 export function announceWebPosition(point:Coordinate,fix?:{accuracy:number;time:number}){
  if(!isCoordinate(point))return;
- recentFix={point,at:Date.now(),...(fix?{accuracy:fix.accuracy,time:fix.time}:{})};
- if(typeof window!=='undefined')window.dispatchEvent(new CustomEvent('yalla:location-ready',{detail:point}));
+ const prior=recentFix;if(fix&&typeof prior?.time==='number'&&Number.isFinite(fix.time)&&fix.time<prior.time)return;
+ const same=prior&&Math.abs(prior.point.latitude-point.latitude)<0.000001&&Math.abs(prior.point.longitude-point.longitude)<0.000001;
+ recentFix={point,at:Date.now(),...(fix?{accuracy:fix.accuracy,time:fix.time}:same?{accuracy:prior.accuracy,time:prior.time}:{})};
+ if(typeof window!=='undefined'&&typeof window.dispatchEvent==='function')window.dispatchEvent(new CustomEvent('yalla:location-ready',{detail:point}));
 }

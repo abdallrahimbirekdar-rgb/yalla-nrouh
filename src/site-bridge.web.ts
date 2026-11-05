@@ -44,6 +44,7 @@ export function nativeCurrentPosition(askPermission:boolean,signal?:AbortSignal,
    const error=point?null:['permission','accuracy','services','position','timeout'].includes(detail.error)?detail.error as NativePositionResult['error']:'position';
    const rawFix=detail.fix;
    const fix=point&&rawFix&&Number.isFinite(rawFix.accuracy)&&rawFix.accuracy>=0&&Number.isFinite(rawFix.time)&&rawFix.time>0?{...point,accuracy:rawFix.accuracy,time:rawFix.time} as Fix:undefined;
+   if(point){const shared=recentMeasuredWebPosition(20000,250);if(!shared||!fix||shared.time!==fix.time||Math.abs(shared.latitude-point.latitude)>0.000001||Math.abs(shared.longitude-point.longitude)>0.000001)announceWebPosition(point,fix?{accuracy:fix.accuracy,time:fix.time}:undefined)}
    cleanup();
    resolve({point,error,...(fix?{fix}:{})});
   };
@@ -97,7 +98,7 @@ export async function siteCurrentPosition(askPermission:boolean,signal?:AbortSig
       if(result.point)return result.point;
       throw new PositionError(result.error==='timeout'?'timeout':'position');
      }),
-     getWebPosition(6500,250),
+     getWebPosition(6500,250,false,controller.signal),
     ]);
     if(signal?.aborted)throw new PositionError('position');
     controller.abort();

@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {pickupPosition,pickupPositionMessage} from '../src/pickup-position.ts';
-import {announceWebPosition,recentVerifiedWebPosition} from '../src/web-position.ts';
+import {clearWebPosition,announceWebPosition,recentVerifiedWebPosition} from '../src/web-position.ts';
 import {pickupAllowed} from '../src/pickup-policy.ts';
 import {PositionError} from '../src/current-position.ts';
 const phone={latitude:51.48,longitude:7.21};
@@ -9,7 +9,7 @@ async function browser(permission,geolocation,work,native=false){
  const oldWindow=globalThis.window;const descriptor=Object.getOwnPropertyDescriptor(globalThis,'navigator');
  globalThis.window=new EventTarget();if(native)window.ReactNativeWebView={postMessage:()=>{}};
  Object.defineProperty(globalThis,'navigator',{configurable:true,value:{permissions:{query:async()=>({state:permission})},geolocation}});
- announceWebPosition(phone); // no accuracy metadata: this is never trusted as a verified fix.
+ clearWebPosition();announceWebPosition(phone); // no accuracy metadata: this is never trusted as a verified fix.
  try{await work()}finally{globalThis.window=oldWindow;if(descriptor)Object.defineProperty(globalThis,'navigator',descriptor);else delete globalThis.navigator}
 }
 test('a pickup confirmation in browser prompt state actively obtains a precise location',()=>browser('prompt',{
