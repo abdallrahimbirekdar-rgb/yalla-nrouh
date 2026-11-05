@@ -17,10 +17,10 @@ export interface CloudRide {
   id:string; passenger_id:string;driver_id:string|null;pickup:string;destination:string;
   category:string;region:number;pickup_lat:number;pickup_lng:number;destination_lat:number;destination_lng:number;
   status:'requested'|'accepted'|'arrived'|'riding'|'completed'|'cancelled';
-  created_at:string;updated_at:string;pickup_confirmed_at:string|null;
+  created_at:string;updated_at:string;pickup_confirmed_at:string|null;search_expired_at?:string|null;
 }
 export interface CloudDriver {user_id:string;region:number;category:string;approved:boolean;online:boolean;last_seen_at:string|null}
-export interface RidePreview {ride_id:string;region:number;category:string;created_at:string;pickup_lat_approx:number;pickup_lng_approx:number;estimated_fare?:number|null}
+export interface RidePreview {ride_id:string;region:number;category:string;created_at:string;pickup_lat_approx:number;pickup_lng_approx:number;estimated_fare?:number|null;remaining_ms?:number;expiresOnDevice?:number}
 export interface StaffDriver {user_id:string;region:number;category:string;approved:boolean;online:boolean;created_at:string}
 export class CloudError extends Error {
   readonly status:number;
@@ -71,11 +71,17 @@ export async function cloudWhoAmI(token:string):Promise<{id:string;email?:string
   requireToken(token);
   return call('/auth/v1/user','GET',token);
 }
-const rideColumns='id,passenger_id,driver_id,pickup,destination,pickup_lat,pickup_lng,destination_lat,destination_lng,category,region,status,created_at,updated_at,pickup_confirmed_at';
+const rideColumns='id,passenger_id,driver_id,pickup,destination,pickup_lat,pickup_lng,destination_lat,destination_lng,category,region,status,created_at,updated_at,pickup_confirmed_at,search_expired_at';
+export const rideSearchLimitMs=180000;
 export async function cloudMyRides(token:string):Promise<CloudRide[]>{
   requireToken(token);
   const owner=readRideState().owner;
-  const rides=await call<CloudRide[]>('/rest/v1/rides?select='+rideColumns+'&order=created_at.desc&limit=30','GET',token);
+  const fetchRides=()=>call<CloudRide[]>('/rest/v1/rides?select='+rideColumns+'&order=created_at.desc&limit=30','GET',token);
+  let rides=await fetchRides();
+  if(rides.some(ride=>ride.status==='requested'&&Date.parse(ride.updated_at)<=Date.now()-rideSearchLimitMs)){
+   const closed=await rpc<number>('close_my_expired_searches',token).catch(()=>0);
+   if(closed>0)rides=await fetchRides();
+  }
   receiveRideState(owner,rides);return rides;
 }
 export type DriverHistoryKind='completed'|'cancelled'|'released';
@@ -126,7 +132,13 @@ export const cloudRegisterDriver=(token:string,region:number,category:string)=>r
 export const cloudSetDriverOnline=(token:string,online:boolean)=>rpc<boolean>('set_driver_online',token,{p_online:online});
 export const cloudHeartbeat=(token:string)=>rpc<boolean>('driver_heartbeat',token);
 export const cloudDeclineDriverOffer=(token:string,id:string)=>rpc<null>('decline_driver_offer',token,{p_ride_id:id});
-export const cloudOpenRides=(token:string)=>rpc<RidePreview[]>('open_ride_previews_with_fare',token);
+export async function cloudOpenRides(token:string):Promise<RidePreview[]>{
+ const started=performance.now();
+ const offers=await rpc<RidePreview[]>('open_ride_timed_previews',token);
+ // The server provides time remaining. Measure locally with a monotonic clock
+ // and count the request transit time against the offer, even on skewed phones.
+ return offers.map(offer=>({...offer,expiresOnDevice:started+Math.max(0,Math.min(rideSearchLimitMs,offer.remaining_ms??0))}));
+}
 export async function cloudAcceptRide(token:string,id:string):Promise<boolean>{
  const accepted=await rpc<boolean>('accept_ride',token,{p_ride_id:id});
  if(typeof accepted!=='boolean')throw new CloudError(500,'bad_response');

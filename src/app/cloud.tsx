@@ -29,6 +29,22 @@ export default function Rides(){
  },[userId]);
  const [acceptedPlans,setAcceptedPlans]=useState<{rideId:string;trip:RoutePlan|null;pickup:RoutePlan|null}|null>(null);
  const [rides,setRides]=useState<CloudRide[]>([]),[driver,setDriver]=useState<CloudDriver|null>(null),[offers,setOffers]=useState<RidePreview[]>([]),[busy,setBusy]=useState(false),[loading,setLoading]=useState(true),[notice,setNotice]=useState(''),[inboxProblem,setInboxProblem]=useState(false);
+ const [offerClock,setOfferClock]=useState(()=>performance.now());
+ useEffect(()=>{
+  if(!driverMode||offers.length===0)return;
+  let timer:ReturnType<typeof setTimeout>|undefined;
+  function tick(){
+   const now=performance.now();
+   setOfferClock(now);
+   const next=offers.reduce((nearest,offer)=>{
+    const remaining=(offer.expiresOnDevice??0)-now;
+    return remaining>0?Math.min(nearest,remaining):nearest;
+   },Infinity);
+   if(Number.isFinite(next))timer=setTimeout(tick,Math.min(1000,Math.ceil(next)));
+  }
+  tick();
+  return()=>clearTimeout(timer);
+ },[driverMode,offers]);
  const offerRead=useRef(0),historyRead=useRef(0);
  const alive=useRef(true),queue=useRef(createRefreshQueue()).current,identity=useRef(auth.session?.user.id),mode=useRef(driverMode);identity.current=auth.session?.user.id;mode.current=driverMode;
  useEffect(()=>{alive.current=true;return()=>{alive.current=false}},[]);
@@ -92,6 +108,10 @@ export default function Rides(){
  async function run(work:(token:string)=>Promise<void>,success?:string){if(busy)return;setBusy(true);setNotice('');try{await work(await cloudCurrentToken());await refresh();if(success)setNotice(success)}catch(e){const kind=(e as {kind?:string})?.kind??(e as Error)?.message;setNotice(kind==='waiting_passenger_confirmation'?t('بانتظار تأكيد الراكب ركوب السيارة.','Waiting for passenger pickup confirmation.'):kind==='driver_not_approved'?t('حساب السائق بانتظار الاعتماد.','Driver account is waiting for approval.'):authErrorMessage(e,state.language==='ar'))}finally{setBusy(false)}}
  async function accept(offer:RidePreview,routes:{trip:RoutePlan|null;pickup:RoutePlan|null}){
   if(busy||!userId||currentDriverRide||recovery.checking||recovery.id&&recovery.id!==offer.ride_id)return;
+  if((offer.expiresOnDevice??0)<=performance.now()){
+   setNotice(t('انتهت مهلة هذا الطلب.','This request has expired.'));
+   return;
+  }
   setBusy(true);setNotice('');
   let submitted=false;
   try{
@@ -117,7 +137,7 @@ export default function Rides(){
  const status=(value:string)=>({requested:t('بانتظار السائق','Waiting for driver'),accepted:t('السائق في الطريق','Driver is on the way'),arrived:t('وصل السائق','Driver arrived'),riding:t('الرحلة جارية','Ride in progress'),completed:t('مكتملة','Completed'),cancelled:t('ملغاة','Cancelled')} as Record<string,string>)[value]??value;
  const mine=rides.filter(r=>r.passenger_id===userId);
  const hiddenOffers=declined?.owner===userId?declined?.ids:undefined;
- const availableOffers=offers.filter(offer=>!hiddenOffers?.includes(offer.ride_id));
+ const availableOffers=offers.filter(offer=>(offer.expiresOnDevice??0)>offerClock&&!hiddenOffers?.includes(offer.ride_id));
  const visibleOffers=availableOffers.slice(0,offerLimit);
  const selectedOffer=visibleOffers.some(offer=>offer.ride_id===focusedOffer)?focusedOffer:visibleOffers[0]?.ride_id;
  function decline(id:string){
@@ -137,8 +157,8 @@ export default function Rides(){
   if(driver)void run(async token=>{if(!await cloudSetDriverOnline(token,!driver.online))throw Error('not_allowed')});
  }
  const renderRide=(ride:CloudRide)=><Panel key={ride.id}>
-   <View style={{alignSelf:'flex-start',borderRadius:20,paddingHorizontal:12,paddingVertical:4,backgroundColor:colors.selected}}><Label muted>{status(ride.status)}</Label></View>
-   {ride.status==='requested'&&<RideSearchTimer startedAt={ride.updated_at??ride.created_at}/>}
+   <View style={{alignSelf:'flex-start',borderRadius:20,paddingHorizontal:12,paddingVertical:4,backgroundColor:colors.selected}}><Label muted>{ride.search_expired_at?t('انتهى البحث بدون سائق','Search expired without a driver'):status(ride.status)}</Label></View>
+   {ride.status==='requested'&&<RideSearchTimer startedAt={ride.updated_at??ride.created_at} onExpired={()=>void refresh().catch(()=>{})}/>}
    {ride.status==='accepted'&&<PassengerTaxiMap key={ride.driver_id} rideId={ride.id} pickup={{latitude:ride.pickup_lat,longitude:ride.pickup_lng}}/>}
    <Label>{ride.pickup}</Label><Icon name="arrow-down-outline" size={18}/><Label>{ride.destination}</Label><Label muted>{new Date(ride.created_at).toLocaleString(state.language==='ar'?'ar':'en')}</Label>
    {live(ride)&&<>
@@ -192,7 +212,7 @@ export default function Rides(){
       {!recovery.checking&&<>
        {inboxProblem&&<Label muted>{t('تعذر تحديث الطلبات. حاول تحديث القائمة.','Could not update requests. Refresh the list to try again.')}</Label>}
        {!inboxProblem&&!visibleOffers.length&&<Panel><Label>{t('عم نستقبل الطلبات… ما في طلب مناسب حاليًا.','You’re online. Waiting for matching requests…')}</Label></Panel>}
-       {visibleOffers.map(offer=><DriverOffer key={offer.ride_id} offer={offer} position={gps.camera?.point} disabled={busy||!!recovery.id&&recovery.id!==offer.ride_id} expanded={selectedOffer===offer.ride_id} onExpand={()=>setFocusedOffer(offer.ride_id)} onDecline={()=>decline(offer.ride_id)} onAccept={routes=>void accept(offer,routes)}/>)}
+       {visibleOffers.map(offer=><DriverOffer key={offer.ride_id} remainingSeconds={Math.max(0,Math.ceil(((offer.expiresOnDevice??0)-offerClock)/1000))} offer={offer} position={gps.camera?.point} disabled={busy||!!recovery.id&&recovery.id!==offer.ride_id} expanded={selectedOffer===offer.ride_id} onExpand={()=>setFocusedOffer(offer.ride_id)} onDecline={()=>decline(offer.ride_id)} onAccept={routes=>void accept(offer,routes)}/>)}
        {availableOffers.length>offerLimit&&<Button secondary title={t('عرض طلبات أخرى','Show more requests')} onPress={()=>setOfferLimit(value=>value+3)}/>}
        {!gps.camera&&visibleOffers.length>0&&<Button secondary icon="locate" title={gps.busy?t('جارٍ تحديد الموقع…','Finding location…'):t('تحديد موقعي لحساب طريق الزبون','Find my location to calculate pickup route')} disabled={gps.busy} onPress={()=>void gps.locate()}/>}
       </>}

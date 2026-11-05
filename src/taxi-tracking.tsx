@@ -1,5 +1,6 @@
 import React,{useEffect,useState} from 'react';
 import {ActivityIndicator,Platform,View} from 'react-native';
+import {rideSearchLimitMs} from './cloud-api';
 import {authClient} from './auth-client';
 import {useApp} from './context';
 import {isCoordinate,type Coordinate} from './geo';
@@ -42,7 +43,7 @@ export function useShareTaxiPosition(rideId:string|undefined,foreground:boolean)
  },[rideId,foreground]);
 }
 
-export function RideSearchTimer({startedAt}:{startedAt:string}){
+export function RideSearchTimer({startedAt,onExpired}:{startedAt:string;onExpired:()=>void}){
  const t=useText();const {colors}=useTheme();
  const [now,setNow]=useState(Date.now);
  useEffect(()=>{
@@ -50,10 +51,14 @@ export function RideSearchTimer({startedAt}:{startedAt:string}){
   return()=>clearInterval(timer);
  },[]);
  const start=Date.parse(startedAt);
+ const elapsed=Number.isFinite(start)?now-start:0;
+ const expired=elapsed>=rideSearchLimitMs;
+ const checkExpiry=React.useRef(onExpired);checkExpiry.current=onExpired;
+ useEffect(()=>{if(expired)checkExpiry.current()},[expired]);
  const seconds=Number.isFinite(start)?Math.max(0,Math.floor((now-start)/1000)):0;
  return <View style={{flexDirection:'row',alignItems:'center',gap:10}}>
   <ActivityIndicator color={colors.purple}/>
-  <Label large>{t('جارٍ البحث عن تاكسي…','Looking for a taxi…')} {seconds} {t('ثانية','s')}</Label>
+  <Label large>{expired?t('جارٍ التحقق من نتيجة البحث…','Checking the search result…'):t('جارٍ البحث عن تاكسي…','Looking for a taxi…')+' '+seconds+' '+t('ثانية','s')}</Label>
  </View>;
 }
 
