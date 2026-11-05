@@ -3,6 +3,7 @@ import {ActivityIndicator,View} from 'react-native';
 import {cloudCurrentToken,cloudDriverRidePreview,type RidePreview} from './cloud-api';
 import {createRoutingClient,type RoutePlan} from './routing';
 import {routeScheduler} from './route-scheduler';
+import {offerRouteCache} from './offer-route-cache';
 import {distanceMeters,navigationProgress} from './navigation-progress';
 import type {Coordinate} from './geo';
 import {priceForRoute} from './meter';
@@ -20,8 +21,12 @@ export default function DriverOffer({offer,position,disabled,onAccept}:{offer:Ri
  useEffect(()=>{let live=true;const controller=new AbortController();setBusy(true);setError('');setPlan(null);setPickupPlan(null);
   void (async()=>{const token=await cloudCurrentToken();const row=await cloudDriverRidePreview(token,id);if(!live)return;
    const from={latitude:row.pickup_lat,longitude:row.pickup_lng},to={latitude:row.destination_lat,longitude:row.destination_lng};
+   // Always recheck server visibility before reusing a summary.
+   const key=JSON.stringify([owner,id,state.language]);
+   const cached=attempt===0?offerRouteCache.get(key,from,to):null;
+   if(cached){setPlan(cached.trip);setPickupPlan(cached.pickup);return}
    const next=await routeScheduler.run(async()=>{const client=createRoutingClient(process.env.EXPO_PUBLIC_GOOGLE_ROUTES_PROXY||'https://gokosprcqpdvqgahvquk.supabase.co/functions/v1/fare-route');const driver=currentPosition.current;return driver?client.driverOffer(driver,from,to,controller.signal,state.language,token):{trip:await client.route(from,to,controller.signal,state.language,token),pickup:null}},controller.signal);
-   if(live){setPlan(next.trip);setPickupPlan(next.pickup)}
+   if(live){offerRouteCache.set(key,next);setPlan(next.trip);setPickupPlan(next.pickup)}
   })().catch(e=>{if(live)setError((e as {code?:string;kind?:string}).code??(e as {kind?:string}).kind??'network')}).finally(()=>{if(live)setBusy(false)});
   return()=>{live=false;controller.abort()};
  },[id,owner,state.language,attempt]);
@@ -29,9 +34,9 @@ export default function DriverOffer({offer,position,disabled,onAccept}:{offer:Ri
  const pickupLat=plan?.from.latitude,pickupLng=plan?.from.longitude;
  useEffect(()=>{setPickupError('');setPickupBusy(false);if(originLat===undefined||originLng===undefined||pickupLat===undefined||pickupLng===undefined)return;
   if(pickupPlan&&distanceMeters(pickupPlan.from,{latitude:originLat,longitude:originLng})<100&&distanceMeters(pickupPlan.to,{latitude:pickupLat,longitude:pickupLng})<1&&pickupAttempt===0)return;let live=true;const controller=new AbortController();setPickupBusy(true);
-  void cloudCurrentToken().then(token=>routeScheduler.run(()=>createRoutingClient(process.env.EXPO_PUBLIC_GOOGLE_ROUTES_PROXY||'https://gokosprcqpdvqgahvquk.supabase.co/functions/v1/fare-route').route({latitude:originLat,longitude:originLng},{latitude:pickupLat,longitude:pickupLng},controller.signal,state.language,token),controller.signal)).then(next=>{if(live){setPickupBusy(false);setPickupAttempt(0);setPickupPlan(next)}}).catch(()=>{if(live)setPickupError(state.language==='ar'?'تعذر حساب طريق الوصول إلى الراكب.':'Could not find the driving route to pickup.')}).finally(()=>{if(live)setPickupBusy(false)});
+  void cloudCurrentToken().then(token=>routeScheduler.run(()=>createRoutingClient(process.env.EXPO_PUBLIC_GOOGLE_ROUTES_PROXY||'https://gokosprcqpdvqgahvquk.supabase.co/functions/v1/fare-route').route({latitude:originLat,longitude:originLng},{latitude:pickupLat,longitude:pickupLng},controller.signal,state.language,token),controller.signal)).then(next=>{if(live){setPickupBusy(false);setPickupAttempt(0);setPickupPlan(next);if(plan)offerRouteCache.set(JSON.stringify([owner,id,state.language]),{trip:plan,pickup:next})}}).catch(()=>{if(live)setPickupError(state.language==='ar'?'تعذر حساب طريق الوصول إلى الراكب.':'Could not find the driving route to pickup.')}).finally(()=>{if(live)setPickupBusy(false)});
   return()=>{live=false;controller.abort()};
- },[originLat,originLng,pickupLat,pickupLng,state.language,pickupAttempt,pickupPlan]);
+ },[originLat,originLng,pickupLat,pickupLng,state.language,pickupAttempt,pickupPlan,plan,owner,id]);
  const fare=plan?priceForRoute(plan.meters,plan.seconds/60,plan.tariff??null):null;
  const approach=pickupPlan&&position?navigationProgress(pickupPlan,position):null;
  const away=pickupPlan?(approach&&approach.offRouteMeters<=100?approach.remainingMeters:pickupPlan.meters):null;
