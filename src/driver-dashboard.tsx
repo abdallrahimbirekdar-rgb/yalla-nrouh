@@ -4,7 +4,7 @@ import {useApp} from './context';
 import {categories,regions} from './domain';
 import {Button,Icon,Label,useText,useTheme} from './ui';
 
-export function DriverShift({online,region,category,target,disabled,onToggle}:{online:boolean;region:number;category:string;target:boolean|null;disabled:boolean;onToggle:()=>void}){
+export function DriverShift({online,region,category,target,disabled,onToggle,soundReady,soundProblem,onEnableSound}:{online:boolean;region:number;category:string;target:boolean|null;disabled:boolean;onToggle:()=>void;soundReady:boolean;soundProblem:boolean;onEnableSound:()=>void}){
  const {state}=useApp();const t=useText();const {colors,dark}=useTheme();
  const ar=state.language==='ar';
  const accent=online?(dark?'#85dfb1':'#116443'):colors.muted;
@@ -24,6 +24,8 @@ export function DriverShift({online,region,category,target,disabled,onToggle}:{o
    title={target===null?(online?t('إيقاف استقبال الطلبات','Stop receiving requests'):t('تفعيل استقبال الطلبات','Start receiving requests'))
     :target?t('جارٍ تفعيل الاستقبال…','Starting requests…'):t('جارٍ إيقاف الاستقبال…','Stopping requests…')}
    disabled={disabled} onPress={onToggle}/>
+  {online&&!soundReady&&<Button secondary icon="volume-high-outline" title={t('تفعيل صوت الطلبات','Enable request sound')} onPress={onEnableSound}/>}
+  {online&&soundProblem&&<Label muted>{t('تعذّر تشغيل صوت الطلبات. جرّب تفعيله مرة ثانية.','Request sound could not start. Try enabling it again.')}</Label>}
  </View>;
 }
 

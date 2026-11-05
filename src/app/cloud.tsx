@@ -1,4 +1,4 @@
-import React,{useCallback,useEffect,useRef,useState} from 'react';
+import React,{useCallback,useEffect,useMemo,useRef,useState} from 'react';
 import {AppState,View} from 'react-native';
 import {router,useLocalSearchParams} from 'expo-router';
 import {useApp} from '../context';
@@ -11,6 +11,7 @@ import type {RoutePlan} from '../routing';
 import DriverNavigation from '../driver-navigation';
 import {DriverQueueEmpty,DriverQueueHeader,DriverShift} from '../driver-dashboard';
 import {DriverHistory,DriverHistoryBar} from '../driver-history';
+import {useDriverOfferSound} from '../use-driver-offer-sound';
 import {useCurrentPosition} from '../use-current-position';
 import {PassengerTaxiMap,RideSearchTimer,useShareTaxiPosition} from '../taxi-tracking';
 import {useRideRecovery} from '../use-ride-recovery';
@@ -139,7 +140,9 @@ export default function Rides(){
  const status=(value:string)=>({requested:t('بانتظار السائق','Waiting for driver'),accepted:t('السائق في الطريق','Driver is on the way'),arrived:t('وصل السائق','Driver arrived'),riding:t('الرحلة جارية','Ride in progress'),completed:t('مكتملة','Completed'),cancelled:t('ملغاة','Cancelled')} as Record<string,string>)[value]??value;
  const mine=rides.filter(r=>r.passenger_id===userId);
  const hiddenOffers=declined?.owner===userId?declined?.ids:undefined;
- const availableOffers=offers.filter(offer=>(offer.expiresOnDevice??0)>offerClock&&!hiddenOffers?.includes(offer.ride_id));
+ const audibleOffers=useMemo(()=>offers.filter(offer=>!hiddenOffers?.includes(offer.ride_id)),[offers,hiddenOffers]);
+ const sound=useDriverOfferSound(userId,Boolean(driverMode&&auth.rolesReady&&driver?.approved&&driver.online&&foreground&&!loading&&!busy&&!currentDriverRide&&!recovery.checking),audibleOffers);
+ const availableOffers=audibleOffers.filter(offer=>(offer.expiresOnDevice??0)>offerClock);
  const visibleOffers=availableOffers.slice(0,offerLimit);
  const selectedOffer=visibleOffers.some(offer=>offer.ride_id===focusedOffer)?focusedOffer:visibleOffers[0]?.ride_id;
  function decline(id:string){
@@ -158,6 +161,7 @@ export default function Rides(){
  async function toggleWork(){
   if(!driver?.approved||busy||workTarget!==null||recovery.checking)return;
   const online=!driver.online;
+  if(online)void sound.unlock();
   setWorkTarget(online);
   try{
    await run(async token=>{if(!await cloudSetDriverOnline(token,online))throw Error('not_allowed')});
@@ -204,7 +208,8 @@ export default function Rides(){
   {driverMode&&historyKind&&userId&&<DriverHistory key={userId+historyKind} kind={historyKind} owner={userId} onClose={closeHistory}/>}
   {driverMode&&driver?.approved&&!currentDriverRide&&<DriverShift
    online={driver.online} region={driver.region} category={driver.category} target={workTarget}
-   disabled={busy||workTarget!==null||recovery.checking} onToggle={()=>void toggleWork()}/>}
+   disabled={busy||workTarget!==null||recovery.checking} onToggle={()=>void toggleWork()}
+   soundReady={sound.ready} soundProblem={sound.problem} onEnableSound={()=>void sound.unlock()}/>}
   {currentDriverRide&&renderDriverRide(currentDriverRide)}
   {driverMode&&recovery.id&&!currentDriverRide&&<Panel>
    <Label>{busy||recovery.checking?t('جارٍ التحقق من قبول الطلب…','Checking request acceptance…'):t('لم يتأكد قبول الطلب. يمكنك المحاولة مجددًا إذا ظل متاحًا.','Acceptance is unconfirmed. You can retry if the request is still available.')}</Label>
