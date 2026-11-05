@@ -18,15 +18,29 @@ export default function SiteShell(){
  const [url,setUrl]=useState(()=>SITE_URL+'?app=android&launch='+Date.now());
  const [failed,setFailed]=useState(false),[loading,setLoading]=useState(true),[available,setAvailable]=useState(false),[notice,setNotice]=useState('');
  const permissionRequest=useRef<Promise<Location.LocationPermissionResponse>|null>(null);
+ // Ask Android for foreground location once at first launch. The embedded
+ // website intentionally hides its own permission dialog, so without this
+ // step a fresh installation can never auto-centre until a manual tap.
+ const requestLaunchPermission=async()=>{
+  let permission=await Location.getForegroundPermissionsAsync();
+  if(!permission.granted&&permission.canAskAgain){
+   if(!permissionRequest.current)permissionRequest.current=Location.requestForegroundPermissionsAsync().finally(()=>{permissionRequest.current=null});
+   permission=await permissionRequest.current;
+  }
+  if(alive.current){
+   web.current?.injectJavaScript(`window.__YALLA_NATIVE_LOCATION_GRANTED__=${permission.granted};window.dispatchEvent(new CustomEvent('yalla:native-location-permission',{detail:{granted:${permission.granted}}}));true;`);
+  }
+  return permission;
+ };
  const gpsJobs=useRef<ReturnType<typeof createPositionJobs<Location.LocationObject>>|null>(null);
  const gpsAbort=useRef(new AbortController());
- if(!gpsJobs.current)gpsJobs.current=createPositionJobs(precise=>foregroundFix<Location.LocationObject>((next,error)=>Location.watchPositionAsync({accuracy:Location.Accuracy.High,timeInterval:1000,distanceInterval:0,mayShowUserSettingsDialog:false},next,error),fix=>Number.isFinite(fix.coords.latitude)&&Number.isFinite(fix.coords.longitude)&&fix.timestamp>=Date.now()-30000&&typeof fix.coords.accuracy==='number'&&fix.coords.accuracy<=(precise?50:250),gpsAbort.current.signal),21000);
+ if(!gpsJobs.current)gpsJobs.current=createPositionJobs(precise=>foregroundFix<Location.LocationObject>((next,error)=>Location.watchPositionAsync({accuracy:precise?Location.Accuracy.High:Location.Accuracy.Balanced,timeInterval:1000,distanceInterval:0,mayShowUserSettingsDialog:false},next,error),fix=>Number.isFinite(fix.coords.latitude)&&Number.isFinite(fix.coords.longitude)&&fix.timestamp>=Date.now()-30000&&typeof fix.coords.accuracy==='number'&&fix.coords.accuracy<=(precise?50:250),gpsAbort.current.signal),21000);
  const safe=useRef(false),canGoBack=useRef(false),loadedVersion=useRef<string|null>(null),checking=useRef(false),alive=useRef(true),checkAbort=useRef<AbortController|null>(null);
  const navigationTimer=useRef<ReturnType<typeof setTimeout>|null>(null);
  const finishLoading=()=>{if(navigationTimer.current)clearTimeout(navigationTimer.current);navigationTimer.current=null;setLoading(false)};
  const gpsStatus=async(stage:string)=>{const [permission,providers]=await Promise.all([Location.getForegroundPermissionsAsync(),Location.getProviderStatusAsync()]);const value=JSON.stringify({version:Constants.expoConfig?.version,stage,permission:permission.granted,precise:permission.android?.accuracy!=='coarse',services:providers.locationServicesEnabled,gps:providers.gpsAvailable,network:providers.networkAvailable});if(alive.current)web.current?.injectJavaScript(`window.__YALLA_GPS_STATUS__=${value};window.dispatchEvent(new CustomEvent('yalla:gps-status',{detail:${value}}));true;`);return {permission,providers}};
  function refresh(){if(!safe.current){setNotice(t('احفظ بياناتك وأكمل الرحلة، ثم حدّث العرض من الصفحة الرئيسية.','Save your work and finish the ride, then refresh from the home page.'));return}setNotice('');setAvailable(false);setFailed(false);setLoading(true);safe.current=false;setUrl(SITE_URL+'?app=android&launch='+Date.now())}
- useEffect(()=>{alive.current=true;return()=>{alive.current=false;gpsAbort.current.abort();checkAbort.current?.abort();if(navigationTimer.current)clearTimeout(navigationTimer.current)}},[]);
+ useEffect(()=>{alive.current=true;void requestLaunchPermission().catch(()=>{});return()=>{alive.current=false;gpsAbort.current.abort();checkAbort.current?.abort();if(navigationTimer.current)clearTimeout(navigationTimer.current)}},[]);
  useEffect(()=>{
   const listener=BackHandler.addEventListener('hardwareBackPress',()=>{if(failed||loading)return false;web.current?.injectJavaScript("if(window.dispatchEvent(new CustomEvent('yalla:native-back',{cancelable:true}))&&window.dispatchEvent(new CustomEvent('yalla:native-back-default',{cancelable:true}))){window.ReactNativeWebView.postMessage(JSON.stringify({type:'back-default'}));}true;");return true});
   return()=>listener.remove();
@@ -69,7 +83,7 @@ export default function SiteShell(){
       try{
        if(AppState.currentState==='background'){send(null,'position');return}
        let permission=await Location.getForegroundPermissionsAsync();
-       if(!permission.granted&&message.askPermission){if(!permissionRequest.current)permissionRequest.current=Location.requestForegroundPermissionsAsync().finally(()=>{permissionRequest.current=null});permission=await permissionRequest.current;}
+       if(!permission.granted&&message.askPermission){permission=await requestLaunchPermission();}
        if(!permission.granted){send(null,'permission');return}
        let providers=await Location.getProviderStatusAsync();
        // Permission and Android's high-accuracy service are separate settings.
