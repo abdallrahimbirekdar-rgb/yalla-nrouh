@@ -137,12 +137,11 @@ export default function Rides(){
   if(driver)void run(async token=>{if(!await cloudSetDriverOnline(token,!driver.online))throw Error('not_allowed')});
  }
  const renderRide=(ride:CloudRide)=><Panel key={ride.id}>
-   {driverMode&&live(ride)&&<Label large>{t('الرحلة الحالية','Current ride')}</Label>}
    <View style={{alignSelf:'flex-start',borderRadius:20,paddingHorizontal:12,paddingVertical:4,backgroundColor:colors.selected}}><Label muted>{status(ride.status)}</Label></View>
-   {!driverMode&&ride.status==='requested'&&<RideSearchTimer startedAt={ride.updated_at??ride.created_at}/>}
-   {!driverMode&&ride.status==='accepted'&&<PassengerTaxiMap key={ride.driver_id} rideId={ride.id} pickup={{latitude:ride.pickup_lat,longitude:ride.pickup_lng}}/>}
+   {ride.status==='requested'&&<RideSearchTimer startedAt={ride.updated_at??ride.created_at}/>}
+   {ride.status==='accepted'&&<PassengerTaxiMap key={ride.driver_id} rideId={ride.id} pickup={{latitude:ride.pickup_lat,longitude:ride.pickup_lng}}/>}
    <Label>{ride.pickup}</Label><Icon name="arrow-down-outline" size={18}/><Label>{ride.destination}</Label><Label muted>{new Date(ride.created_at).toLocaleString(state.language==='ar'?'ar':'en')}</Label>
-   {!driverMode&&live(ride)&&<>
+   {live(ride)&&<>
     {ride.status==='arrived'&&!ride.pickup_confirmed_at&&<>
      <Label muted>{t('تأكد من السائق والسيارة أولًا، ثم أكّد الركوب من حسابك. لا يلزم إعطاء أي رمز.','Check the driver and car first, then confirm pickup in your account. No code needed.')}</Label>
      <Button title={t('تأكيد ركوب السيارة','Confirm pickup')} disabled={busy} onPress={()=>void run(async token=>{if(!await cloudConfirmPickup(token,ride.id))throw Error('not_allowed')},t('تم تأكيد الركوب. يمكن للسائق بدء الرحلة الآن.','Pickup confirmed. The driver can start the ride.'))}/>
@@ -150,21 +149,33 @@ export default function Rides(){
     {ride.status==='arrived'&&ride.pickup_confirmed_at&&<Label muted>{t('تم تأكيد الركوب. بانتظار بدء الرحلة من السائق.','Pickup confirmed. Waiting for driver to start the ride.')}</Label>}
     {ride.status!=='riding'&&<Button secondary title={t('إلغاء الطلب','Cancel request')} disabled={busy} onPress={()=>void run(async token=>{if(!await cloudCancelRide(token,ride.id))throw Error('not_allowed')},t('تم إلغاء الطلب.','Request cancelled.'))}/>}
    </>}
-   {driverMode&&['accepted','arrived','riding'].includes(ride.status)&&<>
-    {ride.status==='accepted'&&<Button title={t('وصلت إلى الزبون','I arrived at pickup')} disabled={busy} onPress={()=>void run(async token=>{if(await cloudAdvanceRide(token,ride.id,'arrived')!=='arrived')throw Error('not_allowed')})}/>}
-    {ride.status!=='arrived'&&<DriverNavigation devicePosition={gps.camera?.point} deviceRevision={gps.camera?.revision} key={ride.id+'-'+ride.status} initialPlan={acceptedPlans?.rideId===ride.id?(ride.status==='riding'?acceptedPlans.trip:acceptedPlans.pickup):null} to={ride.status==='riding'?{latitude:ride.destination_lat,longitude:ride.destination_lng}:{latitude:ride.pickup_lat,longitude:ride.pickup_lng}} title={ride.status==='riding'?t('الملاحة إلى وجهة الراكب','Navigation to destination'):t('الملاحة إلى الراكب','Navigation to pickup')}/>}
-    {ride.status==='arrived'&&<>
-     {!ride.pickup_confirmed_at&&<Label muted>{t('بانتظار تأكيد الراكب للركوب من حسابه. اضغط تحديث الرحلات بعد التأكيد.','Waiting for passenger confirmation. Refresh rides after pickup is confirmed.')}</Label>}
-     <Button title={ride.pickup_confirmed_at?t('بدء الرحلة','Start ride'):t('بانتظار تأكيد الراكب','Waiting for passenger')} disabled={busy||!ride.pickup_confirmed_at} onPress={()=>void run(async token=>{const result=await cloudAdvanceRide(token,ride.id,'riding');if(result!=='riding')throw Error(result)})}/>
-    </>}
-    {ride.status==='riding'?<Button title={t('إنهاء الرحلة','Finish ride')} disabled={busy} onPress={()=>void run(async token=>{if(await cloudAdvanceRide(token,ride.id,'completed')!=='completed')throw Error('not_allowed')})}/>:<Button secondary title={t('إعادة الطلب للبحث عن سائق','Release request to other drivers')} disabled={busy} onPress={()=>void run(async token=>{if(!await cloudReleaseRide(token,ride.id))throw Error('not_allowed')})}/>}
-   </>}
   </Panel>;
+ function renderDriverRide(ride:CloudRide){
+  const pickingUp=ride.status==='accepted';
+  const atPickup=ride.status==='arrived';
+  const action=atPickup
+   ? <Button prominent title={ride.pickup_confirmed_at?t('بدء الرحلة','Start ride'):t('بانتظار تأكيد الزبون','Waiting for passenger')} disabled={busy||!ride.pickup_confirmed_at} onPress={()=>void run(async token=>{const result=await cloudAdvanceRide(token,ride.id,'riding');if(result!=='riding')throw Error(result)})}/>
+   : pickingUp
+    ? <Button prominent icon="location-outline" title={t('وصلت إلى الزبون','I arrived at pickup')} disabled={busy} onPress={()=>void run(async token=>{if(await cloudAdvanceRide(token,ride.id,'arrived')!=='arrived')throw Error('not_allowed')})}/>
+    : <Button prominent icon="checkmark-circle-outline" title={t('إنهاء الرحلة','Finish ride')} disabled={busy} onPress={()=>void run(async token=>{if(await cloudAdvanceRide(token,ride.id,'completed')!=='completed')throw Error('not_allowed')})}/>;
+  return <View key={ride.id} style={{gap:12}}>
+   {atPickup
+    ? <Panel><Label display>{t('عند الزبون','At pickup')}</Label>{action}<Label>{ride.pickup}</Label></Panel>
+    : <DriverNavigation key={ride.id+'-'+ride.status}
+       title={pickingUp?t('إلى الزبون','To pickup'):t('إلى الوجهة','To destination')}
+       targetLabel={pickingUp?ride.pickup:ride.destination}
+       action={action}
+       devicePosition={gps.camera?.point} deviceRevision={gps.camera?.revision}
+       initialPlan={acceptedPlans?.rideId===ride.id?(pickingUp?acceptedPlans.pickup:acceptedPlans.trip):null}
+       to={pickingUp?{latitude:ride.pickup_lat,longitude:ride.pickup_lng}:{latitude:ride.destination_lat,longitude:ride.destination_lng}}/>}
+   {ride.status!=='riding'&&<Button secondary title={t('إعادة الطلب للبحث عن سائق','Release request to other drivers')} disabled={busy} onPress={()=>void run(async token=>{if(!await cloudReleaseRide(token,ride.id))throw Error('not_allowed')})}/>}
+  </View>;
+ }
  if(!auth.ready||auth.session&&!auth.rolesReady)return <Page title={t('رحلاتي','My rides')}><Label>{t('جارٍ تحميل الحساب…','Loading account…')}</Label>{auth.problem&&<Button title={t('إعادة المحاولة','Try again')} onPress={()=>void auth.retry()}/>}</Page>;
  if(!auth.session)return <Page title={driverMode?t('وضع السائق','Driver mode'):t('رحلاتي','My rides')}><Panel><Icon name="person-circle-outline" size={42}/><Label>{t('سجّل الدخول لعرض رحلاتك أو العمل كسائق.','Sign in to view your rides or use driver mode.')}</Label><Button title={t('تسجيل الدخول','Sign in')} onPress={()=>router.push('/account')}/></Panel></Page>;
- return <Page title={driverMode?t('وضع السائق','Driver mode'):t('رحلاتي','My rides')} footer={driverMode&&userId?<DriverHistoryBar onOpen={setHistoryKind}/>:undefined}>
+ return <Page title={driverMode?t('وضع السائق','Driver mode'):t('رحلاتي','My rides')} compact={driverMode} footer={driverMode&&userId?<DriverHistoryBar onOpen={setHistoryKind}/>:undefined}>
   {driverMode&&historyKind&&userId&&<DriverHistory key={userId+historyKind} kind={historyKind} owner={userId} onClose={closeHistory}/>}
-  {currentDriverRide&&renderRide(currentDriverRide)}
+  {currentDriverRide&&renderDriverRide(currentDriverRide)}
   {driverMode&&recovery.id&&!currentDriverRide&&<Panel>
    <Label>{busy||recovery.checking?t('جارٍ التحقق من قبول الطلب…','Checking request acceptance…'):t('لم يتأكد قبول الطلب. يمكنك المحاولة مجددًا إذا ظل متاحًا.','Acceptance is unconfirmed. You can retry if the request is still available.')}</Label>
    {!busy&&!recovery.checking&&<Button secondary title={t('العودة للطلبات المتاحة','Back to available requests')} onPress={()=>{recovery.clear();void refresh().catch(()=>{})}}/>}
@@ -175,7 +186,7 @@ export default function Rides(){
     ? driver.online
      ? <>
       <View style={{flexDirection:state.language==='ar'?'row-reverse':'row',gap:8,alignItems:'center',justifyContent:'space-between',flexWrap:'wrap'}}>
-       <Label large>{t('الطلبات المتاحة','Available requests')} ({availableOffers.length})</Label>
+       <Label large>{t('الطلبات','Requests')} ({availableOffers.length})</Label>
        <Button secondary title={t('إيقاف الاستقبال','Go offline')} disabled={busy||recovery.checking} onPress={toggleWork}/>
       </View>
       {!recovery.checking&&<>
@@ -186,7 +197,7 @@ export default function Rides(){
        {!gps.camera&&visibleOffers.length>0&&<Button secondary icon="locate" title={gps.busy?t('جارٍ تحديد الموقع…','Finding location…'):t('تحديد موقعي لحساب طريق الزبون','Find my location to calculate pickup route')} disabled={gps.busy} onPress={()=>void gps.locate()}/>}
       </>}
      </>
-     : <Panel><Label large>{t('خارج العمل','Off duty')}</Label><Label muted>{t('فعّل استقبال الطلبات لما تكون جاهز للعمل.','Turn on incoming requests when you’re ready to work.')}</Label><Button icon="power-outline" title={t('بدء استقبال الطلبات','Start receiving requests')} disabled={busy||recovery.checking} onPress={toggleWork}/></Panel>
+     : <Panel><Label large>{t('خارج العمل','Off duty')}</Label><Label muted>{t('فعّل استقبال الطلبات لما تكون جاهز للعمل.','Turn on incoming requests when you’re ready to work.')}</Label><Button prominent icon="power-outline" title={t('بدء استقبال الطلبات','Start receiving requests')} disabled={busy||recovery.checking} onPress={toggleWork}/></Panel>
     : loading&&!driver
      ? <Panel><Label>{t('جارٍ تحميل حالة السائق…','Loading driver status…')}</Label></Panel>
      : <Panel>

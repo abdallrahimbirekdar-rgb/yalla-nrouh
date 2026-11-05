@@ -12,7 +12,7 @@ import {categories,regions} from './domain';
 import {useApp} from './context';
 import {useAuth} from './auth';
 import MapCanvas from './map/MapCanvas';
-import {Button,Icon,Label,Panel,useText,useTheme} from './ui';
+import {Button,Label,Panel,useText,useTheme} from './ui';
 export default function DriverOffer({offer,position,disabled,expanded,onExpand,onDecline,onAccept}:{offer:RidePreview;position?:Coordinate;disabled:boolean;expanded:boolean;onExpand:()=>void;onDecline:()=>void;onAccept:(routes:{trip:RoutePlan|null;pickup:RoutePlan|null})=>void}){
  const {state}=useApp();const auth=useAuth();const t=useText();const {colors}=useTheme();
  const [plan,setPlan]=useState<RoutePlan|null>(null),[busy,setBusy]=useState(true),[error,setError]=useState(''),[attempt,setAttempt]=useState(0);
@@ -54,25 +54,27 @@ export default function DriverOffer({offer,position,disabled,expanded,onExpand,o
  const fare=quotedFare??(plan?priceForRoute(plan.meters,plan.seconds/60,plan.tariff??null):null);
  const approach=pickupPlan&&position?navigationProgress(pickupPlan,position):null;
  const away=pickupPlan?(approach&&approach.offRouteMeters<=100?approach.remainingMeters:pickupPlan.meters):null;
- return <Panel><View style={{flexDirection:'row',justifyContent:'space-between',alignItems:'center'}}><Label large>{t('طلب رحلة','Ride request')}</Label><Icon name="car-sport-outline" color={colors.purple}/></View>
-  <Label muted>{regions[offer.region]?.[state.language==='ar'?0:1]} · {categories.find(c=>c.id===offer.category)?.[state.language]??offer.category}</Label>
-  <Label large>{t('الأجرة التقديرية','Estimated fare')}{' · '}{fare===null?'—':fare.toLocaleString('en-US')+' '+t('ل.س','SYP')}</Label>
-  {!expanded&&<Button secondary icon="location-outline" title={t('عرض مكان الزبون والطريق','Show pickup and route')} onPress={onExpand}/>}
-  <View style={{flexDirection:state.language==='ar'?'row-reverse':'row',gap:8}}>
-   <View style={{flex:1}}><Button icon="checkmark-circle-outline" title={t('قبول الطلب','Accept')} disabled={disabled||error==='ride_unavailable'} onPress={()=>onAccept({trip:plan,pickup:pickupPlan})}/></View>
-   <View style={{flex:1}}><Button secondary title={t('رفض الطلب','Decline')} disabled={disabled} onPress={onDecline}/></View>
+ const eta=pickupPlan?(approach&&approach.offRouteMeters<=100?approach.remainingSeconds:pickupPlan.seconds):null;
+ const row={flexDirection:state.language==='ar'?'row-reverse' as const:'row' as const,gap:8};
+ const metric={flex:1,paddingHorizontal:10,paddingVertical:8,borderRadius:12,backgroundColor:colors.selected};
+ return <Panel>
+  <Label>{regions[offer.region]?.[state.language==='ar'?0:1]} · {categories.find(c=>c.id===offer.category)?.[state.language]??offer.category}</Label>
+  <View style={row}>
+   <View style={metric}><Label>{t('الأجرة التقديرية','Estimated fare')}</Label><Label display>{fare===null?'—':fare.toLocaleString('en-US')}</Label>{fare!==null&&<Label>{t('ل.س','SYP')}</Label>}</View>
+   <View style={metric}><Label>{t('للزبون','To pickup')}</Label><Label display>{away===null?'—':(away/1000).toFixed(1)}</Label><Label>{away!==null?t('كم','km')+(eta===null?'':' · '+Math.ceil(eta/60)+' '+t('د','min')):expanded&&pickupBusy?t('جارٍ الحساب','Calculating'):t('مسافة القيادة','Driving distance')}</Label></View>
   </View>
+  <View style={row}>
+   <View style={{flex:1.25}}><Button prominent icon="checkmark-circle-outline" title={t('قبول','Accept')} disabled={disabled||error==='ride_unavailable'} onPress={()=>onAccept({trip:plan,pickup:pickupPlan})}/></View>
+   <View style={{flex:1}}><Button prominent secondary title={t('رفض','Decline')} disabled={disabled} onPress={onDecline}/></View>
+  </View>
+  {!expanded&&<Button secondary icon="location-outline" title={t('عرض مكان الزبون','Show pickup location')} onPress={onExpand}/>}
   {expanded&&<>
+  {plan&&<Label>{t('رحلة الزبون','Passenger trip')} · {(plan.meters/1000).toFixed(1)} {t('كم','km')} · {Math.ceil(plan.seconds/60)} {t('دقيقة','min')}</Label>}
   {pickupPoint&&<>
    <Label>{t('مكان الزبون','Pickup location')}</Label>
-   <View style={{height:190,borderRadius:14,overflow:'hidden'}}><MapCanvas compact readOnly minMapHeight={180} point={pickupPoint} route={plan?.points} onChange={()=>{}}/></View>
+   <View style={{height:175,borderRadius:14,overflow:'hidden'}}><MapCanvas compact readOnly minMapHeight={175} point={pickupPoint} route={plan?.points} onChange={()=>{}}/></View>
    {plan&&<Label muted>{t('أ: مكان الزبون · ب: الوجهة','A: pickup · B: destination')} · Google Maps</Label>}
   </>}
-  <View style={{flexDirection:'row',flexWrap:'wrap',gap:10}}>
-   <View style={{flex:1,minWidth:120,padding:12,backgroundColor:colors.selected,borderRadius:12,gap:4}}><Label muted>{t('طريقك إلى الزبون','Driving distance to the customer')}</Label><Label>{pickupBusy?t('جارٍ الحساب…','Calculating…'):away===null?'—':(away/1000).toFixed(1)+' '+t('كم','km')}</Label>{pickupPlan&&<Label muted>{Math.ceil((approach?.remainingSeconds??pickupPlan.seconds)/60)} {t('دقيقة تقريبًا','min, estimated')}</Label>}</View>
-   <View style={{flex:1,minWidth:120,padding:12,backgroundColor:colors.selected,borderRadius:12,gap:4}}><Label muted>{t('مسافة الرحلة','Trip distance')}</Label><Label>{plan?(plan.meters/1000).toFixed(1)+' '+t('كم','km'):'—'}</Label></View>
-   <View style={{flex:1,minWidth:120,padding:12,backgroundColor:colors.selected,borderRadius:12,gap:4}}><Label muted>{t('مدة الرحلة','Trip time')}</Label><Label>{plan?Math.ceil(plan.seconds/60)+' '+t('دقيقة','min'):'—'}</Label></View>
-  </View>
   <Label muted>{!position?t('حدّث موقعك لحساب طريق الوصول إلى الراكب.','Update your location to calculate the driving route to pickup.'):t('المسافتان حسب طريق القيادة في Google. الأجرة تخص رحلة الراكب ولا تشمل وصولك إليه.','Both distances use Google driving routes. The fare covers the passenger trip and excludes your drive to pickup.')}</Label>{!!pickupError&&<><Label muted>{pickupError}</Label><Button secondary title={t('إعادة حساب طريق الانطلاق','Retry driving route to pickup')} onPress={()=>setPickupAttempt(value=>value+1)}/></>}
   {busy&&<View style={{alignItems:'center',gap:8,padding:16}}><ActivityIndicator color={colors.purple}/><Label muted>{t('جارٍ تحميل تفاصيل الطريق…','Loading route details…')}</Label></View>}
   {!!error&&<><Label muted>{error==='ride_unavailable'?t('هذا الطلب لم يعد متاحًا. حدّث الطلبات.','This request is no longer available. Refresh requests.'):error==='busy'?t('بلغت خدمة الخرائط حد المحاولات. يمكنك إعادة حساب الملخص لاحقًا.','The route limit was reached. Try the summary again later.'):t('تعذر حساب الملخص الآن. أعد المحاولة.','Could not load the summary. Try again.')}</Label><Button secondary title={t('إعادة حساب الملخص','Retry summary')} onPress={()=>setAttempt(value=>value+1)}/></>}
