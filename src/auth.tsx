@@ -35,7 +35,7 @@ export function AuthProvider({children}:{children:React.ReactNode}){
  },[accept,retry]);
  useEffect(()=>{
   setAdmin(false);setDriver(false);setRolesReady(false);if(!accessToken){setCheckingAdmin(false);setRolesReady(true);return}let active=true;setCheckingAdmin(true);
-  void Promise.all([cloudIsAdmin(accessToken),cloudMyDriver(accessToken)]).then(([staff,account])=>{if(active){setAdmin(staff);setDriver(account?.approved===true);setRolesReady(true)}}).catch(()=>{if(active)setProblem('admin_unavailable')}).finally(()=>{if(active)setCheckingAdmin(false)});
+  void Promise.all([cloudIsAdmin(accessToken),cloudMyDriver(accessToken)]).then(([staff,account])=>{if(active){setAdmin(staff);setDriver(!staff&&account?.approved===true);setRolesReady(true)}}).catch(()=>{if(active)setProblem('admin_unavailable')}).finally(()=>{if(active)setCheckingAdmin(false)});
   return()=>{active=false};
  },[accessToken,userId,roleAttempt]);
  const value=useMemo<AuthValue>(()=>({session,ready,admin,checkingAdmin,driver,rolesReady,recovery,problem,retry,
