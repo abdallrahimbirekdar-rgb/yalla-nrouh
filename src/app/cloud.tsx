@@ -60,7 +60,7 @@ export default function Rides(){
     {ride.status==='arrived'&&<>
      {!ride.pickup_confirmed_at&&<Label muted>{t('بانتظار تأكيد الراكب للركوب من حسابه. اضغط تحديث الرحلات بعد التأكيد.','Waiting for passenger confirmation. Refresh rides after pickup is confirmed.')}</Label>}
      <Button title={ride.pickup_confirmed_at?t('بدء الرحلة','Start ride'):t('بانتظار تأكيد الراكب','Waiting for passenger')} disabled={busy||!ride.pickup_confirmed_at} onPress={()=>void run(async token=>{const result=await cloudAdvanceRide(token,ride.id,'riding');if(result!=='riding')throw Error(result)})}/>
-    </>
+    </>}
     {ride.status==='riding'?<Button title={t('إنهاء الرحلة','Finish ride')} disabled={busy} onPress={()=>void run(async token=>{if(await cloudAdvanceRide(token,ride.id,'completed')!=='completed')throw Error('not_allowed')})}/>:<Button secondary title={t('إعادة الطلب للبحث عن سائق','Release request to other drivers')} disabled={busy} onPress={()=>void run(async token=>{if(!await cloudReleaseRide(token,ride.id))throw Error('not_allowed')})}/>}
    </>}
   </Panel>)}
