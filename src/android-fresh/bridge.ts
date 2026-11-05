@@ -1,0 +1,66 @@
+// Standalone, typed bridge for the rebuilt Android host.
+// Never execute strings received from the website; only parse a small JSON protocol.
+export const SITE='https://abdallrahimbirekdar-rgb.github.io/yalla-nrouh/';
+export type WebMessage=
+ |{type:'bootstrap';id:string;version:string|null}
+ |{type:'location';id:string;askPermission:boolean;track:boolean}
+ |{type:'location-settings';id:string}
+ |{type:'alerts-enable';id:string}
+ |{type:'notify';id:string;title:string;body:string}
+ |{type:'status';safeToReload:boolean;canGoBack:boolean;language?:'ar'|'en';theme?:'system'|'light'|'dark'}
+ |{type:'refresh'}
+ |{type:'back-default'};
+const idOK=(v:unknown):v is string=>typeof v==='string'&&/^[a-z0-9-]{1,80}$/i.test(v);
+export function trustedSite(value:string):boolean{
+ try{const u=new URL(value);return u.origin==='https://abdallrahimbirekdar-rgb.github.io'
+ &&!u.username&&!u.password&&(u.pathname==='/yalla-nrouh'||u.pathname.startsWith('/yalla-nrouh/'))}
+ catch{return false}
+}
+export function externalTarget(value:string):boolean{
+ try{return ['https:','http:','tel:','mailto:','sms:','geo:','whatsapp:'].includes(new URL(value).protocol)}
+ catch{return false}
+}
+export function readWebMessage(raw:string):WebMessage|null{
+ if(raw.length>4096)return null;
+ try{
+  const v=JSON.parse(raw) as Record<string,unknown>;
+  if(!v||typeof v!=='object')return null;
+  if(v.type==='bootstrap'&&idOK(v.id)&&typeof v.needsSavedState==='boolean')
+   return {type:'bootstrap',id:v.id,version:typeof v.version==='string'?v.version:null};
+  if(v.type==='location'&&idOK(v.id)&&typeof v.askPermission==='boolean'
+    &&(v.track===undefined||typeof v.track==='boolean'))
+   return {type:'location',id:v.id,askPermission:v.askPermission,track:v.track===true};
+  if(v.type==='location-settings'&&idOK(v.id))return {type:'location-settings',id:v.id};
+  if(v.type==='alerts-enable'&&idOK(v.id))return {type:'alerts-enable',id:v.id};
+  if(v.type==='notify'&&idOK(v.id)&&typeof v.title==='string'&&v.title.length<=200&&typeof v.body==='string'&&v.body.length<=1000)
+   return {type:'notify',id:v.id,title:v.title,body:v.body};
+  if(v.type==='status'&&typeof v.safeToReload==='boolean'&&typeof v.canGoBack==='boolean')
+   return {type:'status',safeToReload:v.safeToReload,canGoBack:v.canGoBack,
+     ...((v.language==='ar'||v.language==='en')?{language:v.language}:{}),
+     ...((v.theme==='system'||v.theme==='light'||v.theme==='dark')?{theme:v.theme}:{})};
+  if(v.type==='refresh')return {type:'refresh'};
+  if(v.type==='back-default')return {type:'back-default'};
+ }catch{}
+ return null;
+}
+const js=(value:unknown)=>JSON.stringify(value).replace(/</g,'\\u003c');
+export function eventScript(name:string,detail:unknown):string{
+ return 'window.dispatchEvent(new CustomEvent('+js(name)+',{detail:'+js(detail)+'}));true;';
+}
+export function bootstrapScript(id:string,granted:boolean):string{
+ return 'window.__YALLA_NATIVE_LOCATION_GRANTED__='+js(granted)+';'
+  +eventScript('yalla:native-bootstrap',{id,savedState:null,locationGranted:granted})
+  +eventScript('yalla:native-location-permission',{granted});
+}
+export type PositionPoint={latitude:number;longitude:number};
+export type PositionResponse={
+ id:string;point:PositionPoint|null;
+ error?:'permission'|'accuracy'|'services'|'position'|'timeout';
+ fix?:{accuracy:number;time:number};
+};
+export function positionScript(response:PositionResponse):string{
+ return eventScript('yalla:native-position',response);
+}
+export function diagnosticScript(value:unknown):string{
+ return 'window.__YALLA_GPS_STATUS__='+js(value)+';'+eventScript('yalla:gps-status',value);
+}

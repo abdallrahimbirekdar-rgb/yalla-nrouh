@@ -1,1 +1,1 @@
-export {default} from '../site-shell';
+export {default} from '../android-fresh/App';
