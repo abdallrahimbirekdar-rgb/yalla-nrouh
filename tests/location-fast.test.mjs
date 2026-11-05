@@ -155,3 +155,16 @@ test('native autolocation survives event before home page mounts',async()=>withL
  controller.abort();await native;
  assert.deepEqual(position.recentWebPosition(),host.__YALLA_NATIVE_AUTOFIX__.point);
 }));
+
+
+test('cancelled Android fallback cannot move a newer screen when browser GPS replies late',t=>withLocationBrowser({
+ geolocation:{getCurrentPosition:success=>{reply=success}}
+},async host=>{
+ t.mock.timers.enable({apis:['setTimeout']});host.__YALLA_NATIVE_LOCATION_GRANTED__=true;host.ReactNativeWebView={postMessage:()=>{}};
+ const points=[];host.addEventListener('yalla:location-ready',e=>points.push(e.detail));
+ const controller=new AbortController();const pending=siteCurrentPosition(false,controller.signal);const rejected=assert.rejects(pending,e=>e.code==='position');
+ t.mock.timers.tick(1500);for(let i=0;i<5;i++)await Promise.resolve();
+ assert.equal(typeof reply,'function');controller.abort();reply({coords:{latitude:51.5,longitude:7.2,accuracy:20},timestamp:Date.now()});
+ await rejected;assert.deepEqual(points,[]);
+}));
+let reply;

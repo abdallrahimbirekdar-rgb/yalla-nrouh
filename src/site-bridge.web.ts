@@ -49,10 +49,11 @@ export function nativeCurrentPosition(askPermission:boolean,signal?:AbortSignal,
   };
   const cleanup=()=>{clearTimeout(timer);window.removeEventListener('yalla:native-position',finish);signal?.removeEventListener('abort',abort)};
   const abort=()=>{
+   if(latestNativeGpsId===id)latestNativeGpsId=null;
    try{bridge.postMessage(JSON.stringify({type:'location-cancel',id}))}catch{}
    cleanup();resolve({point:null,error:'unsupported'});
   };
-  const timer=setTimeout(()=>{try{bridge.postMessage(JSON.stringify({type:'location-cancel',id}))}catch{}cleanup();resolve({point:null,error:'timeout'})},askPermission?60000:25000);
+  const timer=setTimeout(()=>{if(latestNativeGpsId===id)latestNativeGpsId=null;try{bridge.postMessage(JSON.stringify({type:'location-cancel',id}))}catch{}cleanup();resolve({point:null,error:'timeout'})},askPermission?60000:25000);
   window.addEventListener('yalla:native-position',finish);
   if(signal?.aborted){abort();return}
   signal?.addEventListener('abort',abort,{once:true});
@@ -98,6 +99,7 @@ export async function siteCurrentPosition(askPermission:boolean,signal?:AbortSig
      }),
      getWebPosition(6500,250),
     ]);
+    if(signal?.aborted)throw new PositionError('position');
     controller.abort();
     announceWebPosition(point);
     return point;
