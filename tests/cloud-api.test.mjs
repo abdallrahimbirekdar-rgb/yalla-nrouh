@@ -71,6 +71,18 @@ test('ride request posts a safe payload to the backend RPC',async()=>{
  });
 });
 
+test('a quoted ride submits the opaque quote ID and no user-entered fare',async()=>{
+ const quoteId='00000000-0000-4000-8000-000000000004';
+ await withFetch(async(url,options)=>{
+   assert.match(url,/request_ride_with_fare$/);
+   const payload=JSON.parse(options.body);
+   assert.equal(payload.p_quote_id,quoteId);
+   assert.equal(payload.p_request_id,requestId);
+   assert.equal(payload.p_fare,undefined);
+   return reply(requestId);
+ },async()=>assert.equal(await cloudRequestRide(token,draft,requestId,quoteId),requestId));
+});
+
 test('an ambiguous ride submission can be checked and retried with the same request ID',async()=>{
  const owner='00000000-0000-4000-8000-000000000002';
  const ride={id:'00000000-0000-4000-8000-000000000003',passenger_id:owner,status:'requested'};
@@ -198,7 +210,7 @@ test('admin adds a verified driver email through a restricted server RPC',async(
 test('driver inbox renews a stale online session before requesting matching rides',async()=>{
  const {cloudDriverInbox}=await import('../src/cloud-api.ts');const original=globalThis.fetch;const calls=[];
  const oldDriver={user_id:'driver',region:0,category:'classic',approved:true,online:true,last_seen_at:'2026-01-01T00:00:00Z'};
- globalThis.fetch=async(url)=>{calls.push(String(url));if(String(url).includes('/driver_accounts?'))return reply([oldDriver]);if(String(url).endsWith('/driver_heartbeat'))return reply(true);if(String(url).endsWith('/open_ride_previews')){assert.match(calls.at(-2),/driver_heartbeat$/);return reply([{ride_id:'pending-request',region:0,category:'classic'}])}throw Error('unexpected call')};
+ globalThis.fetch=async(url)=>{calls.push(String(url));if(String(url).includes('/driver_accounts?'))return reply([oldDriver]);if(String(url).endsWith('/driver_heartbeat'))return reply(true);if(String(url).endsWith('/open_ride_previews_with_fare')){assert.match(calls.at(-2),/driver_heartbeat$/);return reply([{ride_id:'pending-request',region:0,category:'classic',estimated_fare:550}])}throw Error('unexpected call')};
  try{const inbox=await cloudDriverInbox('test-driver-token');assert.equal(inbox.offers[0].ride_id,'pending-request');assert.equal(calls.length,3)}finally{globalThis.fetch=original}
 });
 test('offline drivers never renew availability or read ride previews',async()=>{

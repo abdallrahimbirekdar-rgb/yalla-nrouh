@@ -20,7 +20,7 @@ export interface CloudRide {
   created_at:string;updated_at:string;pickup_confirmed_at:string|null;
 }
 export interface CloudDriver {user_id:string;region:number;category:string;approved:boolean;online:boolean;last_seen_at:string|null}
-export interface RidePreview {ride_id:string;region:number;category:string;created_at:string;pickup_lat_approx:number;pickup_lng_approx:number}
+export interface RidePreview {ride_id:string;region:number;category:string;created_at:string;pickup_lat_approx:number;pickup_lng_approx:number;estimated_fare?:number|null}
 export interface StaffDriver {user_id:string;region:number;category:string;approved:boolean;online:boolean;created_at:string}
 export class CloudError extends Error {
   readonly status:number;
@@ -94,10 +94,11 @@ export async function cloudRideOperation(token:string,kind:'request'|'accept',id
 export function cloudMutationUncertain(error:unknown):boolean{
   return !(error instanceof CloudError)||error.status===0||error.status===408||error.status>=500||error.kind==='bad_response';
 }
-export async function cloudRequestRide(token:string,draft:TripDraft,requestId:string):Promise<string>{
+export async function cloudRequestRide(token:string,draft:TripDraft,requestId:string,quoteId?:string):Promise<string>{
   if(!isCoordinate(draft.pickupPoint)||!isCoordinate(draft.destinationPoint)||!draft.pickup.trim()||!draft.destination.trim())
     throw new CloudError(400,'select_map_points');
-  const id=await rpc<string>('request_ride_once',token,{
+  const id=await rpc<string>(quoteId?'request_ride_with_fare':'request_ride_once',token,{
+    ...(quoteId?{p_quote_id:quoteId}:{}),
     p_request_id:requestId,
     p_pickup:draft.pickup.trim(),p_destination:draft.destination.trim(),
     p_pickup_lat:draft.pickupPoint.latitude,p_pickup_lng:draft.pickupPoint.longitude,
@@ -113,7 +114,7 @@ export const cloudConfirmPickup=(token:string,id:string)=>rpc<boolean>('confirm_
 export const cloudRegisterDriver=(token:string,region:number,category:string)=>rpc<boolean>('register_driver',token,{p_region:region,p_category:category});
 export const cloudSetDriverOnline=(token:string,online:boolean)=>rpc<boolean>('set_driver_online',token,{p_online:online});
 export const cloudHeartbeat=(token:string)=>rpc<boolean>('driver_heartbeat',token);
-export const cloudOpenRides=(token:string)=>rpc<RidePreview[]>('open_ride_previews',token);
+export const cloudOpenRides=(token:string)=>rpc<RidePreview[]>('open_ride_previews_with_fare',token);
 export async function cloudAcceptRide(token:string,id:string):Promise<boolean>{
  const accepted=await rpc<boolean>('accept_ride',token,{p_ride_id:id});
  if(typeof accepted!=='boolean')throw new CloudError(500,'bad_response');

@@ -30,6 +30,21 @@ Deno.serve(async(req:Request)=>{
   const response=await fetch('https://routes.googleapis.com/directions/v2:computeRoutes',{method:'POST',headers:{'Content-Type':'application/json','X-Goog-Api-Key':key,'X-Goog-FieldMask':input.pickup?'routes.legs.distanceMeters,routes.legs.duration,routes.legs.polyline.geoJsonLinestring,routes.legs.steps.distanceMeters,routes.legs.steps.navigationInstruction':'routes.distanceMeters,routes.duration,routes.polyline.geoJsonLinestring,routes.legs.steps.distanceMeters,routes.legs.steps.navigationInstruction'},body:JSON.stringify({origin:{location:{latLng:input.origin}},destination:{location:{latLng:input.destination}},...(input.pickup?{intermediates:[{location:{latLng:input.pickup}}]}:{}),travelMode:'DRIVE',routingPreference:'TRAFFIC_UNAWARE',computeAlternativeRoutes:false,polylineEncoding:'GEO_JSON_LINESTRING',polylineQuality:'HIGH_QUALITY',languageCode:input.languageCode==='en'?'en':'ar',units:'METRIC'}),signal:AbortSignal.timeout(12000)});
   if(!response.ok)return json({error:response.status===403?'google_not_enabled':'route_unavailable'},502);
   const data=await response.json();if(!data.routes?.length)return json({error:'no_route'},422);
-  return json({...data,tariff:{base:Number(tariff.base),perKm:Number(tariff.per_km),perMinute:Number(tariff.per_minute),peakMultiplier:Number(tariff.peak_multiplier),updatedAt:tariff.updated_at}});
+  const ratesForTrip={base:Number(tariff.base),perKm:Number(tariff.per_km),perMinute:Number(tariff.per_minute),peakMultiplier:Number(tariff.peak_multiplier),updatedAt:tariff.updated_at};
+  let quote;
+  if(input.quote===true&&!input.pickup){
+   const route=data.routes[0],meters=route.distanceMeters,seconds=typeof route.duration==='string'&&/^\d+(?:\.\d+)?s$/.test(route.duration)?Number(route.duration.slice(0,-1)):NaN;
+   const fare=Math.round((ratesForTrip.base+meters/1000*ratesForTrip.perKm+seconds/60*ratesForTrip.perMinute)*ratesForTrip.peakMultiplier);
+   if(!Number.isFinite(meters)||meters<0||meters>3e6||!Number.isFinite(seconds)||seconds>604800||!Number.isSafeInteger(fare)||fare<0)return json({error:'no_route'},422);
+   const issued=await fetch(root+'/rest/v1/rpc/issue_ride_fare_quote',{method:'POST',headers,body:JSON.stringify({
+    p_user:user.id,p_pickup_lat:input.origin.latitude,p_pickup_lng:input.origin.longitude,
+    p_destination_lat:input.destination.latitude,p_destination_lng:input.destination.longitude,p_fare:fare,
+   }),signal:AbortSignal.timeout(8000)});
+   if(!issued.ok)return json({error:'service_unavailable'},503);
+   const id=await issued.json();
+   if(typeof id!=='string')return json({error:'service_unavailable'},503);
+   quote={id,fare};
+  }
+  return json({...data,tariff:ratesForTrip,...(quote?{quote}:{})});
  }catch{return json({error:'service_unavailable'},503)}
 });
