@@ -4,13 +4,14 @@ import {router,useLocalSearchParams} from 'expo-router';
 import {useApp} from '../context';
 import {useAuth} from '../auth';
 import {authErrorMessage} from '../auth-errors';
-import {cloudCurrentToken,cloudMyRides,cloudMyDriver,cloudDriverInbox,cloudOpenRides,cloudAcceptRide,cloudAdvanceRide,cloudReleaseRide,cloudCancelRide,cloudConfirmPickup,cloudRegisterDriver,cloudSetDriverOnline,type CloudRide,type CloudDriver,type RidePreview} from '../cloud-api';
+import {cloudCurrentToken,cloudMyRides,cloudDriverInbox,cloudOpenRides,cloudAcceptRide,cloudAdvanceRide,cloudReleaseRide,cloudCancelRide,cloudConfirmPickup,cloudRegisterDriver,cloudSetDriverOnline,type CloudRide,type CloudDriver,type RidePreview} from '../cloud-api';
 import {categories,regions} from '../domain';
 import DriverOffer from '../driver-offer';
 import type {RoutePlan} from '../routing';
 import DriverNavigation from '../driver-navigation';
 import MapCanvas from '../map/MapCanvas';
 import {useCurrentPosition} from '../use-current-position';
+import {PassengerTaxiMap,RideSearchTimer,useShareTaxiPosition} from '../taxi-tracking';
 import {createRefreshQueue} from '../refresh-queue';
 import {Button,Icon,Label,Page,Panel,useText,useTheme} from '../ui';
 const live=(r:CloudRide)=>!['completed','cancelled'].includes(r.status);
@@ -30,7 +31,7 @@ export default function Rides(){
    if(!isCurrent())return;
    const token=await cloudCurrentToken();
    const ticket=++offerRead.current;
-   const readInbox=driverMode?cloudDriverInbox(token):cloudMyDriver(token).then(driver=>({driver,offers:[] as RidePreview[]}));
+   const readInbox=driverMode?cloudDriverInbox(token):Promise.resolve({driver:null,offers:[] as RidePreview[]});
    const [history,inbox]=await Promise.allSettled([
     cloudMyRides(token).then(next=>{if(isCurrent())setRides(next)}),
     readInbox.then(next=>{
@@ -49,12 +50,15 @@ export default function Rides(){
   });
  },[userId,driverMode,queue]);
  useEffect(()=>{setRides([]);setOffers([]);setDriver(null);setInboxProblem(false);setLoading(true);if(!userId){setLoading(false);return}let active=true;void refresh().catch(()=>{if(active){setNotice(state.language==='ar'?'تعذر تحميل الرحلات. تحقق من الاتصال وأعد المحاولة.':'Could not load rides. Check internet and retry.');setLoading(false)}});return()=>{active=false}},[refresh,userId,state.language]);
+ const approachingRide=driverMode?rides.find(r=>r.driver_id===userId&&r.status==='accepted'):undefined;
+ useShareTaxiPosition(approachingRide?.id,foreground);
  const activeRide=rides.some(live);const shouldPoll=foreground&&(activeRide||driverMode&&(!driver||driver.approved&&driver.online));
  useEffect(()=>{
   if(!userId||!shouldPoll)return;
   const tick=()=>{if(AppState.currentState!=='background')void refresh().catch(()=>{if(alive.current)setNotice(state.language==='ar'?'تعذر تحديث الطلبات. تحقق من الاتصال واضغط تحديث الرحلات.':'Could not update requests. Check internet and refresh.')})};
-  const timer=setInterval(tick,state.preferences.dataSaver?30000:15000);return()=>clearInterval(timer);
- },[refresh,shouldPoll,userId,state.preferences.dataSaver,state.language]);
+  const interval=driverMode?(state.preferences.dataSaver?30000:15000):(state.preferences.dataSaver?6000:4000);
+  const timer=setInterval(tick,interval);return()=>clearInterval(timer);
+ },[refresh,shouldPoll,userId,driverMode,state.preferences.dataSaver,state.language]);
  useEffect(()=>{
   if(!userId||!driverMode||!driver?.approved||!driver.online||!foreground)return;
   let active=true,running=false;const owner=userId;
@@ -100,6 +104,8 @@ export default function Rides(){
   {!loading&&mine.length===0&&<Panel><Icon name="time-outline" size={36}/><Label>{t('لا توجد رحلات بعد','No rides yet')}</Label></Panel>}
   {mine.map(ride=><Panel key={ride.id}>
    <View style={{alignSelf:'flex-start',borderRadius:20,paddingHorizontal:12,paddingVertical:4,backgroundColor:colors.selected}}><Label muted>{status(ride.status)}</Label></View>
+   {!driverMode&&ride.status==='requested'&&<RideSearchTimer startedAt={ride.updated_at??ride.created_at}/>}
+   {!driverMode&&ride.status==='accepted'&&<PassengerTaxiMap key={ride.driver_id} rideId={ride.id} pickup={{latitude:ride.pickup_lat,longitude:ride.pickup_lng}}/>}
    <Label>{ride.pickup}</Label><Icon name="arrow-down-outline" size={18}/><Label>{ride.destination}</Label><Label muted>{new Date(ride.created_at).toLocaleString(state.language==='ar'?'ar':'en')}</Label>
    {!driverMode&&live(ride)&&<>
     {ride.status==='arrived'&&!ride.pickup_confirmed_at&&<>
