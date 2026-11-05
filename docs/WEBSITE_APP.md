@@ -86,3 +86,8 @@ Tests assert zero bridge/provider calls for a valid measured startup position, m
 DriverNavigation receives the exact phone point/revision already shown by the parent driver map and retains it while a new read is pending or fails. Unknown or old precision remains display-only and cannot enable turn instructions. Every successful browser/native fix publishes to the same measured in-memory stream; an older concurrent native request can resolve a navigation reader waiting on another request ID. Re-announcing the same point preserves its original measurement timestamp/accuracy, without extending its validity. Cancelled browser requests cannot publish late updates. A fresh shared fix recovers a failed navigation reader without turning every normal map update into another GPS request.
 
 Regression tests reproduce concurrent upper-map/navigation requests, delivery to only the upper request, immediate navigation resolution from that fix, display-only unknown precision, preserved original measurement age, and cancelled fallback suppression.
+
+### Destination search suggestions
+- Destination entry uses Google Places Autocomplete suggestions after three characters and a 500 ms pause. New input invalidates older responses. The existing Search button remains available.
+- A per-picker session token groups predictions. Only selection fetches the place location; the selected prediction then sets the destination and map camera. No route or fare request is sent while typing.
+- Check on a real phone: type quickly, clear the field, select with the keyboard open, delay the network, retry Search, and verify that only the chosen destination moves the pin.
