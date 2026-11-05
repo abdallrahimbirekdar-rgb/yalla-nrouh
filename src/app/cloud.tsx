@@ -4,7 +4,7 @@ import {router,useLocalSearchParams} from 'expo-router';
 import {useApp} from '../context';
 import {useAuth} from '../auth';
 import {authErrorMessage} from '../auth-errors';
-import {cloudCurrentToken,cloudMyRides,cloudMyDriver,cloudDriverInbox,cloudAcceptRide,cloudAdvanceRide,cloudReleaseRide,cloudCancelRide,cloudConfirmPickup,cloudRegisterDriver,cloudSetDriverOnline,type CloudRide,type CloudDriver,type RidePreview} from '../cloud-api';
+import {cloudCurrentToken,cloudMyRides,cloudMyDriver,cloudDriverInbox,cloudOpenRides,cloudAcceptRide,cloudAdvanceRide,cloudReleaseRide,cloudCancelRide,cloudConfirmPickup,cloudRegisterDriver,cloudSetDriverOnline,type CloudRide,type CloudDriver,type RidePreview} from '../cloud-api';
 import {categories,regions} from '../domain';
 import DriverOffer from '../driver-offer';
 import type {RoutePlan} from '../routing';
@@ -19,26 +19,60 @@ export default function Rides(){
  const gps=useCurrentPosition(driverMode&&state.preferences.permissionsIntroSeen);
  const [offerLimit,setOfferLimit]=useState(3);
  const [acceptedPlans,setAcceptedPlans]=useState<{rideId:string;trip:RoutePlan|null;pickup:RoutePlan|null}|null>(null);
- const [rides,setRides]=useState<CloudRide[]>([]),[driver,setDriver]=useState<CloudDriver|null>(null),[offers,setOffers]=useState<RidePreview[]>([]),[busy,setBusy]=useState(false),[loading,setLoading]=useState(true),[notice,setNotice]=useState('');
+ const [rides,setRides]=useState<CloudRide[]>([]),[driver,setDriver]=useState<CloudDriver|null>(null),[offers,setOffers]=useState<RidePreview[]>([]),[busy,setBusy]=useState(false),[loading,setLoading]=useState(true),[notice,setNotice]=useState(''),[inboxProblem,setInboxProblem]=useState(false);
+ const offerRead=useRef(0);
  const alive=useRef(true),queue=useRef(createRefreshQueue()).current,identity=useRef(auth.session?.user.id),mode=useRef(driverMode);identity.current=auth.session?.user.id;mode.current=driverMode;
  useEffect(()=>{alive.current=true;return()=>{alive.current=false}},[]);
  const refresh=useCallback(async()=>{
-  if(!userId)return;const owner=userId;return queue.run(async()=>{if(!alive.current||identity.current!==owner||mode.current!==driverMode)return;
-  const token=await cloudCurrentToken();const [next,inbox]=await Promise.all([cloudMyRides(token),driverMode?cloudDriverInbox(token):cloudMyDriver(token).then(driver=>({driver,offers:[] as RidePreview[]}))]);const myDriver=inbox.driver,available=inbox.offers;
-   if(alive.current&&identity.current===owner&&mode.current===driverMode){setRides(next);setDriver(myDriver);setOffers(available);setLoading(false)}
+  if(!userId)return;
+  const isCurrent=()=>alive.current&&identity.current===userId&&mode.current===driverMode;
+  return queue.run(async()=>{
+   if(!isCurrent())return;
+   const token=await cloudCurrentToken();
+   const ticket=++offerRead.current;
+   const readInbox=driverMode?cloudDriverInbox(token):cloudMyDriver(token).then(driver=>({driver,offers:[] as RidePreview[]}));
+   const [history,inbox]=await Promise.allSettled([
+    cloudMyRides(token).then(next=>{if(isCurrent())setRides(next)}),
+    readInbox.then(next=>{
+     if(!isCurrent())return;
+     setDriver(next.driver);
+     if(ticket===offerRead.current){setOffers(next.offers);setInboxProblem(false)}
+    })
+   ]);
+   if(!isCurrent())return;
+   setLoading(false);
+   if(inbox.status==='rejected'){
+    if(ticket===offerRead.current)setInboxProblem(true);
+    throw inbox.reason;
+   }
+   if(history.status==='rejected')throw history.reason;
   });
  },[userId,driverMode,queue]);
- useEffect(()=>{setRides([]);setOffers([]);setDriver(null);setLoading(true);if(!userId){setLoading(false);return}let active=true;void refresh().catch(()=>{if(active){setNotice(state.language==='ar'?'تعذر تحميل الرحلات. تحقق من الاتصال وأعد المحاولة.':'Could not load rides. Check internet and retry.');setLoading(false)}});return()=>{active=false}},[refresh,userId,state.language]);
- const activeRide=rides.some(live);const shouldPoll=foreground&&(activeRide||driverMode&&driver?.approved&&driver.online);
+ useEffect(()=>{setRides([]);setOffers([]);setDriver(null);setInboxProblem(false);setLoading(true);if(!userId){setLoading(false);return}let active=true;void refresh().catch(()=>{if(active){setNotice(state.language==='ar'?'تعذر تحميل الرحلات. تحقق من الاتصال وأعد المحاولة.':'Could not load rides. Check internet and retry.');setLoading(false)}});return()=>{active=false}},[refresh,userId,state.language]);
+ const activeRide=rides.some(live);const shouldPoll=foreground&&(activeRide||driverMode&&(!driver||driver.approved&&driver.online));
  useEffect(()=>{
   if(!userId||!shouldPoll)return;
   const tick=()=>{if(AppState.currentState!=='background')void refresh().catch(()=>{if(alive.current)setNotice(state.language==='ar'?'تعذر تحديث الطلبات. تحقق من الاتصال واضغط تحديث الرحلات.':'Could not update requests. Check internet and refresh.')})};
   const timer=setInterval(tick,state.preferences.dataSaver?30000:15000);return()=>clearInterval(timer);
  },[refresh,shouldPoll,userId,state.preferences.dataSaver,state.language]);
+ useEffect(()=>{
+  if(!userId||!driverMode||!driver?.approved||!driver.online||!foreground)return;
+  let active=true,running=false;const owner=userId;
+  const tick=async()=>{
+   if(running||document.visibilityState==='hidden'||AppState.currentState==='background')return;
+   running=true;const ticket=++offerRead.current;
+   try{const next=await cloudOpenRides(await cloudCurrentToken());if(active&&identity.current===owner&&mode.current&&ticket===offerRead.current){setOffers(next);setInboxProblem(false)}}
+   catch{if(active&&identity.current===owner&&ticket===offerRead.current)setInboxProblem(true)}
+   finally{running=false}
+  };
+  const timer=setInterval(()=>void tick(),state.preferences.dataSaver?8000:5000);
+  return()=>{active=false;clearInterval(timer)};
+ },[userId,driverMode,driver?.approved,driver?.online,foreground,state.preferences.dataSaver]);
  useEffect(()=>{if(!userId)return;const resume=()=>{if(document.visibilityState!=='hidden')void refresh().catch(()=>{if(alive.current)setNotice(state.language==='ar'?'تعذر تحديث الطلبات. تحقق من الاتصال واضغط تحديث الرحلات.':'Could not update requests. Check internet and refresh.')})};const native=(event:Event)=>{if((event as CustomEvent).detail?.active===true)resume()};window.addEventListener('focus',resume);window.addEventListener('pageshow',resume);document.addEventListener('visibilitychange',resume);window.addEventListener('yalla:native-visibility',native);return()=>{window.removeEventListener('focus',resume);window.removeEventListener('pageshow',resume);document.removeEventListener('visibilitychange',resume);window.removeEventListener('yalla:native-visibility',native)}},[userId,refresh,state.language]);
  async function run(work:(token:string)=>Promise<void>,success?:string){if(busy)return;setBusy(true);setNotice('');try{await work(await cloudCurrentToken());await refresh();if(success)setNotice(success)}catch(e){const kind=(e as {kind?:string})?.kind??(e as Error)?.message;setNotice(kind==='waiting_passenger_confirmation'?t('بانتظار تأكيد الراكب ركوب السيارة.','Waiting for passenger pickup confirmation.'):kind==='driver_not_approved'?t('حساب السائق بانتظار الاعتماد.','Driver account is waiting for approval.'):authErrorMessage(e,state.language==='ar'))}finally{setBusy(false)}}
  const status=(value:string)=>({requested:t('بانتظار السائق','Waiting for driver'),accepted:t('السائق في الطريق','Driver is on the way'),arrived:t('وصل السائق','Driver arrived'),riding:t('الرحلة جارية','Ride in progress'),completed:t('مكتملة','Completed'),cancelled:t('ملغاة','Cancelled')} as Record<string,string>)[value]??value;
- const mine=rides.filter(r=>driverMode?r.driver_id===auth.session?.user.id:r.passenger_id===auth.session?.user.id);
+ const mine=rides.filter(r=>driverMode?r.driver_id===userId:r.passenger_id===userId);
+ const hasActiveRide=mine.some(live);
  if(!auth.ready||auth.session&&!auth.rolesReady)return <Page title={t('رحلاتي','My rides')}><Label>{t('جارٍ تحميل الحساب…','Loading account…')}</Label>{auth.problem&&<Button title={t('إعادة المحاولة','Try again')} onPress={()=>void auth.retry()}/>}</Page>;
  if(!auth.session)return <Page title={driverMode?t('وضع السائق','Driver mode'):t('رحلاتي','My rides')}><Panel><Icon name="person-circle-outline" size={42}/><Label>{t('سجّل الدخول لعرض رحلاتك أو العمل كسائق.','Sign in to view your rides or use driver mode.')}</Label><Button title={t('تسجيل الدخول','Sign in')} onPress={()=>router.push('/account')}/></Panel></Page>;
  return <Page title={driverMode?t('وضع السائق','Driver mode'):t('رحلاتي','My rides')}>
@@ -46,11 +80,23 @@ export default function Rides(){
   <Button secondary icon="refresh-outline" title={loading?t('جارٍ تحميل الرحلات…','Loading rides…'):t('تحديث الرحلات','Refresh rides')} disabled={busy} onPress={()=>void run(async()=>{})}/>
   {!!notice&&<View accessibilityRole="alert"><Label>{notice}</Label></View>}
   {!driverMode&&<Button icon="car-outline" title={t('حجز رحلة جديدة','Book a new ride')} onPress={()=>router.replace('/')}/>}
+  {driverMode&&driver?.approved&&driver.online&&<>
+   <Label large>{t('طلبات متاحة','Available requests')} ({offers.length})</Label>
+   {inboxProblem&&<Label muted>{t('تعذر تحديث الطلبات. يمكنك الضغط على تحديث الرحلات.','Requests could not update. You can refresh rides.')}</Label>}
+   {hasActiveRide?<Label muted>{t('أكمل رحلتك الحالية قبل قبول طلب جديد.','Finish your current ride before accepting a new request.')}</Label>:<>
+    {!inboxProblem&&offers.length===0&&<Panel><Label muted>{t('لا توجد طلبات مناسبة الآن.','No matching requests now.')}</Label></Panel>}
+    {offers.slice(0,offerLimit).map(offer=><DriverOffer key={offer.ride_id} offer={offer} position={gps.camera?.point} disabled={busy} onAccept={routes=>void run(async token=>{
+     if(!await cloudAcceptRide(token,offer.ride_id))throw Error('not_allowed');
+     setAcceptedPlans({rideId:offer.ride_id,...routes});
+    },t('تم قبول الطلب.','Request accepted.'))}/>)}
+    {offers.length>offerLimit&&<Button secondary title={t('عرض طلبات أخرى','Show more requests')} onPress={()=>setOfferLimit(value=>value+3)}/>}
+   </>}
+  </>}
   {driverMode&&<Panel><Label>{t('موقعي الحالي','My current location')}</Label><View style={{height:210,borderRadius:14,overflow:'hidden'}}><MapCanvas compact readOnly minMapHeight={180} point={gps.camera?.point??null} cameraTarget={gps.camera} onChange={()=>{}}/></View>{gps.failure&&<Label muted>{gps.failure==='permission'?t('اسمح بإذن الموقع من إعدادات التطبيق.','Allow location in app settings.'):gps.failure==='services'?t('فعّل خدمة الموقع في الهاتف.','Turn on phone location.'):gps.failure==='accuracy'?t('فعّل الموقع الدقيق من أذونات التطبيق.','Turn on precise location in app settings.'):t('تعذر تحديد موقعك. أعد المحاولة.','Could not find your location. Try again.')}</Label>}<Button secondary icon="locate" title={gps.busy?t('جارٍ تحديد الموقع…','Finding location…'):t('تحديث موقعي','Update my location')} disabled={gps.busy} onPress={()=>void gps.locate()}/></Panel>}
   {driverMode&&<Panel>
    {!driver?<><Label>{t('التسجيل كسائق','Register as a driver')}</Label><Label muted>{t('منطقة العمل ونوع السيارة: ','Work region and car: ')}{regions[draft.region]?.[state.language==='ar'?0:1]} · {categories.find(c=>c.id===draft.category)?.[state.language]}</Label><Button secondary title={t('تعديل المنطقة ونوع السيارة','Change region and car')} onPress={()=>router.replace('/')}/><Button title={t('إرسال طلب اعتماد سائق','Apply for driver approval')} disabled={busy} onPress={()=>void run(async token=>{await cloudRegisterDriver(token,draft.region,draft.category)},t('تم إرسال الطلب إلى الإدارة.','Application sent to admin.'))}/></>:!driver.approved?<><Label>{t('طلبك بانتظار مراجعة الإدارة','Your application is waiting for review')}</Label><Label muted>{t('يمكنك تحديث الصفحة بعد اعتماد الحساب.','Refresh after your account is approved.')}</Label></>:<><Label>{driver.online?t('متاح لاستقبال الطلبات','Available for requests'):t('استقبال الطلبات متوقف','Requests are off')}</Label><Button title={driver.online?t('إيقاف استقبال الطلبات','Go offline'):t('بدء استقبال الطلبات','Go online')} disabled={busy} onPress={()=>void run(async token=>{await cloudSetDriverOnline(token,!driver.online)})}/></>}
   </Panel>}
-  {driverMode&&driver?.approved&&driver.online&&!mine.some(live)&&<><Label large>{t('طلبات متاحة','Available requests')}</Label>{offers.length===0&&<Panel><Label muted>{t('لا توجد طلبات مناسبة الآن.','No matching requests now.')}</Label></Panel>}{offers.slice(0,offerLimit).map(offer=><DriverOffer key={offer.ride_id} offer={offer} position={gps.camera?.point} disabled={busy} onAccept={routes=>void run(async token=>{if(!await cloudAcceptRide(token,offer.ride_id))throw Error('not_allowed');setAcceptedPlans({rideId:offer.ride_id,...routes})},t('تم قبول الطلب.','Request accepted.'))}/>)}{offers.length>offerLimit&&<Button secondary title={t('عرض طلبات أخرى','Show more requests')} onPress={()=>setOfferLimit(value=>value+3)}/>}</>}
+
   {!loading&&mine.length===0&&<Panel><Icon name="time-outline" size={36}/><Label>{t('لا توجد رحلات بعد','No rides yet')}</Label></Panel>}
   {mine.map(ride=><Panel key={ride.id}>
    <View style={{alignSelf:'flex-start',borderRadius:20,paddingHorizontal:12,paddingVertical:4,backgroundColor:colors.selected}}><Label muted>{status(ride.status)}</Label></View>
