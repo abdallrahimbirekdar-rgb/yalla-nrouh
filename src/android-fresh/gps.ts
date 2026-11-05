@@ -34,3 +34,23 @@ export function awaitFreshFix<T>(
    .catch(()=>finish(new Error('GPS_UNAVAILABLE')));
  });
 }
+
+// A map, route panel and startup can ask together. Share the provider, but
+// cancelling one consumer must never cancel a fix another consumer still needs.
+export class GpsTaskPool<T>{
+ private jobs=new Map<string,{controller:AbortController;listeners:Set<{preview:(fix:T)=>void;resolve:(fix:T)=>void;reject:(error:unknown)=>void}>}>();
+ request(key:string,signal:AbortSignal,preview:(fix:T)=>void,start:(signal:AbortSignal,preview:(fix:T)=>void)=>Promise<T>):Promise<T>{
+  if(signal.aborted)return Promise.reject(new Error('GPS_CANCELLED'));
+  let job=this.jobs.get(key);const fresh=!job;
+  if(!job){job={controller:new AbortController(),listeners:new Set()};this.jobs.set(key,job)}
+  const current=job;
+  const result=new Promise<T>((resolve,reject)=>{
+   const cleanup=()=>signal.removeEventListener('abort',cancel);
+   const listener={preview,resolve:(fix:T)=>{cleanup();resolve(fix)},reject:(error:unknown)=>{cleanup();reject(error)}};
+   const cancel=()=>{current.listeners.delete(listener);listener.reject(new Error('GPS_CANCELLED'));if(!current.listeners.size){current.controller.abort();if(this.jobs.get(key)===current)this.jobs.delete(key)}};
+   current.listeners.add(listener);signal.addEventListener('abort',cancel,{once:true});
+  });
+  if(fresh)void Promise.resolve().then(()=>start(current.controller.signal,fix=>{for(const listener of current.listeners)listener.preview(fix)})).then(fix=>{for(const listener of current.listeners)listener.resolve(fix)},error=>{for(const listener of current.listeners)listener.reject(error)}).finally(()=>{current.listeners.clear();if(this.jobs.get(key)===current)this.jobs.delete(key)});
+  return result;
+ }
+}

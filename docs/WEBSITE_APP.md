@@ -64,3 +64,11 @@ The previous passenger request used balanced accuracy and timed out before tryin
 A deliberate location tap may show Android's high-accuracy location-services dialog when network location is off. App permission and provider state are checked separately; approximate-only grants produce a precise-location instruction. Settings never start GPS on mount and no longer mark a timeout as a denied permission. Native provider diagnostics show app version, precise/coarse permission, satellite/network provider and services state without coordinates or account data. The typed settings action opens OS app settings.
 
 Device acceptance remains required: upgrade in place; open Settings and change theme/back without waiting for GPS; test denied/coarse/precise permission, service-off dialog, fresh GPS indoors/outside, timeout/retry, background cancellation, return from OS settings, map centring and 500 m pickup checks. Unit tests and APK compilation do not establish physical reception on the owner's phone.
+
+
+## Android 1.0.2 / code 22 and approved driver interface
+Map startup now starts high-accuracy foreground GPS immediately (20-second bounded subscription), rather than spending 8.5 seconds on balanced location before trying satellites. A recent measured fix (20 seconds / 250 m for the map) can display first. Explicit location taps may offer Android's network-provider settings dialog. Concurrent map consumers share a provider; cancellation removes only that consumer, and backgrounding settles pending page requests before stopping GPS. A page reload resets the native startup fallback. These host changes require APK 1.0.2.
+
+Approved driver status is loaded from the existing RLS-protected driver_accounts record with the signed-in session. Approved drivers open the driver dashboard, with a current-location map, availability and assigned trips. Booking, passenger tabs and saved destination controls are hidden for drivers; sign-out, settings and server-verified admin access remain available. Account role loading blocks the booking UI until verification succeeds.
+
+Regression coverage adds concurrent GPS consumer cancellation and clean retry. Physical-device acceptance remains outstanding: upgrade in place, first launch, indoor/outdoor GPS, permission/provider settings, background/resume, approved-driver login and a two-account test trip.

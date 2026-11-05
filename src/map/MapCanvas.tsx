@@ -1,11 +1,10 @@
 import React,{useEffect,useState} from 'react';
-import {View,ActivityIndicator} from 'react-native';
+import {View,ActivityIndicator,Platform} from 'react-native';
 import {type Coordinate,formatCoordinate} from '../geo';
 import {useApp} from '../context';
 import {useMapNetwork} from '../connectivity';
 import {Icon,Label,useText,useTheme} from '../ui';
 import {mapPolicy} from './network-policy';
-import {Platform} from 'react-native';
 import {isNativeWebView} from '../site-bridge';
 import MapContent from './MapContent';
 import type {CameraTarget} from '../use-current-position';

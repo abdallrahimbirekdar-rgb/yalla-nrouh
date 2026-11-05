@@ -5,7 +5,7 @@ import {WebView,type WebViewMessageEvent} from 'react-native-webview';
 import * as Location from 'expo-location';
 import Constants from 'expo-constants';
 import {enableLocalAlerts,notifyLocal} from '../alerts';
-import {acceptableFix,awaitFreshFix,deadlineOr} from './gps';
+import {acceptableFix,awaitFreshFix,deadlineOr,GpsTaskPool} from './gps';
 import {SITE,bootstrapScript,diagnosticScript,eventScript,autoFixScript,externalTarget,positionScript,readWebMessage,trustedSite,
  type WebMessage,type PositionResponse} from './bridge';
 
@@ -42,8 +42,9 @@ class ForegroundLocation {
   if(!permission.granted)throw new Error('permission');
   if(permission.android?.accuracy==='coarse')throw new Error('accuracy');
   if(!await Location.hasServicesEnabledAsync())throw new Error('services');
+  if(ask){const providers=await Location.getProviderStatusAsync();if(!providers.networkAvailable)await Location.enableNetworkProviderAsync().catch(()=>{})}
   if(signal.aborted)throw new Error('GPS_CANCELLED');
-  const accuracy=track?50:150;
+  const accuracy=track?50:250;
   if(!track){
    // A genuinely recent fix opens the map immediately. Fresh GPS still follows.
    const last=await deadlineOr(
@@ -56,18 +57,12 @@ class ForegroundLocation {
    awaitFreshFix<Location.LocationObject>(
     (next,error)=>Location.watchPositionAsync({
       accuracy:mode,timeInterval:1000,distanceInterval:0,
-      mayShowUserSettingsDialog:false,
+      mayShowUserSettingsDialog:ask,
     },next,error),
     fix=>acceptableFix(fix,accuracy,30000),
-    track?17000:8500,signal,
+    20000,signal,
    );
-  if(track)return subscribe(Location.Accuracy.High);
-  try{return await subscribe(Location.Accuracy.Balanced)}
-  catch(error){
-   if(signal.aborted)throw error;
-   // Satellite fallback for devices where network location is unavailable.
-   return subscribe(Location.Accuracy.High);
-  }
+  return subscribe(Location.Accuracy.High);
  }
 }
 type Run={controller:AbortController;id:string};
@@ -76,7 +71,8 @@ const websiteVersion=(v:unknown):string|null=>typeof v==='string'&&/^[a-f0-9]{40
 export default function FreshAndroid(){
  const web=useRef<WebView>(null);
  const engine=useRef(new ForegroundLocation()).current;
- const active=useRef(true),run=useRef<Run|null>(null),canGoBack=useRef(false);
+ const active=useRef(true),runs=useRef(new Map<string,Run>()),canGoBack=useRef(false);
+ const gpsPool=useRef(new GpsTaskPool<Location.LocationObject>()).current;
  const autoStarted=useRef(false),locationRequestedByPage=useRef(false);
  const safeToReload=useRef(false),websiteRevision=useRef<string|null>(null);
  const [uri,setUri]=useState(()=>SITE+'?app=android&launch='+Date.now());
@@ -85,7 +81,7 @@ export default function FreshAndroid(){
  const [notice,setNotice]=useState('');
  const [colorMode,setColorMode]=useState<'system'|'light'|'dark'>('system');
  const ar=language==='ar';
- const text=(arText:string,enText:string)=>ar?arText:enText;
+ const text=useCallback((arText:string,enText:string)=>ar?arText:enText,[ar]);
  const background=colorMode==='dark'?'#171b20':'#fffaf5';
  const foreground=colorMode==='dark'?'#ffffff':'#24262b';
  const inject=useCallback((script:string)=>{
@@ -95,7 +91,7 @@ export default function FreshAndroid(){
   try{
    const state=await engine.status(stage);
    inject(diagnosticScript(state));
-   inject(eventScript('yalla:native-location-permission',{granted:state.permission}));
+   inject('window.__YALLA_NATIVE_LOCATION_GRANTED__='+JSON.stringify(state.permission)+';'+eventScript('yalla:native-location-permission',{granted:state.permission}));
   }catch{/* Settings must still open if GPS providers cannot be queried. */}
  },[engine,inject]);
  const boot=useCallback(async()=>{
@@ -103,8 +99,8 @@ export default function FreshAndroid(){
    inject(eventScript('yalla:native-location-permission',{granted:permission.granted}));
   }catch{/* The website still offers manual pickup. */}
  },[engine,inject]);
- useEffect(()=>{active.current=true;void boot();return()=>{
-  active.current=false;run.current?.controller.abort();run.current=null;
+ useEffect(()=>{const requests=runs.current;active.current=true;void boot();return()=>{
+  active.current=false;for(const task of requests.values())task.controller.abort();requests.clear();
  }},[boot]);
  const refresh=useCallback(()=>{
   if(!safeToReload.current){
@@ -113,7 +109,7 @@ export default function FreshAndroid(){
   }
   setNotice('');setNewWeb(false);setLoading(true);setFailed(false);
   setUri(SITE+'?app=android&launch='+Date.now());
- },[ar]); // no automatic reset of drafts or website storage
+ },[text]); // no automatic reset of drafts or website storage
  const checkWebUpdate=useCallback(async()=>{
   if(!websiteRevision.current)return;
   const controller=new AbortController();
@@ -134,7 +130,7 @@ export default function FreshAndroid(){
   const state=AppState.addEventListener('change',value=>{
    // Android permission sheets can briefly mark the activity inactive.
    // Cancel only on actual backgrounding so the first GPS request survives consent.
-   if(value==='background'){run.current?.controller.abort();inject(eventScript('yalla:native-visibility',{active:false}));return}
+   if(value==='background'){autoStarted.current=false;locationRequestedByPage.current=false;for(const task of runs.current.values()){inject(positionScript({id:task.id,point:null,error:'timeout'}));task.controller.abort()}inject(eventScript('yalla:native-visibility',{active:false}));return}
    if(value==='active'){
     inject(eventScript('yalla:native-visibility',{active:true}));
     void syncPermission('resumed');
@@ -147,10 +143,10 @@ export default function FreshAndroid(){
   inject(positionScript(reply));
  },[inject]);
  const locate=useCallback(async(message:Extract<WebMessage,{type:'location'}>)=>{
-  run.current?.controller.abort();
+  runs.current.get(message.id)?.controller.abort();
   const controller=new AbortController();
   const task:Run={controller,id:message.id};
-  run.current=task;
+  runs.current.set(message.id,task);
   let delivered=false;
   const send=(fix:Location.LocationObject)=>{
    if(controller.signal.aborted||!active.current||AppState.currentState==='background')return;
@@ -165,7 +161,7 @@ export default function FreshAndroid(){
   };
   void syncPermission('locating');
   try{
-   const fix=await engine.locate(message.askPermission,message.track,controller.signal,send);
+   const fix=await gpsPool.request(message.track?'track':'map',controller.signal,send,(signal,preview)=>engine.locate(message.askPermission,message.track,signal,preview));
    send(fix);void syncPermission('found');
   }catch(error){
    if(!controller.signal.aborted&&!delivered){
@@ -176,8 +172,8 @@ export default function FreshAndroid(){
     respond({id:message.id,point:null,error:code});
     void syncPermission(code||'position');
    }
-  }finally{if(run.current===task)run.current=null}
- },[engine,respond,syncPermission]);
+  }finally{if(runs.current.get(message.id)===task)runs.current.delete(message.id)}
+ },[engine,gpsPool,inject,respond,syncPermission]);
  const handleMessage=useCallback((event:WebViewMessageEvent)=>{
   if(!trustedSite(event.nativeEvent.url))return;
   const message=readWebMessage(event.nativeEvent.data);
@@ -198,7 +194,7 @@ export default function FreshAndroid(){
    locationRequestedByPage.current=true;
    void locate(message);
   }else if(message.type==='location-cancel'){
-   if(run.current?.id===message.id)run.current.controller.abort();
+   runs.current.get(message.id)?.controller.abort();
   }else if(message.type==='location-settings'){
    // Opening system settings must never wait for a GPS fix.
    void Linking.openSettings().then(
@@ -238,7 +234,7 @@ export default function FreshAndroid(){
    onOpenWindow={event=>openExternal(event.nativeEvent.targetUrl)}
    onMessage={handleMessage}
    onNavigationStateChange={nav=>{canGoBack.current=nav.canGoBack;if(!nav.loading)setLoading(false)}}
-   onLoadStart={()=>{setLoading(true);setFailed(false)}}
+   onLoadStart={()=>{autoStarted.current=false;locationRequestedByPage.current=false;for(const task of runs.current.values())task.controller.abort();setLoading(true);setFailed(false)}}
    onLoadEnd={()=>{
     setLoading(false);void syncPermission('page-loaded');
     // If the website cannot post its location request to Android,

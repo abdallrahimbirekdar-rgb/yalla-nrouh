@@ -57,3 +57,19 @@ test('a stalled cache read has a deterministic short fallback',async()=>{
  const task=new Promise(()=>{});
  assert.equal(await deadlineOr(task,5,null),null);
 });
+
+test('concurrent map requests share GPS and cancelling one does not stop another',async()=>{
+ const {GpsTaskPool}=await import('../src/android-fresh/gps.ts');const pool=new GpsTaskPool();
+ const a=new AbortController(),b=new AbortController();let calls=0,signal,done,preview;
+ const start=(s,p)=>{calls++;signal=s;preview=p;return new Promise(resolve=>{done=resolve})};
+ const seen=[];const first=pool.request('map',a.signal,()=>{},start);const rejected=assert.rejects(first,/GPS_CANCELLED/);
+ const second=pool.request('map',b.signal,fix=>seen.push(fix),start);
+ await Promise.resolve();assert.equal(calls,1);a.abort();await rejected;assert.equal(signal.aborted,false);
+ preview(9);done(10);assert.equal(await second,10);assert.deepEqual(seen,[9]);
+});
+test('last GPS consumer cancels the provider and later request starts cleanly',async()=>{
+ const {GpsTaskPool}=await import('../src/android-fresh/gps.ts');const pool=new GpsTaskPool();const a=new AbortController();let oldSignal;
+ const first=pool.request('map',a.signal,()=>{},async signal=>{oldSignal=signal;return new Promise(()=>{})});
+ const rejected=assert.rejects(first,/GPS_CANCELLED/);await Promise.resolve();a.abort();await rejected;assert.equal(oldSignal.aborted,true);
+ assert.equal(await pool.request('map',new AbortController().signal,()=>{},async()=>17),17);
+});
