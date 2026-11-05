@@ -23,7 +23,7 @@ export default function RoutePanel({from,to,fromAddress,toAddress,currentLocatio
   const id=++generation.current;const active=()=>alive.current&&id===generation.current;running.current=true;setBusy(true);setError('');setPlan(null);quoteCallback.current?.(null);abort.current?.abort();const controller=new AbortController();abort.current=controller;
   try{
    const token=await cloudCurrentToken();const start=currentLocation?await siteCurrentPosition(false):from;if(!start||!active())return;
-   const next=await createRoutingClient(process.env.EXPO_PUBLIC_GOOGLE_ROUTES_PROXY||'https://gokosprcqpdvqgahvquk.supabase.co/functions/v1/fare-route').route(start,to,controller.signal,state.language,token);
+   const next=await createRoutingClient(process.env.EXPO_PUBLIC_GOOGLE_ROUTES_PROXY||'https://gokosprcqpdvqgahvquk.supabase.co/functions/v1/fare-route').route(start,to,controller.signal,state.language,token,auth.admin);
    if(active()){setPlan(next);quoteCallback.current?.(priceForRoute(next.meters,next.seconds/60,next.tariff??state.tariff))}
   }catch(e){if(active())setError(e instanceof ServiceError?e.code:(e as {status?:number})?.status===401?'unauthorized':'network')}
   finally{if(active()){running.current=false;setBusy(false)}}

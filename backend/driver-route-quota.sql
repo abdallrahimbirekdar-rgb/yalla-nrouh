@@ -1,9 +1,14 @@
 -- Keep this in sync with fare-setup.sql. Service role only.
+-- The routing proxy checks the caller's verified user ID against the admin roster.
+grant usage on schema private to service_role;
+grant select(user_id) on private.admins to service_role;
 create or replace function public.consume_google_route_quota(p_user uuid) returns boolean
 language plpgsql security invoker set search_path='' as $$
 declare d date := (now() at time zone 'UTC')::date; total integer; personal integer; personal_limit integer; last_call timestamptz;
 begin
  if p_user is null then return false; end if;
+ -- Admin testing is separate from the shared passenger/driver budget.
+ if exists(select 1 from private.admins where user_id=p_user) then return true; end if;
  perform pg_catalog.pg_advisory_xact_lock(73481620);
  select calls into total from public.google_route_usage where day=d and scope='global';
  select calls,last_at into personal,last_call from public.google_route_usage where day=d and scope=p_user::text;
