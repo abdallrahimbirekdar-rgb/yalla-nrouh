@@ -9,7 +9,7 @@ const position=(point:Coordinate):LatLng=>({lat:point.latitude,lng:point.longitu
 export default function MapContent({point,onChange,compact=false,route,readOnly=false,lean=false,loadTimeoutMs=25000,cameraTarget,initialCenter,minMapHeight=260}:{point:Coordinate|null;onChange:(point:Coordinate)=>void;compact?:boolean;route?:Coordinate[];readOnly?:boolean;lean?:boolean;loadTimeoutMs?:number;cameraTarget?:CameraTarget;initialCenter?:Coordinate;minMapHeight?:number}){
  const {state}=useApp();const t=useText();const {colors,dark}=useTheme();const host=useRef<HTMLDivElement>(null);
  const map=useRef<GoogleMap|null>(null),api=useRef<GoogleMaps|null>(null),marker=useRef<GoogleMarker|null>(null),line=useRef<GoogleLine|null>(null);
- const userMarker=useRef<GoogleMarker|null>(null);
+ const userMarker=useRef<GoogleMarker|null>(null),endMarker=useRef<GoogleMarker|null>(null);
  const current=useRef(point);current.current=point;const choose=useRef(onChange);choose.current=onChange;
  const profile=useRef({lean,dark});profile.current={lean,dark};
  const entry=useRef({initialCenter,compact});
@@ -29,13 +29,13 @@ export default function MapContent({point,onChange,compact=false,route,readOnly=
    const start=current.current??entry.current.initialCenter??{latitude:33.5138,longitude:36.2765};
    const instance=new maps.Map(host.current,{center:position(start),zoom:profile.current.lean?13:14,mapId:process.env.EXPO_PUBLIC_GOOGLE_MAPS_WEB_MAP_ID||'DEMO_MAP_ID',renderingType:'RASTER',mapTypeId:'roadmap',disableDefaultUI:true,zoomControl:true,gestureHandling:readOnly||entry.current.compact?'cooperative':'greedy',clickableIcons:false,tilt:0,heading:0,colorScheme:profile.current.dark?'DARK':'LIGHT'});
    map.current=instance;
-   const pin=new maps.marker.AdvancedMarkerElement({map:instance,gmpDraggable:!readOnly,title:state.language==='ar'?'الموقع المحدد':'Selected location'});marker.current=pin;
+   const pin=new maps.marker.AdvancedMarkerElement({map:instance,gmpDraggable:!readOnly,title:state.language==='ar'?'أ: الانطلاق':'A: pickup'});marker.current=pin;
    const select=(event:{latLng?:{lat:()=>number;lng:()=>number}|null})=>{if(!event.latLng||readOnly)return;const next={latitude:event.latLng.lat(),longitude:event.latLng.lng()};if(isCoordinate(next))choose.current(next)};
    if(!readOnly){instance.addListener('click',select);pin.addListener('dragend',select)}
    line.current=new maps.Polyline({map:instance,strokeColor:'#2688e8',strokeWeight:5,clickable:false});
    clearTimeout(pending);failed.current=false;setError(false);setReady(true);
   }).catch(()=>{if(!disposed){clearTimeout(pending);failed.current=true;setError(true)}});
-  return()=>{disposed=true;clearTimeout(pending);removeAuthListener();window.removeEventListener('online',online);if(marker.current){api.current?.event.clearInstanceListeners(marker.current);marker.current.map=null}if(userMarker.current)userMarker.current.map=null;userMarker.current=null;line.current?.setMap(null);if(map.current)api.current?.event.clearInstanceListeners(map.current);map.current=null;marker.current=null;line.current=null;container.replaceChildren()};
+  return()=>{disposed=true;clearTimeout(pending);removeAuthListener();window.removeEventListener('online',online);if(marker.current){api.current?.event.clearInstanceListeners(marker.current);marker.current.map=null}if(endMarker.current)endMarker.current.map=null;endMarker.current=null;if(userMarker.current)userMarker.current.map=null;userMarker.current=null;line.current?.setMap(null);if(map.current)api.current?.event.clearInstanceListeners(map.current);map.current=null;marker.current=null;line.current=null;container.replaceChildren()};
  },[key,state.language,readOnly,attempt,loadTimeoutMs]);
  useEffect(()=>{
   const instance=map.current,pin=marker.current;if(!ready||!instance||!pin)return;
@@ -45,17 +45,19 @@ export default function MapContent({point,onChange,compact=false,route,readOnly=
  useEffect(()=>{
   if(!ready||!map.current||!api.current||!line.current)return;
   const path=route?.map(position)??[];line.current.setPath(path);
+  if(path.length>1){if(marker.current){const dot=document.createElement('div');dot.textContent=state.language==='ar'?'أ':'A';Object.assign(dot.style,{background:'#202529',color:'white',border:'2px solid white',borderRadius:'50%',width:'28px',height:'28px',display:'grid',placeItems:'center',fontWeight:'bold'});marker.current.content=dot}if(!endMarker.current){const dot=document.createElement('div');dot.textContent=state.language==='ar'?'ب':'B';Object.assign(dot.style,{background:'#d67749',color:'white',border:'2px solid white',borderRadius:'50%',width:'28px',height:'28px',display:'grid',placeItems:'center',fontWeight:'bold'});endMarker.current=new api.current.marker.AdvancedMarkerElement({map:map.current,content:dot,title:state.language==='ar'?'ب: الوصول':'B: destination'})}endMarker.current.position=path[path.length-1]}else if(endMarker.current){endMarker.current.map=null;endMarker.current=null}
   if(path.length>1){const bounds=new api.current.LatLngBounds();path.forEach(p=>bounds.extend(p));map.current.fitBounds(bounds,30)}
- },[route,ready]);
+ },[route,ready,state.language]);
  useEffect(()=>{
   if(!ready||!map.current||!api.current||!cameraTarget)return;
-  const center=position(cameraTarget.point);map.current.setCenter(center);map.current.setZoom(19);
+  const center=position(cameraTarget.point);
+  if(cameraTarget.overview&&route&&route.length>1){const bounds=new api.current.LatLngBounds();route.forEach(point=>bounds.extend(position(point)));map.current.fitBounds(bounds,30)}else{map.current.setCenter(center);map.current.setZoom(cameraTarget.zoom??19)}
   if(cameraTarget.isLocation===false)return;
   if(!userMarker.current){
    const dot=document.createElement('div');Object.assign(dot.style,{width:'18px',height:'18px',background:'#2688e8',border:'3px solid white',borderRadius:'50%',boxShadow:'0 0 0 8px #2688e822'});
    userMarker.current=new api.current.marker.AdvancedMarkerElement({map:map.current,position:center,content:dot,title:state.language==='ar'?'موقعي الحالي':'My current location'});
   }else userMarker.current.position=center;
- },[cameraTarget,ready,state.language]);
+ },[cameraTarget,ready,state.language,route]);
  useEffect(()=>{map.current?.setOptions({tilt:0,heading:0,headingInteractionEnabled:!lean,tiltInteractionEnabled:false})},[lean,ready]);
  return <View style={compact?{flex:1,minHeight:minMapHeight}:{gap:10}}>
   {React.createElement('div',{ref:host,role:'region','aria-label':t('خريطة Google لاختيار الموقع','Google map to choose a location'),style:{height:compact?'100%':340,minHeight:compact?minMapHeight:340,width:'100%',borderRadius:compact?0:16,overflow:'hidden',background:colors.surface}})}

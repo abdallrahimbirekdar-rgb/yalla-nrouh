@@ -41,7 +41,7 @@ test('fare proxy returns road data and central rates without exposing secrets',a
  const parsed=JSON.parse(body);assert.equal(parsed.tariff.perKm,60);assert.equal(parsed.routes[0].distanceMeters,5000);
  const outgoing=app.requests.find(r=>r.url.includes('routes.googleapis.com'));
  const payload=JSON.parse(outgoing.options.body);
- assert.equal(payload.routingPreference,'TRAFFIC_UNAWARE');assert.equal(payload.computeAlternativeRoutes,false);
+ assert.equal(payload.routingPreference,'TRAFFIC_UNAWARE');assert.equal(payload.computeAlternativeRoutes,false);assert.equal(payload.polylineQuality,'HIGH_QUALITY');
  assert.deepEqual(payload.origin.location.latLng,input.origin);
  assert.equal(result.headers.get('cache-control'),'no-store');
 });

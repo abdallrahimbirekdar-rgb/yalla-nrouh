@@ -12,7 +12,7 @@ export interface GoogleMap {
  setZoom:(zoom:number)=>void;
  fitBounds:(bounds:unknown,padding?:number)=>void;
 }
-export interface GoogleMarker {position:LatLng|undefined;map:GoogleMap|null;gmpDraggable:boolean;addListener:(name:string,callback:(event:MapEvent)=>void)=>Listener}
+export interface GoogleMarker {content?:HTMLElement;position:LatLng|undefined;map:GoogleMap|null;gmpDraggable:boolean;addListener:(name:string,callback:(event:MapEvent)=>void)=>Listener}
 export interface GoogleLine {setMap:(map:GoogleMap|null)=>void;setPath:(points:LatLng[])=>void}
 export interface GoogleMaps {
  importLibrary?:(name:string)=>Promise<unknown>;

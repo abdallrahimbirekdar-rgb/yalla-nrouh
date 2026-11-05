@@ -25,7 +25,7 @@ const adapter={
   return {coords:fix};
  },
 };
-export type CameraTarget={point:Coordinate;revision:number;isLocation?:boolean};
+export type CameraTarget={point:Coordinate;revision:number;isLocation?:boolean;zoom?:number;overview?:boolean};
 export function useCurrentPosition(enabled:boolean){
  const [camera,setCamera]=useState<CameraTarget>();const [busy,setBusy]=useState(false),[failure,setFailure]=useState<PositionFailure|null>(null);
  const request=useRef<AbortController|null>(null),cameraRevision=useRef(0);

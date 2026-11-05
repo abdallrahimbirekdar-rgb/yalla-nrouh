@@ -183,3 +183,10 @@ test('offline drivers never renew availability or read ride previews',async()=>{
  globalThis.fetch=async()=>{calls++;return reply([{approved:true,online:false}])};
  try{assert.deepEqual((await cloudDriverInbox('test-driver-token')).offers,[]);assert.equal(calls,1)}finally{globalThis.fetch=original}
 });
+
+test('driver route preview requests only the scoped RPC and validates the ride endpoints',async()=>{
+ const {cloudDriverRidePreview}=await import('../src/cloud-api.ts');const id='00000000-0000-4000-8000-000000000010';
+ await withFetch(async(url,options)=>{assert.match(String(url),/\/rpc\/driver_ride_preview$/);assert.deepEqual(JSON.parse(options.body),{p_ride_id:id});return reply([{ride_id:id,pickup_lat:33.5,pickup_lng:36.2,destination_lat:33.6,destination_lng:36.3}])},async()=>{assert.equal((await cloudDriverRidePreview(token,id)).ride_id,id)});
+ await withFetch(async()=>reply([]),async()=>{await assert.rejects(cloudDriverRidePreview(token,id),error=>error.kind==='ride_unavailable')});
+ await withFetch(async()=>reply([{ride_id:id,pickup_lat:100,pickup_lng:36.2,destination_lat:33.6,destination_lng:36.3}]),async()=>{await assert.rejects(cloudDriverRidePreview(token,id),error=>error.kind==='ride_unavailable')});
+});

@@ -119,9 +119,9 @@ export async function siteCurrentPosition(askPermission:boolean,signal?:AbortSig
 }
 // Driver metering needs the actual native GPS timestamp and accuracy.
 // Invalid/inaccurate fixes are NOT counted as traveled distance.
-export async function siteCurrentFix(askPermission:boolean):Promise<Fix>{
+export async function siteCurrentFix(askPermission:boolean,signal?:AbortSignal):Promise<Fix>{
  if(!isNativeWebView())throw new PositionError('position');
- const result=await nativeCurrentPosition(askPermission,undefined,true);
+ const result=await nativeCurrentPosition(askPermission,signal,true);
  if(result.fix&&result.fix.accuracy<=50)return result.fix;
  throw new PositionError(
   result.error==='permission'||result.error==='accuracy'||result.error==='services'||result.error==='timeout'

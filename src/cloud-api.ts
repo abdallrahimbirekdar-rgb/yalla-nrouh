@@ -152,3 +152,11 @@ export async function cloudDriverInbox(token:string):Promise<{driver:CloudDriver
  if(!await cloudHeartbeat(token))throw new CloudError(409,'driver_not_approved');
  return {driver,offers:await cloudOpenRides(token)};
 }
+
+export interface DriverRidePreview {ride_id:string;pickup_lat:number;pickup_lng:number;destination_lat:number;destination_lng:number}
+export async function cloudDriverRidePreview(token:string,id:string):Promise<DriverRidePreview>{
+ const rows=await rpc<DriverRidePreview[]>('driver_ride_preview',token,{p_ride_id:id});
+ const row=rows?.[0];
+ if(!row||row.ride_id!==id||!isCoordinate({latitude:row.pickup_lat,longitude:row.pickup_lng})||!isCoordinate({latitude:row.destination_lat,longitude:row.destination_lng}))throw new CloudError(404,'ride_unavailable');
+ return row;
+}

@@ -27,7 +27,7 @@ export function recentWebPosition(maxAgeMs=12000):Coordinate|null{
 
 // First paint uses a recent, reasonably fast network/GPS fix rather than
 // waiting for a fresh high-accuracy satellite lock (slow indoors).
-export function getWebPosition(timeout=7000,maxAccuracy?:number):Promise<Coordinate>{
+export function getWebPosition(timeout=7000,maxAccuracy?:number,highAccuracy=false):Promise<Coordinate>{
  if(typeof navigator==='undefined'||!navigator.geolocation)return Promise.reject(new PositionError('position'));
  return new Promise((resolve,reject)=>{
   let settled=false;
@@ -40,7 +40,7 @@ export function getWebPosition(timeout=7000,maxAccuracy?:number):Promise<Coordin
    recentFix={point,at:Date.now()};
    if(settled){if(typeof document!=='undefined'&&document.visibilityState==='visible')announceWebPosition(point);return}
    settled=true;clearTimeout(timer);resolve(point);
-  },error=>fail(error.code===1?'permission':error.code===3?'timeout':'position'),{enableHighAccuracy:false,maximumAge:12000,timeout});}
+  },error=>fail(error.code===1?'permission':error.code===3?'timeout':'position'),{enableHighAccuracy:highAccuracy,maximumAge:highAccuracy?0:12000,timeout});}
   catch{fail('position')}
  });
 }
