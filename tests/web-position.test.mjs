@@ -50,3 +50,14 @@ test('first approved location is ready while the home map mounts',()=>withBrowse
 test('a browser GPS implementation that never calls back cannot leave an endless spinner',t=>withBrowser({geolocation:{getCurrentPosition:()=>{}}},async()=>{
  t.mock.timers.enable({apis:['setTimeout']});const pending=getWebPosition(1000);const rejected=assert.rejects(pending,e=>e.code==='timeout');t.mock.timers.tick(1500);await rejected;
 }));
+
+
+test('Android browser fallback rejects imprecise or stale fixes before racing native GPS',()=>withBrowser({
+ geolocation:{getCurrentPosition:success=>success({coords:{latitude:51.5,longitude:7.2,accuracy:1800},timestamp:Date.now()})},
+},async()=>{
+ await assert.rejects(getWebPosition(6500,250),e=>e.code==='position');
+ navigator.geolocation.getCurrentPosition=success=>success({coords:{latitude:51.5,longitude:7.2,accuracy:20},timestamp:Date.now()-60000});
+ await assert.rejects(getWebPosition(6500,250),e=>e.code==='position');
+ navigator.geolocation.getCurrentPosition=success=>success({coords:{latitude:51.5,longitude:7.2,accuracy:20},timestamp:Date.now()});
+ assert.deepEqual(await getWebPosition(6500,250),{latitude:51.5,longitude:7.2});
+}));

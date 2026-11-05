@@ -129,7 +129,7 @@ test('a fresh Android fix after the old short deadline still reaches the website
 
 test('Android app can use browser GPS if native bridge stalls and Android grant exists',async()=>withLocationBrowser({
  geolocation:{getCurrentPosition:success=>{
-  queueMicrotask(()=>success({coords:{latitude:51.47,longitude:7.23}}));
+  queueMicrotask(()=>success({coords:{latitude:51.47,longitude:7.23,accuracy:25},timestamp:Date.now()}));
  }}
 },async host=>{
  host.__YALLA_NATIVE_LOCATION_GRANTED__=true;

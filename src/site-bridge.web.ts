@@ -52,7 +52,7 @@ export function nativeCurrentPosition(askPermission:boolean,signal?:AbortSignal,
    try{bridge.postMessage(JSON.stringify({type:'location-cancel',id}))}catch{}
    cleanup();resolve({point:null,error:'unsupported'});
   };
-  const timer=setTimeout(()=>{cleanup();resolve({point:null,error:'timeout'})},askPermission?60000:25000);
+  const timer=setTimeout(()=>{try{bridge.postMessage(JSON.stringify({type:'location-cancel',id}))}catch{}cleanup();resolve({point:null,error:'timeout'})},askPermission?60000:25000);
   window.addEventListener('yalla:native-position',finish);
   if(signal?.aborted){abort();return}
   signal?.addEventListener('abort',abort,{once:true});
@@ -92,7 +92,7 @@ export async function siteCurrentPosition(askPermission:boolean):Promise<Coordin
       if(result.point)return result.point;
       throw new PositionError(result.error==='timeout'?'timeout':'position');
      }),
-     getWebPosition(6500),
+     getWebPosition(6500,250),
     ]);
     controller.abort();
     announceWebPosition(point);

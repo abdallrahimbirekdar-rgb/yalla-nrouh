@@ -27,7 +27,7 @@ export function recentWebPosition(maxAgeMs=12000):Coordinate|null{
 
 // First paint uses a recent, reasonably fast network/GPS fix rather than
 // waiting for a fresh high-accuracy satellite lock (slow indoors).
-export function getWebPosition(timeout=7000):Promise<Coordinate>{
+export function getWebPosition(timeout=7000,maxAccuracy?:number):Promise<Coordinate>{
  if(typeof navigator==='undefined'||!navigator.geolocation)return Promise.reject(new PositionError('position'));
  return new Promise((resolve,reject)=>{
   let settled=false;
@@ -36,6 +36,7 @@ export function getWebPosition(timeout=7000):Promise<Coordinate>{
   try{navigator.geolocation.getCurrentPosition(result=>{
    const point={latitude:result.coords.latitude,longitude:result.coords.longitude};
    if(!isCoordinate(point)){fail('position');return}
+   if(maxAccuracy!==undefined&&(typeof result.coords.accuracy!=='number'||!Number.isFinite(result.coords.accuracy)||result.coords.accuracy<0||result.coords.accuracy>maxAccuracy||!Number.isFinite(result.timestamp)||Date.now()-result.timestamp>20000||result.timestamp>Date.now()+3000)){fail('position');return}
    recentFix={point,at:Date.now()};
    if(settled){if(typeof document!=='undefined'&&document.visibilityState==='visible')announceWebPosition(point);return}
    settled=true;clearTimeout(timer);resolve(point);
