@@ -4,6 +4,7 @@ export const SITE='https://abdallrahimbirekdar-rgb.github.io/yalla-nrouh/';
 export type WebMessage=
  |{type:'bootstrap';id:string;version:string|null}
  |{type:'location';id:string;askPermission:boolean;track:boolean}
+ |{type:'location-cancel';id:string}
  |{type:'location-settings';id:string}
  |{type:'alerts-enable';id:string}
  |{type:'notify';id:string;title:string;body:string}
@@ -30,6 +31,7 @@ export function readWebMessage(raw:string):WebMessage|null{
   if(v.type==='location'&&idOK(v.id)&&typeof v.askPermission==='boolean'
     &&(v.track===undefined||typeof v.track==='boolean'))
    return {type:'location',id:v.id,askPermission:v.askPermission,track:v.track===true};
+  if(v.type==='location-cancel'&&idOK(v.id))return {type:'location-cancel',id:v.id};
   if(v.type==='location-settings'&&idOK(v.id))return {type:'location-settings',id:v.id};
   if(v.type==='alerts-enable'&&idOK(v.id))return {type:'alerts-enable',id:v.id};
   if(v.type==='notify'&&idOK(v.id)&&typeof v.title==='string'&&v.title.length<=200&&typeof v.body==='string'&&v.body.length<=1000)
@@ -53,6 +55,11 @@ export function bootstrapScript(id:string,granted:boolean):string{
   +eventScript('yalla:native-location-permission',{granted});
 }
 export type PositionPoint={latitude:number;longitude:number};
+export function autoFixScript(point:PositionPoint,time:number):string{
+ const payload={point,time};
+ return 'window.__YALLA_NATIVE_AUTOFIX__='+js(payload)+';'
+  +eventScript('yalla:native-autofix',payload);
+}
 export type PositionResponse={
  id:string;point:PositionPoint|null;
  error?:'permission'|'accuracy'|'services'|'position'|'timeout';

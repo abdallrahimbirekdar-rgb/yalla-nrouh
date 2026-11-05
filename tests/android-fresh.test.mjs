@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {acceptableFix,awaitFreshFix,deadlineOr} from '../src/android-fresh/gps.ts';
-import {readWebMessage,trustedSite,positionScript,bootstrapScript} from '../src/android-fresh/bridge.ts';
+import {readWebMessage,trustedSite,positionScript,bootstrapScript,autoFixScript} from '../src/android-fresh/bridge.ts';
 test('trusted website only; no JavaScript URL injection',()=>{
  assert.equal(trustedSite('https://abdallrahimbirekdar-rgb.github.io/yalla-nrouh/'),true);
  assert.equal(trustedSite('https://evil.example/yalla-nrouh/'),false);
@@ -9,11 +9,13 @@ test('trusted website only; no JavaScript URL injection',()=>{
  assert.equal(readWebMessage('{"type":"location","id":"a-1","askPermission":true}')?.type,'location');
  assert.equal(readWebMessage('{"type":"location","id":"!!!","askPermission":true}'),null);
  assert.equal(readWebMessage('{"type":"notify","id":"abc","title":"x","body":"y"}')?.type,'notify');
+ assert.deepEqual(readWebMessage('{"type":"location-cancel","id":"x"}'),{type:'location-cancel',id:'x'});
 });
 test('native bootstrap and position events serialize as data',()=>{
  const result=positionScript({id:'x',point:{latitude:50,longitude:7}});
  assert.match(result,/yalla:native-position/);
  assert.match(bootstrapScript('x',true),/YALLA_NATIVE_LOCATION_GRANTED__/);
+ assert.match(autoFixScript({latitude:51.5,longitude:7.2},Date.now()),/YALLA_NATIVE_AUTOFIX__/);
  assert.doesNotMatch(positionScript({id:'x',point:null,error:'timeout'}),/eval\s*\(/);
 });
 test('freshness, accuracy, and coordinate bounds are enforced',()=>{

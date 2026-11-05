@@ -2,7 +2,7 @@ import {isCoordinate,type Coordinate} from './geo.ts';
 import {announceWebPosition,getWebPosition,refineWebPosition,webLocationGranted} from './web-position.ts';
 import {PositionError} from './current-position.ts';
 import type {Fix} from './meter.ts';
-export type SiteWindow=Window&{ReactNativeWebView?:{postMessage:(message:string)=>void};__YALLA_NATIVE_LOCATION_GRANTED__?:boolean};
+export type SiteWindow=Window&{ReactNativeWebView?:{postMessage:(message:string)=>void};__YALLA_NATIVE_LOCATION_GRANTED__?:boolean;__YALLA_NATIVE_AUTOFIX__?:{point:Coordinate;time:number}};
 // The website owns its local data. Never block a launch or save while trying
 // to import older APK data; the owner chose to start without that migration.
 // Keep the native handshake only for optional foreground location status.
@@ -15,6 +15,16 @@ function listenNativePosition(host:SiteWindow){
   const point=(event as CustomEvent).detail?.point;
   if((event as CustomEvent).detail?.id===latestNativeGpsId&&isCoordinate(point))announceWebPosition(point);
  });
+ // Native can obtain GPS even if the webpage -> Android message never arrives.
+ // Keep a recent result available when React mounts after the native event.
+ const auto=(value:unknown)=>{
+  const details=value as {point?:unknown;time?:unknown}|null;
+  if(details&&isCoordinate(details.point)&&typeof details.time==='number'
+     &&Date.now()-details.time>=-3000&&Date.now()-details.time<30000)
+   announceWebPosition(details.point);
+ };
+ host.addEventListener('yalla:native-autofix',event=>auto((event as CustomEvent).detail));
+ if(host.__YALLA_NATIVE_AUTOFIX__)auto(host.__YALLA_NATIVE_AUTOFIX__);
 }
 export type NativePositionResult={point:Coordinate|null;error:'permission'|'accuracy'|'services'|'position'|'timeout'|'unsupported'|null;fix?:Fix};
 export function isNativeWebView():boolean{
@@ -38,7 +48,10 @@ export function nativeCurrentPosition(askPermission:boolean,signal?:AbortSignal,
    resolve({point,error,...(fix?{fix}:{})});
   };
   const cleanup=()=>{clearTimeout(timer);window.removeEventListener('yalla:native-position',finish);signal?.removeEventListener('abort',abort)};
-  const abort=()=>{cleanup();resolve({point:null,error:'unsupported'})};
+  const abort=()=>{
+   try{bridge.postMessage(JSON.stringify({type:'location-cancel',id}))}catch{}
+   cleanup();resolve({point:null,error:'unsupported'});
+  };
   const timer=setTimeout(()=>{cleanup();resolve({point:null,error:'timeout'})},askPermission?60000:25000);
   window.addEventListener('yalla:native-position',finish);
   if(signal?.aborted){abort();return}
@@ -54,17 +67,46 @@ export function nativeCurrentPosition(askPermission:boolean,signal?:AbortSignal,
  */
 export async function siteCurrentPosition(askPermission:boolean):Promise<Coordinate>{
  if(isNativeWebView()){
-  // The installed app has ONE location permission and ONE GPS provider:
-  // Android Expo Location via the typed WebView bridge. Never fall back to
-  // navigator.geolocation here: that creates a second WebView-origin prompt.
-  const result=await nativeCurrentPosition(askPermission);
+  const host=window as SiteWindow;
+  const controller=new AbortController();
+  const nativeRequest=nativeCurrentPosition(askPermission,controller.signal);
+  // Give the native foreground GPS an opportunity to answer promptly, without
+  // opening an unnecessary second WebView-origin permission prompt.
+  let timer:ReturnType<typeof setTimeout>|undefined;
+  const early=await Promise.race([
+   nativeRequest.then(result=>({kind:'native' as const,result})),
+   new Promise<{kind:'slow'}>(resolve=>{timer=setTimeout(()=>resolve({kind:'slow'}),1500)}),
+  ]);
+  if(timer)clearTimeout(timer);
+  if(early.kind==='native'&&early.result.point)return early.result.point;
+  if(early.kind==='native'&&['permission','accuracy','services'].includes(early.result.error??'')){
+   throw new PositionError(early.result.error as 'permission'|'accuracy'|'services');
+  }
+  // This fallback works like the user's phone browser. It is enabled only
+  // after Android has reported foreground permission, never after denial.
+  // Driver metering deliberately stays on native precise GPS below.
+  if(host.__YALLA_NATIVE_LOCATION_GRANTED__===true&&navigator.geolocation){
+   try{
+    const point=await Promise.any([
+     nativeRequest.then(result=>{
+      if(result.point)return result.point;
+      throw new PositionError(result.error==='timeout'?'timeout':'position');
+     }),
+     getWebPosition(6500),
+    ]);
+    controller.abort();
+    announceWebPosition(point);
+    return point;
+   }catch{/* Preserve the native error if both paths fail. */}
+  }
+  const result=early.kind==='native'?early.result:await nativeRequest;
   if(result.point)return result.point;
   throw new PositionError(
    result.error==='permission'||result.error==='accuracy'||result.error==='services'||result.error==='timeout'
     ?result.error:'position'
   );
  }
- // Ordinary browsers still use their own permission once.
+ // Ordinary browsers keep their existing geolocation behavior.
  if(!askPermission&&!await webLocationGranted())throw new PositionError('permission');
  const point=await getWebPosition(6500);refineWebPosition();return point;
 }

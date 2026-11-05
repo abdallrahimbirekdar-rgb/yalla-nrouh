@@ -125,3 +125,33 @@ test('a fresh Android fix after the old short deadline still reaches the website
  host.dispatchEvent(new CustomEvent('yalla:native-position',{detail:{id,point:{latitude:51.48,longitude:7.21}}}));
  assert.deepEqual(await task,{latitude:51.48,longitude:7.21});
 }));
+
+
+test('Android app can use browser GPS if native bridge stalls and Android grant exists',async()=>withLocationBrowser({
+ geolocation:{getCurrentPosition:success=>{
+  queueMicrotask(()=>success({coords:{latitude:51.47,longitude:7.23}}));
+ }}
+},async host=>{
+ host.__YALLA_NATIVE_LOCATION_GRANTED__=true;
+ let nativeIds=[];
+ host.ReactNativeWebView={postMessage:raw=>{const value=JSON.parse(raw);nativeIds.push(value)}};
+ const request=siteCurrentPosition(false);
+ await new Promise(resolve=>setTimeout(resolve,1700));
+ assert.deepEqual(await request,{latitude:51.47,longitude:7.23});
+ assert.equal(nativeIds[0]?.type,'location');
+ assert.equal(nativeIds[nativeIds.length-1]?.type,'location-cancel');
+}));
+test('native autolocation survives event before home page mounts',async()=>withLocationBrowser({},async host=>{
+ const now=Date.now();
+ host.ReactNativeWebView={postMessage:()=>{}};
+ host.__YALLA_NATIVE_AUTOFIX__={point:{latitude:51.48,longitude:7.21},time:now};
+ const position=await import('../src/web-position.ts');
+ const point=position.recentWebPosition();
+ // The cache is attached when the webpage sends its first native request.
+ // Prime the listener with a native request but do not await its timeout.
+ const controller=new AbortController();
+ const {nativeCurrentPosition}=await import('../src/site-bridge.web.ts');
+ const native=nativeCurrentPosition(false,controller.signal);
+ controller.abort();await native;
+ assert.deepEqual(position.recentWebPosition(),host.__YALLA_NATIVE_AUTOFIX__.point);
+}));

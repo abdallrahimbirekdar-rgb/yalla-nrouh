@@ -36,3 +36,19 @@ Physical-device tests REQUIRED before calling the issue fixed:
 7. Test passenger and driver separately on a physical Android device.
 
 GitHub tests and a built APK confirm compilation, not real GPS reception.
+
+
+## 1.0.1 Android geolocation diagnostic fix
+- The home map no longer claims Damascus is the passenger's live location.
+- The native host can obtain foreground GPS and place a recent result into
+  window.__YALLA_NATIVE_AUTOFIX__ even without a web->native location request.
+- WebView JavaScript geolocation is now enabled as a secondary passenger location
+  provider (mirrors the phone-browser API), delayed 1.5 seconds so a working
+  native bridge remains the first choice and does not prompt unnecessarily.
+- Fallback runs only after Android foreground permission is confirmed; the
+  driver fare meter still requires native, accurate timestamped GPS.
+- WebView cancellation explicitly stops a pending native watcher when the
+  secondary location source wins.
+- The APK needs rebuilding for Android WebView geolocation; website-only
+  location logic and placeholder remain live-updatable after that.
+- Android physical-device tests are mandatory before claiming resolution.

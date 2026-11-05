@@ -6,7 +6,7 @@ import * as Location from 'expo-location';
 import Constants from 'expo-constants';
 import {enableLocalAlerts,notifyLocal} from '../alerts';
 import {acceptableFix,awaitFreshFix,deadlineOr} from './gps';
-import {SITE,bootstrapScript,diagnosticScript,eventScript,externalTarget,positionScript,readWebMessage,trustedSite,
+import {SITE,bootstrapScript,diagnosticScript,eventScript,autoFixScript,externalTarget,positionScript,readWebMessage,trustedSite,
  type WebMessage,type PositionResponse} from './bridge';
 
 // Fresh native app: it owns ONLY Android foreground location and the live website.
@@ -77,6 +77,7 @@ export default function FreshAndroid(){
  const web=useRef<WebView>(null);
  const engine=useRef(new ForegroundLocation()).current;
  const active=useRef(true),run=useRef<Run|null>(null),canGoBack=useRef(false);
+ const autoStarted=useRef(false),locationRequestedByPage=useRef(false);
  const safeToReload=useRef(false),websiteRevision=useRef<string|null>(null);
  const [uri,setUri]=useState(()=>SITE+'?app=android&launch='+Date.now());
  const [loading,setLoading]=useState(true),[failed,setFailed]=useState(false),[newWeb,setNewWeb]=useState(false);
@@ -154,7 +155,11 @@ export default function FreshAndroid(){
   const send=(fix:Location.LocationObject)=>{
    if(controller.signal.aborted||!active.current||AppState.currentState==='background')return;
    delivered=true;
-   respond({id:message.id,point:{latitude:fix.coords.latitude,longitude:fix.coords.longitude},
+   const point={latitude:fix.coords.latitude,longitude:fix.coords.longitude};
+   // The startup fix is independent of website -> native postMessage.
+   // Save it on window before firing the event, so late website mounts recover it.
+   if(message.id==='auto-location')inject(autoFixScript(point,fix.timestamp));
+   respond({id:message.id,point,
     fix:typeof fix.coords.accuracy==='number'?
      {accuracy:fix.coords.accuracy,time:fix.timestamp}:undefined});
   };
@@ -190,7 +195,10 @@ export default function FreshAndroid(){
     void syncPermission('ready');
    }).catch(()=>inject(bootstrapScript(message.id,false)));
   }else if(message.type==='location'){
+   locationRequestedByPage.current=true;
    void locate(message);
+  }else if(message.type==='location-cancel'){
+   if(run.current?.id===message.id)run.current.controller.abort();
   }else if(message.type==='location-settings'){
    // Opening system settings must never wait for a GPS fix.
    void Linking.openSettings().then(
@@ -218,7 +226,7 @@ export default function FreshAndroid(){
   </View>}
   <WebView ref={web} source={{uri}} style={{flex:1,backgroundColor:background}}
    originWhitelist={['https://abdallrahimbirekdar-rgb.github.io']}
-   javaScriptEnabled domStorageEnabled geolocationEnabled={false}
+   javaScriptEnabled domStorageEnabled geolocationEnabled={true}
    cacheEnabled cacheMode="LOAD_DEFAULT" mixedContentMode="never"
    allowFileAccess={false} allowFileAccessFromFileURLs={false} allowUniversalAccessFromFileURLs={false}
    javaScriptCanOpenWindowsAutomatically={false} setSupportMultipleWindows={false}
@@ -231,7 +239,15 @@ export default function FreshAndroid(){
    onMessage={handleMessage}
    onNavigationStateChange={nav=>{canGoBack.current=nav.canGoBack;if(!nav.loading)setLoading(false)}}
    onLoadStart={()=>{setLoading(true);setFailed(false)}}
-   onLoadEnd={()=>{setLoading(false);void syncPermission('page-loaded')}}
+   onLoadEnd={()=>{
+    setLoading(false);void syncPermission('page-loaded');
+    // If the website cannot post its location request to Android,
+    // native GPS still starts and injects a cached position for the map.
+    if(!autoStarted.current&&!locationRequestedByPage.current){
+     autoStarted.current=true;
+     void locate({type:'location',id:'auto-location',askPermission:false,track:false});
+    }
+   }}
    onError={()=>{setLoading(false);setFailed(true)}}
    onRenderProcessGone={()=>{setLoading(false);setFailed(true)}}
    onHttpError={event=>{if(event.nativeEvent.statusCode>=400&&event.nativeEvent.url===uri){
