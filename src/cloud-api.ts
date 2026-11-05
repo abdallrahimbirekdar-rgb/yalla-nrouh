@@ -78,6 +78,17 @@ export async function cloudMyRides(token:string):Promise<CloudRide[]>{
   const rides=await call<CloudRide[]>('/rest/v1/rides?select='+rideColumns+'&order=created_at.desc&limit=30','GET',token);
   receiveRideState(owner,rides);return rides;
 }
+export type DriverHistoryKind='completed'|'cancelled'|'released';
+export type DriverHistoryEntry={id:string|number;ride_id?:string;region:number;category:string;pickup?:string;destination?:string;updated_at?:string;released_at?:string};
+export const driverHistoryPageSize=20;
+export function cloudDriverHistory(token:string,owner:string,kind:DriverHistoryKind,offset:number){
+ requireToken(token);
+ const page='&driver_id=eq.'+encodeURIComponent(owner)+'&limit='+driverHistoryPageSize+'&offset='+offset;
+ const path=kind==='released'
+  ? '/rest/v1/driver_ride_releases?select=id,ride_id,region,category,released_at&order=released_at.desc,id.desc'
+  : '/rest/v1/rides?select=id,region,category,pickup,destination,updated_at&status=eq.'+kind+'&order=updated_at.desc,id.desc';
+ return call<DriverHistoryEntry[]>(path+page,'GET',token);
+}
 export async function cloudMyDriver(token:string):Promise<CloudDriver|null>{
   requireToken(token);
   const accounts=await call<CloudDriver[]>('/rest/v1/driver_accounts?select=user_id,region,category,approved,online,last_seen_at&limit=1','GET',token);
@@ -114,6 +125,7 @@ export const cloudConfirmPickup=(token:string,id:string)=>rpc<boolean>('confirm_
 export const cloudRegisterDriver=(token:string,region:number,category:string)=>rpc<boolean>('register_driver',token,{p_region:region,p_category:category});
 export const cloudSetDriverOnline=(token:string,online:boolean)=>rpc<boolean>('set_driver_online',token,{p_online:online});
 export const cloudHeartbeat=(token:string)=>rpc<boolean>('driver_heartbeat',token);
+export const cloudDeclineDriverOffer=(token:string,id:string)=>rpc<null>('decline_driver_offer',token,{p_ride_id:id});
 export const cloudOpenRides=(token:string)=>rpc<RidePreview[]>('open_ride_previews_with_fare',token);
 export async function cloudAcceptRide(token:string,id:string):Promise<boolean>{
  const accepted=await rpc<boolean>('accept_ride',token,{p_ride_id:id});
