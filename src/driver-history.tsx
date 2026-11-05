@@ -7,20 +7,26 @@ import {categories,regions} from './domain';
 import {Button,Icon,Label,Panel,useText,useTheme} from './ui';
 
 const sections=[
- {kind:'completed',ar:'المنجزة',en:'Completed',icon:'checkmark-circle-outline'},
- {kind:'cancelled',ar:'الملغاة',en:'Cancelled',icon:'close-circle-outline'},
- {kind:'released',ar:'غير المكتملة',en:'Unfinished',icon:'time-outline'},
+ {kind:'completed',ar:'المنجزة',en:'Completed',icon:'checkmark-circle-outline',light:['#eaf7f0','#26734d'],dark:['#1a3428','#85dfb1']},
+ {kind:'cancelled',ar:'الملغاة',en:'Cancelled',icon:'close-circle-outline',light:['#fff0f0','#a6343b'],dark:['#44292d','#ffb0b4']},
+ {kind:'released',ar:'غير المكتملة',en:'Unfinished',icon:'time-outline',light:['#fff4e0','#875509'],dark:['#423320','#ffd28b']},
 ] as const;
 
 export function DriverHistoryBar({onOpen}:{onOpen:(kind:DriverHistoryKind)=>void}){
- const {state}=useApp();const {colors}=useTheme();const t=useText();
- return <View style={{backgroundColor:colors.background,borderTopWidth:1,borderColor:colors.line,paddingHorizontal:12,paddingVertical:5}}>
-  <View style={{width:'100%',maxWidth:640,alignSelf:'center',flexDirection:state.language==='ar'?'row-reverse':'row',gap:4}}>
-   {sections.map(section=><Pressable key={section.kind} accessibilityRole="button" accessibilityLabel={t(section.ar,section.en)}
-    onPress={()=>onOpen(section.kind)} style={({pressed})=>({flex:1,minHeight:50,alignItems:'center',justifyContent:'center',gap:1,borderRadius:10,backgroundColor:pressed?colors.selected:colors.background})}>
-    <Icon name={section.icon} size={20} color={colors.ink}/>
-    <Label muted>{t(section.ar,section.en)}</Label>
-   </Pressable>)}
+ const {state}=useApp();const {colors,dark}=useTheme();const t=useText();
+ return <View style={{backgroundColor:colors.background,borderTopWidth:1,borderColor:colors.line,paddingHorizontal:12,paddingVertical:8}}>
+  <View style={{width:'100%',maxWidth:640,alignSelf:'center',flexDirection:state.language==='ar'?'row-reverse':'row',gap:7}}>
+   {sections.map(section=>{
+    const [fill,accent]=dark?section.dark:section.light;
+    return <Pressable key={section.kind} accessibilityRole="button" accessibilityLabel={t(section.ar,section.en)}
+     onPress={()=>onOpen(section.kind)} style={({pressed})=>({
+      flex:1,minWidth:0,minHeight:64,alignItems:'center',justifyContent:'center',gap:2,paddingHorizontal:3,paddingVertical:5,
+      borderRadius:12,borderWidth:1.5,borderColor:accent,backgroundColor:fill,opacity:pressed?0.7:1,
+     })}>
+     <Icon name={section.icon} size={21} color={accent}/>
+     <Label>{t(section.ar,section.en)}</Label>
+    </Pressable>;
+   })}
   </View>
  </View>;
 }
