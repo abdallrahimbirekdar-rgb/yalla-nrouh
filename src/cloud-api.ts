@@ -71,10 +71,11 @@ export async function cloudWhoAmI(token:string):Promise<{id:string;email?:string
   requireToken(token);
   return call('/auth/v1/user','GET',token);
 }
+const rideColumns='id,passenger_id,driver_id,pickup,destination,pickup_lat,pickup_lng,destination_lat,destination_lng,category,region,status,created_at,updated_at,pickup_confirmed_at';
 export async function cloudMyRides(token:string):Promise<CloudRide[]>{
   requireToken(token);
   const owner=readRideState().owner;
-  const rides=await call<CloudRide[]>('/rest/v1/rides?select=id,passenger_id,driver_id,pickup,destination,pickup_lat,pickup_lng,destination_lat,destination_lng,category,region,status,created_at,updated_at,pickup_confirmed_at&order=created_at.desc&limit=30','GET',token);
+  const rides=await call<CloudRide[]>('/rest/v1/rides?select='+rideColumns+'&order=created_at.desc&limit=30','GET',token);
   receiveRideState(owner,rides);return rides;
 }
 export async function cloudMyDriver(token:string):Promise<CloudDriver|null>{
@@ -82,17 +83,29 @@ export async function cloudMyDriver(token:string):Promise<CloudDriver|null>{
   const accounts=await call<CloudDriver[]>('/rest/v1/driver_accounts?select=user_id,region,category,approved,online,last_seen_at&limit=1','GET',token);
   return accounts[0]??null;
 }
-export async function cloudRequestRide(token:string,draft:TripDraft):Promise<{ride_id:string;pin:string}>{
+export async function cloudRideOperation(token:string,kind:'request'|'accept',id:string,owner:string):Promise<CloudRide|null>{
+  requireToken(token);
+  const column=kind==='request'?'client_request_id':'id';
+  const participant=kind==='request'?'passenger_id':'driver_id';
+  const rows=await call<CloudRide[]>('/rest/v1/rides?select='+rideColumns+'&'+column+'=eq.'+encodeURIComponent(id)+'&'+participant+'=eq.'+encodeURIComponent(owner)+'&limit=1','GET',token);
+  if(!Array.isArray(rows))throw new CloudError(500,'bad_response');
+  return rows[0]??null;
+}
+export function cloudMutationUncertain(error:unknown):boolean{
+  return !(error instanceof CloudError)||error.status===0||error.status===408||error.status>=500||error.kind==='bad_response';
+}
+export async function cloudRequestRide(token:string,draft:TripDraft,requestId:string):Promise<string>{
   if(!isCoordinate(draft.pickupPoint)||!isCoordinate(draft.destinationPoint)||!draft.pickup.trim()||!draft.destination.trim())
     throw new CloudError(400,'select_map_points');
-  const rows=await rpc<{ride_id:string;pin:string}[]>('request_ride',token,{
+  const id=await rpc<string>('request_ride_once',token,{
+    p_request_id:requestId,
     p_pickup:draft.pickup.trim(),p_destination:draft.destination.trim(),
     p_pickup_lat:draft.pickupPoint.latitude,p_pickup_lng:draft.pickupPoint.longitude,
     p_destination_lat:draft.destinationPoint.latitude,p_destination_lng:draft.destinationPoint.longitude,
     p_region:draft.region,p_category:draft.category
   });
-  if(!Array.isArray(rows)||!rows[0]?.ride_id||!rows[0]?.pin)throw new CloudError(500,'bad_response');
-  return rows[0];
+  if(typeof id!=='string'||!id)throw new CloudError(500,'bad_response');
+  return id;
 }
 export const cloudCancelRide=(token:string,id:string)=>rpc<boolean>('cancel_ride',token,{p_ride_id:id});
 export const cloudReleaseRide=(token:string,id:string)=>rpc<boolean>('release_ride',token,{p_ride_id:id});
@@ -101,7 +114,11 @@ export const cloudRegisterDriver=(token:string,region:number,category:string)=>r
 export const cloudSetDriverOnline=(token:string,online:boolean)=>rpc<boolean>('set_driver_online',token,{p_online:online});
 export const cloudHeartbeat=(token:string)=>rpc<boolean>('driver_heartbeat',token);
 export const cloudOpenRides=(token:string)=>rpc<RidePreview[]>('open_ride_previews',token);
-export const cloudAcceptRide=(token:string,id:string)=>rpc<boolean>('accept_ride',token,{p_ride_id:id});
+export async function cloudAcceptRide(token:string,id:string):Promise<boolean>{
+ const accepted=await rpc<boolean>('accept_ride',token,{p_ride_id:id});
+ if(typeof accepted!=='boolean')throw new CloudError(500,'bad_response');
+ return accepted;
+}
 export const cloudAdvanceRide=(token:string,id:string,next:'arrived'|'riding'|'completed')=>rpc<string>('advance_ride',token,{p_ride_id:id,p_next:next,p_pin:null});
 
 export const cloudIsAdmin=(token:string)=>rpc<boolean>('is_staff_admin',token);

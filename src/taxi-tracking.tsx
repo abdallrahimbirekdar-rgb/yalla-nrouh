@@ -60,7 +60,7 @@ export function RideSearchTimer({startedAt}:{startedAt:string}){
 export function PassengerTaxiMap({rideId,pickup}:{rideId:string;pickup:Coordinate}){
  const {foreground}=useApp();const t=useText();
  const [fix,setFix]=useState<{point:Coordinate;time:number}|null>(null);
- const [stale,setStale]=useState(false);
+ const [now,setNow]=useState(Date.now);
  useEffect(()=>{
   if(!foreground||Platform.OS!=='web')return;
   const client=authClient(),controller=new AbortController();
@@ -104,16 +104,20 @@ export function PassengerTaxiMap({rideId,pickup}:{rideId:string;pickup:Coordinat
  },[foreground,rideId]);
  useEffect(()=>{
   if(!fix)return;
-  const remaining=freshForMs-(Date.now()-fix.time);
-  setStale(remaining<=0);
-  const timeout=setTimeout(()=>setStale(true),Math.max(0,remaining));
-  return()=>clearTimeout(timeout);
- },[fix]);
+  setNow(Date.now());
+  if(!foreground)return;
+  const interval=setInterval(()=>setNow(Date.now()),1000);
+  return()=>clearInterval(interval);
+ },[fix,foreground]);
+ const age=fix?Math.max(0,Math.floor((now-fix.time)/1000)):0;
+ const stale=age>=freshForMs/1000;
+ const number=new Intl.NumberFormat(t('ar','en')).format(age);
  return <Panel>
   <Label large>{t('تابع وصول التاكسي','Track your taxi')}</Label>
   <View style={{height:300,borderRadius:14,overflow:'hidden'}}>
    <MapCanvas compact readOnly minMapHeight={300} point={pickup} taxiPoint={fix?.point} onChange={()=>{}}/>
   </View>
-  <Label muted>{fix?(stale?t('آخر موقع معروف للتاكسي · بانتظار تحديث الموقع','Last known taxi location · waiting for an update'):t('علامة التاكسي تتحرّك مع تحديث موقع السائق','The taxi marker moves as the driver’s location updates')):t('بانتظار أول تحديث لموقع التاكسي…','Waiting for the taxi’s first location update…')}</Label>
+  <Label muted>{fix?t('آخر تحديث قبل '+number+' ثانية','Last updated '+number+' s ago'):t('بانتظار أول تحديث لموقع التاكسي…','Waiting for the taxi’s first location update…')}</Label>
+  {fix&&stale&&<Label muted>{t('نعرض آخر موقع معروف للتاكسي · بانتظار تحديث الموقع','Showing the last known taxi location · waiting for an update')}</Label>}
  </Panel>;
 }

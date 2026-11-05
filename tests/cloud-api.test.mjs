@@ -2,10 +2,11 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   cloudSignIn,cloudSignOut,cloudSignUp,cloudGetToken,cloudWhoAmI,
-  cloudRequestRide,cloudCancelRide,cloudReleaseRide,CloudError
+  cloudRequestRide,cloudRideOperation,cloudMutationUncertain,cloudCancelRide,cloudReleaseRide,CloudError
 } from '../src/cloud-api.ts';
 
 const token='test-access-token-for-requests';
+const requestId='00000000-0000-4000-8000-000000000001';
 const draft={
   pickup:'First test point',destination:'Second test point',region:1,
   category:'classic',intercity:false,
@@ -47,27 +48,49 @@ test('invalid signup and missing authentication fail before a network request',a
 
 test('ride request needs two valid map coordinates',async()=>{
  await withFetch(()=>{throw Error('should not contact backend')},async()=>{
-   await assert.rejects(()=>cloudRequestRide(token,{...draft,destinationPoint:undefined}),e=>e instanceof CloudError&&e.kind==='select_map_points');
-   await assert.rejects(()=>cloudRequestRide(token,{...draft,pickupPoint:{latitude:123,longitude:7}}),e=>e instanceof CloudError&&e.kind==='select_map_points');
+   await assert.rejects(()=>cloudRequestRide(token,{...draft,destinationPoint:undefined},requestId),e=>e instanceof CloudError&&e.kind==='select_map_points');
+   await assert.rejects(()=>cloudRequestRide(token,{...draft,pickupPoint:{latitude:123,longitude:7}},requestId),e=>e instanceof CloudError&&e.kind==='select_map_points');
  });
 });
 
 test('ride request posts a safe payload to the backend RPC',async()=>{
  await withFetch(async (url,options)=>{
-   assert.match(url,/\/rest\/v1\/rpc\/request_ride$/);
+   assert.match(url,/\/rest\/v1\/rpc\/request_ride_once$/);
    assert.equal(options.method,'POST');
    assert.equal(options.headers.Authorization,'Bearer '+token);
    const payload=JSON.parse(options.body);
    assert.deepEqual(payload,{
-     p_pickup:'First test point',p_destination:'Second test point',
+     p_request_id:requestId,p_pickup:'First test point',p_destination:'Second test point',
      p_pickup_lat:33.5,p_pickup_lng:36.25,p_destination_lat:33.53,p_destination_lng:36.29,
      p_region:1,p_category:'classic'
    });
-   return reply([{ride_id:'00000000-0000-4000-8000-000000000000',pin:'123456'}]);
+   return reply('00000000-0000-4000-8000-000000000000');
  },async()=>{
-   const result=await cloudRequestRide(token,draft);
-   assert.equal(result.pin,'123456');
+   const result=await cloudRequestRide(token,draft,requestId);
+   assert.equal(result,'00000000-0000-4000-8000-000000000000');
  });
+});
+
+test('an ambiguous ride submission can be checked and retried with the same request ID',async()=>{
+ const owner='00000000-0000-4000-8000-000000000002';
+ const ride={id:'00000000-0000-4000-8000-000000000003',passenger_id:owner,status:'requested'};
+ let attempts=0;
+ await withFetch(async(url,options)=>{
+   if(options.method==='POST'){
+     assert.equal(JSON.parse(options.body).p_request_id,requestId);
+     if(++attempts===1)throw Error('response lost after commit');
+     return reply(ride.id);
+   }
+   const query=new URL(url).searchParams;
+   assert.equal(query.get('client_request_id'),'eq.'+requestId);
+   assert.equal(query.get('passenger_id'),'eq.'+owner);
+   return reply([ride]);
+ },async()=>{
+   await assert.rejects(()=>cloudRequestRide(token,draft,requestId),cloudMutationUncertain);
+   assert.deepEqual(await cloudRideOperation(token,'request',requestId,owner),ride);
+   assert.equal(await cloudRequestRide(token,draft,requestId),ride.id);
+ });
+ assert.equal(cloudMutationUncertain(new CloudError(400,'23505')),false);
 });
 
 test('server authorization failures are returned as coded errors',async()=>{
