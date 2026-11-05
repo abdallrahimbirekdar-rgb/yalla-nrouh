@@ -33,6 +33,9 @@ test('a late subscription is always removed after a valid fix',async()=>{
  await Promise.resolve();await Promise.resolve();
  callback?.(7);
  assert.equal(await task,7);
+ // The GPS callback may resolve before Android returns the subscription handle.
+ // Cleanup is guaranteed after handle registration, not synchronously with fix resolution.
+ await new Promise(resolve=>setImmediate(resolve));
  assert.equal(removed,1);
 });
 test('aborted requests cannot contaminate later requests',async()=>{

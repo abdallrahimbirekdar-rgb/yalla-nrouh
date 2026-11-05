@@ -131,7 +131,9 @@ export default function FreshAndroid(){
    return true;
   });
   const state=AppState.addEventListener('change',value=>{
-   if(value==='background'||value==='inactive'){run.current?.controller.abort();return}
+   // Android permission sheets can briefly mark the activity inactive.
+   // Cancel only on actual backgrounding so the first GPS request survives consent.
+   if(value==='background'){run.current?.controller.abort();inject(eventScript('yalla:native-visibility',{active:false}));return}
    if(value==='active'){
     inject(eventScript('yalla:native-visibility',{active:true}));
     void syncPermission('resumed');
@@ -232,7 +234,7 @@ export default function FreshAndroid(){
    onLoadEnd={()=>{setLoading(false);void syncPermission('page-loaded')}}
    onError={()=>{setLoading(false);setFailed(true)}}
    onRenderProcessGone={()=>{setLoading(false);setFailed(true)}}
-   onHttpError={event=>{if(event.nativeEvent.statusCode>=400&&trustedSite(event.nativeEvent.url)){
+   onHttpError={event=>{if(event.nativeEvent.statusCode>=400&&event.nativeEvent.url===uri){
     setLoading(false);setFailed(true);
    }}}
   />
