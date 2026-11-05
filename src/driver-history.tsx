@@ -1,10 +1,10 @@
 import React,{useEffect,useState} from 'react';
-import {ActivityIndicator,Modal,Platform,ScrollView,View} from 'react-native';
+import {ActivityIndicator,Modal,Platform,Pressable,ScrollView,View} from 'react-native';
 import {SafeAreaView} from 'react-native-safe-area-context';
 import {cloudCurrentToken,cloudDriverHistory,driverHistoryPageSize,type DriverHistoryEntry,type DriverHistoryKind} from './cloud-api';
 import {useApp} from './context';
 import {categories,regions} from './domain';
-import {Button,Label,Panel,useText,useTheme} from './ui';
+import {Button,Icon,Label,Panel,useText,useTheme} from './ui';
 
 const sections=[
  {kind:'completed',ar:'المنجزة',en:'Completed',icon:'checkmark-circle-outline'},
@@ -14,9 +14,13 @@ const sections=[
 
 export function DriverHistoryBar({onOpen}:{onOpen:(kind:DriverHistoryKind)=>void}){
  const {state}=useApp();const {colors}=useTheme();const t=useText();
- return <View style={{backgroundColor:colors.background,borderTopWidth:1,borderColor:colors.line,paddingHorizontal:10,paddingVertical:8}}>
-  <View style={{width:'100%',maxWidth:640,alignSelf:'center',flexDirection:state.language==='ar'?'row-reverse':'row',gap:6}}>
-   {sections.map(section=><View key={section.kind} style={{flex:1}}><Button secondary stacked icon={section.icon} title={t(section.ar,section.en)} onPress={()=>onOpen(section.kind)}/></View>)}
+ return <View style={{backgroundColor:colors.background,borderTopWidth:1,borderColor:colors.line,paddingHorizontal:12,paddingVertical:5}}>
+  <View style={{width:'100%',maxWidth:640,alignSelf:'center',flexDirection:state.language==='ar'?'row-reverse':'row',gap:4}}>
+   {sections.map(section=><Pressable key={section.kind} accessibilityRole="button" accessibilityLabel={t(section.ar,section.en)}
+    onPress={()=>onOpen(section.kind)} style={({pressed})=>({flex:1,minHeight:50,alignItems:'center',justifyContent:'center',gap:1,borderRadius:10,backgroundColor:pressed?colors.selected:colors.background})}>
+    <Icon name={section.icon} size={20} color={colors.ink}/>
+    <Label muted>{t(section.ar,section.en)}</Label>
+   </Pressable>)}
   </View>
  </View>;
 }

@@ -12,9 +12,9 @@ import {categories,regions} from './domain';
 import {useApp} from './context';
 import {useAuth} from './auth';
 import MapCanvas from './map/MapCanvas';
-import {Button,Label,Panel,useText,useTheme} from './ui';
+import {Button,Icon,Label,Panel,useText,useTheme} from './ui';
 export default function DriverOffer({offer,remainingSeconds,position,disabled,expanded,onExpand,onDecline,onAccept}:{offer:RidePreview;remainingSeconds:number;position?:Coordinate;disabled:boolean;expanded:boolean;onExpand:()=>void;onDecline:()=>void;onAccept:(routes:{trip:RoutePlan|null;pickup:RoutePlan|null})=>void}){
- const {state}=useApp();const auth=useAuth();const t=useText();const {colors}=useTheme();
+ const {state}=useApp();const auth=useAuth();const t=useText();const {colors,dark}=useTheme();
  const [plan,setPlan]=useState<RoutePlan|null>(null),[busy,setBusy]=useState(true),[error,setError]=useState(''),[attempt,setAttempt]=useState(0);
  const [pickupPlan,setPickupPlan]=useState<RoutePlan|null>(null),[pickupBusy,setPickupBusy]=useState(false),[pickupError,setPickupError]=useState(''),[pickupAttempt,setPickupAttempt]=useState(0);
  const currentPosition=useRef(position);currentPosition.current=position;
@@ -56,14 +56,18 @@ export default function DriverOffer({offer,remainingSeconds,position,disabled,ex
  const away=pickupPlan?(approach&&approach.offRouteMeters<=100?approach.remainingMeters:pickupPlan.meters):null;
  const eta=pickupPlan?(approach&&approach.offRouteMeters<=100?approach.remainingSeconds:pickupPlan.seconds):null;
  const row={flexDirection:state.language==='ar'?'row-reverse' as const:'row' as const,gap:8};
- const metric={flex:1,paddingHorizontal:10,paddingVertical:8,borderRadius:12,backgroundColor:colors.selected};
- return <Panel>
-  <View style={{...row,justifyContent:'space-between',alignItems:'center',flexWrap:'wrap'}}>
-   <Label>{regions[offer.region]?.[state.language==='ar'?0:1]} · {categories.find(c=>c.id===offer.category)?.[state.language]??offer.category}</Label>
-   <Label>{t('متبقّي','Time left')} {Math.floor(remainingSeconds/60)}:{String(remainingSeconds%60).padStart(2,'0')}</Label>
+ const metric={flex:1,minWidth:0,paddingHorizontal:10,paddingVertical:7,borderRadius:12,backgroundColor:colors.soft};
+ const urgent=remainingSeconds<=30;
+ return <Panel outlined>
+  <View style={{...row,alignItems:'center'}}>
+   <View style={{flex:1}}><Label muted>{t('عرض رحلة','Ride offer')}</Label><Label>{regions[offer.region]?.[state.language==='ar'?0:1]} · {categories.find(c=>c.id===offer.category)?.[state.language]??offer.category}</Label></View>
+   <View style={{...row,gap:4,alignItems:'center',paddingHorizontal:8,borderRadius:10,backgroundColor:urgent?(dark?'#47262a':'#ffeded'):colors.selected}}>
+    <Icon name="time-outline" size={16} color={urgent?colors.error:colors.ink}/>
+    <Label>{t('متبقّي','Left')} {Math.floor(remainingSeconds/60)}:{String(remainingSeconds%60).padStart(2,'0')}</Label>
+   </View>
   </View>
   <View style={row}>
-   <View style={metric}><Label>{t('الأجرة التقديرية','Estimated fare')}</Label><Label display>{fare===null?'—':fare.toLocaleString('en-US')}</Label>{fare!==null&&<Label>{t('ل.س','SYP')}</Label>}</View>
+   <View style={{...metric,backgroundColor:colors.selected}}><Label>{t('الأجرة التقديرية','Estimated fare')}</Label><Label display>{fare===null?'—':fare.toLocaleString('en-US')}</Label>{fare!==null&&<Label>{t('ل.س','SYP')}</Label>}</View>
    <View style={metric}><Label>{t('للزبون','To pickup')}</Label><Label display>{away===null?'—':(away/1000).toFixed(1)}</Label><Label>{away!==null?t('كم','km')+(eta===null?'':' · '+Math.ceil(eta/60)+' '+t('د','min')):expanded&&pickupBusy?t('جارٍ الحساب','Calculating'):t('مسافة القيادة','Driving distance')}</Label></View>
   </View>
   <View style={row}>
@@ -74,7 +78,7 @@ export default function DriverOffer({offer,remainingSeconds,position,disabled,ex
   {expanded&&<>
   {plan&&<Label>{t('رحلة الزبون','Passenger trip')} · {(plan.meters/1000).toFixed(1)} {t('كم','km')} · {Math.ceil(plan.seconds/60)} {t('دقيقة','min')}</Label>}
   {pickupPoint&&<>
-   <Label>{t('مكان الزبون','Pickup location')}</Label>
+   <View style={{...row,alignItems:'center'}}><Icon name="location-outline" size={19}/><Label>{t('مكان الزبون','Pickup location')}</Label></View>
    <View style={{height:175,borderRadius:14,overflow:'hidden'}}><MapCanvas compact readOnly minMapHeight={175} point={pickupPoint} route={plan?.points} onChange={()=>{}}/></View>
    {plan&&<Label muted>{t('أ: مكان الزبون · ب: الوجهة','A: pickup · B: destination')} · Google Maps</Label>}
   </>}

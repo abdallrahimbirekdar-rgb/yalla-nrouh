@@ -9,6 +9,7 @@ import {categories,regions} from '../domain';
 import DriverOffer from '../driver-offer';
 import type {RoutePlan} from '../routing';
 import DriverNavigation from '../driver-navigation';
+import {DriverQueueEmpty,DriverQueueHeader,DriverShift} from '../driver-dashboard';
 import {DriverHistory,DriverHistoryBar} from '../driver-history';
 import {useCurrentPosition} from '../use-current-position';
 import {PassengerTaxiMap,RideSearchTimer,useShareTaxiPosition} from '../taxi-tracking';
@@ -201,17 +202,9 @@ export default function Rides(){
  if(!auth.session)return <Page title={driverMode?t('وضع السائق','Driver mode'):t('رحلاتي','My rides')}><Panel><Icon name="person-circle-outline" size={42}/><Label>{t('سجّل الدخول لعرض رحلاتك أو العمل كسائق.','Sign in to view your rides or use driver mode.')}</Label><Button title={t('تسجيل الدخول','Sign in')} onPress={()=>router.push('/account')}/></Panel></Page>;
  return <Page title={driverMode?t('وضع السائق','Driver mode'):t('رحلاتي','My rides')} compact={driverMode} footer={driverMode&&userId?<DriverHistoryBar onOpen={setHistoryKind}/>:undefined}>
   {driverMode&&historyKind&&userId&&<DriverHistory key={userId+historyKind} kind={historyKind} owner={userId} onClose={closeHistory}/>}
-  {driverMode&&driver?.approved&&!currentDriverRide&&<Panel>
-   <View style={{flexDirection:state.language==='ar'?'row-reverse':'row',alignItems:'center',gap:8}}>
-    <Icon name={driver.online?'radio-outline':'pause-circle-outline'} size={25}/>
-    <Label large>{driver.online?t('الاستقبال مفعّل','Receiving requests'):t('خارج العمل','Off duty')}</Label>
-   </View>
-   <Button prominent tone={driver.online?'danger':'positive'} icon={driver.online?'stop-circle-outline':'power-outline'}
-    title={workTarget!==null
-     ? workTarget?t('جارٍ تفعيل الاستقبال…','Starting requests…'):t('جارٍ إيقاف الاستقبال…','Stopping requests…')
-     : driver.online?t('إيقاف استقبال الطلبات','Stop receiving requests'):t('تفعيل استقبال الطلبات','Start receiving requests')}
-    disabled={busy||workTarget!==null||recovery.checking} onPress={()=>void toggleWork()}/>
-  </Panel>}
+  {driverMode&&driver?.approved&&!currentDriverRide&&<DriverShift
+   online={driver.online} region={driver.region} category={driver.category} target={workTarget}
+   disabled={busy||workTarget!==null||recovery.checking} onToggle={()=>void toggleWork()}/>}
   {currentDriverRide&&renderDriverRide(currentDriverRide)}
   {driverMode&&recovery.id&&!currentDriverRide&&<Panel>
    <Label>{busy||recovery.checking?t('جارٍ التحقق من قبول الطلب…','Checking request acceptance…'):t('لم يتأكد قبول الطلب. يمكنك المحاولة مجددًا إذا ظل متاحًا.','Acceptance is unconfirmed. You can retry if the request is still available.')}</Label>
@@ -222,10 +215,10 @@ export default function Rides(){
    {!currentDriverRide&&(driver?.approved
     ? driver.online
      ? <>
-      <Label large>{t('الطلبات','Requests')} ({availableOffers.length})</Label>
+      <DriverQueueHeader count={availableOffers.length} disabled={busy} onRefresh={()=>void run(async()=>{})}/>
       {!recovery.checking&&<>
        {inboxProblem&&<Label muted>{t('تعذر تحديث الطلبات. حاول تحديث القائمة.','Could not update requests. Refresh the list to try again.')}</Label>}
-       {!inboxProblem&&!visibleOffers.length&&<Panel><Label>{t('عم نستقبل الطلبات… ما في طلب مناسب حاليًا.','You’re online. Waiting for matching requests…')}</Label></Panel>}
+       {!inboxProblem&&!visibleOffers.length&&<DriverQueueEmpty/>}
        {visibleOffers.map(offer=><DriverOffer key={offer.ride_id} remainingSeconds={Math.max(0,Math.ceil(((offer.expiresOnDevice??0)-offerClock)/1000))} offer={offer} position={gps.camera?.point} disabled={busy||!!recovery.id&&recovery.id!==offer.ride_id} expanded={selectedOffer===offer.ride_id} onExpand={()=>setFocusedOffer(offer.ride_id)} onDecline={()=>decline(offer.ride_id)} onAccept={routes=>void accept(offer,routes)}/>)}
        {availableOffers.length>offerLimit&&<Button secondary title={t('عرض طلبات أخرى','Show more requests')} onPress={()=>setOfferLimit(value=>value+3)}/>}
        {!gps.camera&&visibleOffers.length>0&&<Button secondary icon="locate" title={gps.busy?t('جارٍ تحديد الموقع…','Finding location…'):t('تحديد موقعي لحساب طريق الزبون','Find my location to calculate pickup route')} disabled={gps.busy} onPress={()=>void gps.locate()}/>}
@@ -238,13 +231,13 @@ export default function Rides(){
       {driver?<><Label>{t('طلبك بانتظار مراجعة الإدارة','Your application is waiting for review')}</Label><Label muted>{t('يمكنك تحديث الصفحة بعد اعتماد الحساب.','Refresh after your account is approved.')}</Label></>
        :<><Label>{t('التسجيل كسائق','Register as a driver')}</Label><Label muted>{t('منطقة العمل ونوع السيارة','Work region and car')} · {regions[draft.region]?.[state.language==='ar'?0:1]} · {categories.find(c=>c.id===draft.category)?.[state.language]}</Label><Button secondary title={t('تعديل المنطقة ونوع السيارة','Change region and car')} onPress={()=>router.replace('/')}/><Button title={t('إرسال طلب اعتماد سائق','Apply for driver approval')} disabled={busy} onPress={()=>void run(async token=>{await cloudRegisterDriver(token,draft.region,draft.category)},t('تم إرسال الطلب إلى الإدارة.','Application sent to admin.'))}/></>}
      </Panel>)}
-   <Button secondary icon="refresh-outline" title={t('تحديث الطلبات','Refresh requests')} disabled={busy} onPress={()=>void run(async()=>{})}/>
+   {(currentDriverRide||!driver?.approved||!driver.online&&!!notice)&&<Button secondary icon="refresh-outline" title={t('تحديث الحالة','Refresh status')} disabled={busy} onPress={()=>void run(async()=>{})}/>}
   </>:<>
    <Button secondary icon="refresh-outline" title={loading?t('جارٍ تحميل الرحلات…','Loading rides…'):t('تحديث الرحلات','Refresh rides')} disabled={busy} onPress={()=>void run(async()=>{})}/>
    <Button icon="car-outline" title={t('حجز رحلة جديدة','Book a new ride')} onPress={()=>router.replace('/')}/>
    {!loading&&mine.length===0&&<Panel><Icon name="time-outline" size={36}/><Label>{t('لا توجد رحلات بعد','No rides yet')}</Label></Panel>}
    {mine.map(renderRide)}
   </>}
-  <Label muted>{t('نسخة اختبار. لا تتوفر خدمة نقل تجارية مضمونة حتى اكتمال التشغيل واعتماد السائقين.','Test version. A transport service is not guaranteed until setup and driver checks are complete.')}</Label>
+  {!driverMode&&<Label muted>{t('نسخة اختبار. لا تتوفر خدمة نقل تجارية مضمونة حتى اكتمال التشغيل واعتماد السائقين.','Test version. A transport service is not guaranteed until setup and driver checks are complete.')}</Label>}
  </Page>;
 }
