@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {pickupPosition,pickupPositionMessage} from '../src/pickup-position.ts';
 import {clearWebPosition,announceWebPosition,recentVerifiedWebPosition} from '../src/web-position.ts';
-import {pickupAllowed} from '../src/pickup-policy.ts';
+import {pickupQuoteMatches} from '../src/pickup-policy.ts';
 import {PositionError} from '../src/current-position.ts';
 const phone={latitude:51.48,longitude:7.21};
 async function browser(permission,geolocation,work,native=false){
@@ -19,7 +19,7 @@ test('a recent measured phone fix survives confirmation without a redundant GPS 
  getCurrentPosition:()=>{throw Error('must use the recent measured fix')},
 },async()=>{
  announceWebPosition(phone,{accuracy:15,time:Date.now()});const current=await pickupPosition(async()=>{throw Error('unused')});
- assert.deepEqual(current,phone);assert.equal(pickupAllowed({...phone,latitude:phone.latitude+.001},current),true);assert.equal(pickupAllowed({...phone,latitude:phone.latitude+.01},current),false);
+ assert.deepEqual(current,phone);assert.equal(pickupQuoteMatches(phone,current),true);assert.equal(pickupQuoteMatches({...phone,latitude:phone.latitude+.01},current),false);
 }));
 test('an old or coarse fix and a selected map point cannot validate a pickup',()=>browser('granted',{
  getCurrentPosition:success=>success({coords:{...phone,accuracy:20},timestamp:Date.now()}),

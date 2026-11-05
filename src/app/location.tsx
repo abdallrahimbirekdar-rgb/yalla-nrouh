@@ -6,7 +6,6 @@ import {pickupPosition,pickupPositionMessage} from '../pickup-position';
 import {PositionError} from '../current-position';
 import {recentWebPosition} from '../web-position';
 import {type CameraTarget,useCurrentPosition} from '../use-current-position';
-import {pickupAllowed,MAX_PICKUP_METERS} from '../pickup-policy';
 import MapCanvas from '../map/MapCanvas';
 import {searchGooglePlaces} from '../map/search-places';
 import {useAuth} from '../auth';
@@ -19,8 +18,8 @@ export default function LocationPicker(){
  const {target,returnTo}=useLocalSearchParams<{target:string;returnTo?:string}>();
  const pickup=target==='pickup',fromCloud=returnTo==='cloud';
  const {draft,setDraft,state,ready}=useApp();const auth=useAuth();const t=useText();
- const gps=useCurrentPosition(ready&&pickup);const original=pickup?draft.pickupPoint:draft.destinationPoint;
- const initialCenter=useRef<Coordinate|undefined>(original??draft.pickupPoint??(Platform.OS==='web'?recentWebPosition(60000):null)??undefined);
+ const gps=useCurrentPosition(ready&&pickup);const original=pickup?undefined:draft.destinationPoint;
+ const initialCenter=useRef<Coordinate|undefined>(original??(!pickup?draft.pickupPoint:undefined)??(Platform.OS==='web'?recentWebPosition(60000):null)??undefined);
  const [point,setPoint]=useState<Coordinate|null>(original??null),[label,setLabel]=useState(pickup?draft.pickup:draft.destination);
  const [query,setQuery]=useState(''),[results,setResults]=useState<Place[]>([]),[saved,setSaved]=useState<SavedPlace[]>([]);
  const [message,setMessage]=useState(''),[busy,setBusy]=useState(false),[saving,setSaving]=useState(false),[loaded,setLoaded]=useState(false);
@@ -28,12 +27,13 @@ export default function LocationPicker(){
  const alive=useRef(true),task=useRef(0);const token=auth.session?.access_token??null;const account=auth.session?.user.id;const accountRef=useRef(account);accountRef.current=account;
  useEffect(()=>{alive.current=true;return()=>{alive.current=false}},[]);
  const loadSaved=useCallback(async()=>{
-  if(!token)return;
+  if(!token||pickup)return;
   setLoaded(false);
   try{const list=await cloudSavedPlaces(token);if(alive.current&&accountRef.current===account){setSaved(list);setLoaded(true)}}
   catch{if(alive.current)setMessage(state.language==='ar'?'تعذر تحميل الأماكن المحفوظة. أعد المحاولة.':'Could not load saved places. Try again.')}
- },[token,account,state.language])
+ },[token,account,state.language,pickup])
  useEffect(()=>{void loadSaved()},[loadSaved]); // Account places are fetched from the authenticated user only.
+ useEffect(()=>{if(pickup&&gps.camera?.point){setPoint(gps.camera.point);setLabel(state.language==='ar'?'موقعي الحالي':'My current location')}},[pickup,gps.camera,state.language]);
  function goBack(){if(fromCloud)router.replace('/cloud');else router.replace({pathname:'/',params:{booking:'1'}})}
  function choose(next:Coordinate,nextLabel?:string){setPoint(next);setLabel(nextLabel??(pickup?t('نقطة الالتقاء على الخريطة','Meeting point on the map'):t('نقطة الوصول على الخريطة','Destination on the map')));setMessage('')}
  async function selectCurrent(){
@@ -50,12 +50,11 @@ export default function LocationPicker(){
   finally{if(timer)clearTimeout(timer);if(alive.current&&id===task.current)setBusy(false)}
  }
  async function confirm(){
-  if(!point||busy)return;setBusy(true);setMessage('');
+  if(!pickup&&!point||busy)return;setBusy(true);setMessage('');
   try{
-   // Recheck the actual phone position at confirmation, never a selected pin.
-   if(pickup){const current=await pickupPosition(siteCurrentPosition);if(!pickupAllowed(point,current)){setMessage(t('نقطة الانطلاق تبعد أكثر من ٥٠٠ متر عن موقعك الحالي. اختر نقطة أقرب.','Pickup is more than 500 metres away. Choose a closer point.'));return}}
-   if(!alive.current)return;
-   setDraft(previous=>({...previous,...(pickup?{pickup:label.trim()||formatCoordinate(point),pickupPoint:point}:{destination:label.trim()||formatCoordinate(point),destinationPoint:point})}));goBack();
+   const selected=pickup?await pickupPosition(siteCurrentPosition):point;
+   if(!alive.current||!selected)return;
+   setDraft(previous=>({...previous,...(pickup?{pickup:t('موقعي الحالي','My current location'),pickupPoint:selected}:{destination:label.trim()||formatCoordinate(selected),destinationPoint:selected})}));goBack();
   }catch(error){if(alive.current)setMessage(pickupPositionMessage(error,state.language==='ar'))}
   finally{if(alive.current)setBusy(false)}
  }
@@ -69,10 +68,8 @@ export default function LocationPicker(){
   }catch{if(alive.current)setMessage(t('لم يتم الحفظ. تحقق من الاتصال أو سجّل الدخول مجددًا ثم حاول.','Could not save. Check internet or sign in again, then retry.'))}
   finally{if(alive.current)setSaving(false)}
  }
- const current=gps.camera?.point??null;
- const allowed=!pickup||pickupAllowed(point??undefined,current);
  return <Page backTo={fromCloud?'/cloud':'/'} title={pickup?t('نقطة الانطلاق','Pickup point'):t('نقطة الوصول','Destination point')}>
-  <Label muted>{pickup?t('استخدم موقعك الحالي، أو اختر نقطة على الخريطة ضمن ٥٠٠ متر منه.','Use your location, or choose a map point within 500 metres.'):t('اختر على الخريطة، أو ابحث باسم المكان، أو استخدم مكانًا محفوظًا في حسابك.','Choose on the map, search by name, or use a saved place.')}</Label>
+  <Label muted>{pickup?t('نقطة الانطلاق هي موقع الهاتف الحالي فقط، ولا يمكن تحريكها على الخريطة.','Pickup uses your current phone location only. You cannot move it on the map.'):t('اختر على الخريطة، أو ابحث باسم المكان، أو استخدم مكانًا محفوظًا في حسابك.','Choose on the map, search by name, or use a saved place.')}</Label>
   {pickup&&<Button icon="locate" title={t('استخدام موقعي الحالي','Use my current location')} onPress={()=>void selectCurrent()} disabled={gps.busy||busy}/>}
   {!pickup&&<Panel>
    <Field label={t('البحث في Google Maps','Search Google Maps')} value={query} onChangeText={value=>{task.current++;setBusy(false);setQuery(value);setResults([])}} maxLength={200} placeholder={t('اسم مكان أو شارع أو منطقة','Place, street or area')}/>
@@ -80,14 +77,12 @@ export default function LocationPicker(){
    {results.length>0&&<Label muted>{t('نتائج Google Maps — اختر نتيجة ثم عدّل النقطة إن أردت','Google Maps results — choose one, then move the point if needed')}</Label>}
    {results.map(place=><Button key={place.id} secondary title={place.label} onPress={()=>{choose(place.coordinate,place.label);setSelectionCamera({point:place.coordinate,revision:Date.now(),isLocation:false});setResults([])}}/>)}
   </Panel>}
-  <MapCanvas point={point} initialCenter={initialCenter.current} cameraTarget={selectionCamera??gps.camera} onChange={next=>{gps.chooseManually();choose(next)}}/>
+  <MapCanvas readOnly={pickup} point={point} initialCenter={initialCenter.current} cameraTarget={selectionCamera??gps.camera} onChange={next=>{if(!pickup){gps.chooseManually();choose(next)}}}/>
   {(gps.busy||busy)&&<ActivityIndicator accessibilityLabel={t('جارٍ التحميل','Loading')}/>}
   {pickup&&gps.failure&&<View accessibilityRole="alert"><Label>{pickupPositionMessage(new PositionError(gps.failure),state.language==='ar')}</Label><Button secondary title={t('تحديد موقعي مجددًا','Find my location again')} onPress={()=>void selectCurrent()} disabled={gps.busy}/></View>}
   {point&&<Panel>
    <Label muted>{t('تم تحديد النقطة على الخريطة','Point selected on the map')}</Label>
-   <Field label={t('اسم المكان أو وصف نقطة الالتقاء','Place name or meeting point')} value={label} onChangeText={setLabel} maxLength={200}/>
-   {pickup&&!current&&<Label muted>{t('سيُقرأ موقع الهاتف عند التأكيد للتحقق من مسافة الانطلاق.','Your phone location will be read at confirmation to check pickup distance.')}</Label>}
-   {pickup&&current&&!allowed&&<Label>{t(`يجب أن تكون نقطة الانطلاق ضمن ${MAX_PICKUP_METERS} متر من موقعك الحالي.`,`Pickup must be within ${MAX_PICKUP_METERS} metres of your location.`)}</Label>}
+   {pickup?<Label>{t('موقعي الحالي','My current location')}</Label>:<Field label={t('اسم المكان','Place name')} value={label} onChangeText={setLabel} maxLength={200}/>}
    <Button icon="checkmark-circle-outline" title={pickup?t('تأكيد نقطة الانطلاق','Confirm pickup'):t('تأكيد نقطة الوصول والعودة للحجز','Confirm destination and return to booking')} onPress={()=>void confirm()} disabled={busy}/>
    {!pickup&&token&&<Button secondary icon="bookmark-outline" title={t('حفظ المكان في حسابي','Save place to my account')} onPress={()=>void savePlace()} disabled={saving||!loaded}/>}
   </Panel>}
