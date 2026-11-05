@@ -4,14 +4,14 @@ import {router,useLocalSearchParams} from 'expo-router';
 import {useApp} from '../context';
 import {useAuth} from '../auth';
 import {authErrorMessage} from '../auth-errors';
-import {cloudCurrentToken,cloudMyRides,cloudMyDriver,cloudOpenRides,cloudAcceptRide,cloudAdvanceRide,cloudReleaseRide,cloudCancelRide,cloudPassengerPin,cloudRegisterDriver,cloudSetDriverOnline,cloudHeartbeat,type CloudRide,type CloudDriver,type RidePreview} from '../cloud-api';
+import {cloudCurrentToken,cloudMyRides,cloudMyDriver,cloudOpenRides,cloudAcceptRide,cloudAdvanceRide,cloudReleaseRide,cloudCancelRide,cloudConfirmPickup,cloudRegisterDriver,cloudSetDriverOnline,cloudHeartbeat,type CloudRide,type CloudDriver,type RidePreview} from '../cloud-api';
 import {categories,regions} from '../domain';
 import RoutePanel from '../route-panel';
-import {Button,Field,Icon,Label,Page,Panel,useText,useTheme} from '../ui';
+import {Button,Icon,Label,Page,Panel,useText,useTheme} from '../ui';
 const live=(r:CloudRide)=>!['completed','cancelled'].includes(r.status);
 export default function Rides(){
  const auth=useAuth();const userId=auth.session?.user.id;const {state,draft,foreground}=useApp();const t=useText();const {colors}=useTheme();const params=useLocalSearchParams<{mode?:string}>();const driverMode=params.mode==='driver';
- const [rides,setRides]=useState<CloudRide[]>([]),[driver,setDriver]=useState<CloudDriver|null>(null),[offers,setOffers]=useState<RidePreview[]>([]),[busy,setBusy]=useState(false),[loading,setLoading]=useState(true),[notice,setNotice]=useState(''),[pin,setPin]=useState(''),[passengerPins,setPassengerPins]=useState<Record<string,string>>({});
+ const [rides,setRides]=useState<CloudRide[]>([]),[driver,setDriver]=useState<CloudDriver|null>(null),[offers,setOffers]=useState<RidePreview[]>([]),[busy,setBusy]=useState(false),[loading,setLoading]=useState(true),[notice,setNotice]=useState('');
  const alive=useRef(true),running=useRef(false),identity=useRef(auth.session?.user.id);identity.current=auth.session?.user.id;
  useEffect(()=>{alive.current=true;return()=>{alive.current=false}},[]);
  const refresh=useCallback(async()=>{
@@ -20,7 +20,7 @@ export default function Rides(){
    if(alive.current&&identity.current===owner){setRides(next);setDriver(myDriver);setOffers(available);setLoading(false)}
   }finally{running.current=false}
  },[userId,driverMode]);
- useEffect(()=>{setRides([]);setOffers([]);setDriver(null);setPassengerPins({});setLoading(true);if(!userId){setLoading(false);return}let active=true;void refresh().catch(()=>{if(active){setNotice(state.language==='ar'?'تعذر تحميل الرحلات. تحقق من الاتصال وأعد المحاولة.':'Could not load rides. Check internet and retry.');setLoading(false)}});return()=>{active=false}},[refresh,userId,state.language]);
+ useEffect(()=>{setRides([]);setOffers([]);setDriver(null);setLoading(true);if(!userId){setLoading(false);return}let active=true;void refresh().catch(()=>{if(active){setNotice(state.language==='ar'?'تعذر تحميل الرحلات. تحقق من الاتصال وأعد المحاولة.':'Could not load rides. Check internet and retry.');setLoading(false)}});return()=>{active=false}},[refresh,userId,state.language]);
  const activeRide=rides.some(live);const shouldPoll=foreground&&(activeRide||driverMode&&driver?.approved&&driver.online);
  useEffect(()=>{
   if(!userId||!shouldPoll)return;
@@ -28,7 +28,7 @@ export default function Rides(){
   const timer=setInterval(tick,state.preferences.dataSaver?30000:15000);return()=>clearInterval(timer);
  },[refresh,shouldPoll,userId,state.preferences.dataSaver]);
  useEffect(()=>{if(!driverMode||!driver?.approved||!driver.online||!foreground)return;const timer=setInterval(()=>{void cloudCurrentToken().then(token=>cloudHeartbeat(token)).catch(()=>{})},50000);return()=>clearInterval(timer)},[driverMode,driver?.approved,driver?.online,foreground]);
- async function run(work:(token:string)=>Promise<void>,success?:string){if(busy)return;setBusy(true);setNotice('');try{await work(await cloudCurrentToken());await refresh();if(success)setNotice(success)}catch(e){const kind=(e as {kind?:string})?.kind??(e as Error)?.message;setNotice(kind==='invalid_pin'?t('رمز بدء الرحلة غير صحيح.','The ride PIN is wrong.'):kind==='pin_locked'?t('تم إيقاف محاولات رمز هذه الرحلة.','PIN tries are locked for this ride.'):kind==='driver_not_approved'?t('حساب السائق بانتظار الاعتماد.','Driver account is waiting for approval.'):authErrorMessage(e,state.language==='ar'))}finally{setBusy(false)}}
+ async function run(work:(token:string)=>Promise<void>,success?:string){if(busy)return;setBusy(true);setNotice('');try{await work(await cloudCurrentToken());await refresh();if(success)setNotice(success)}catch(e){const kind=(e as {kind?:string})?.kind??(e as Error)?.message;setNotice(kind==='waiting_passenger_confirmation'?t('بانتظار تأكيد الراكب ركوب السيارة.','Waiting for passenger pickup confirmation.'):kind==='driver_not_approved'?t('حساب السائق بانتظار الاعتماد.','Driver account is waiting for approval.'):authErrorMessage(e,state.language==='ar'))}finally{setBusy(false)}}
  const status=(value:string)=>({requested:t('بانتظار السائق','Waiting for driver'),accepted:t('السائق في الطريق','Driver is on the way'),arrived:t('وصل السائق','Driver arrived'),riding:t('الرحلة جارية','Ride in progress'),completed:t('مكتملة','Completed'),cancelled:t('ملغاة','Cancelled')} as Record<string,string>)[value]??value;
  const mine=rides.filter(r=>driverMode?r.driver_id===auth.session?.user.id:r.passenger_id===auth.session?.user.id);
  if(!auth.ready)return <Page title={t('رحلاتي','My rides')}><Label>{t('جارٍ تحميل الحساب…','Loading account…')}</Label></Page>;
@@ -47,14 +47,20 @@ export default function Rides(){
    <View style={{alignSelf:'flex-start',borderRadius:20,paddingHorizontal:12,paddingVertical:4,backgroundColor:colors.selected}}><Label muted>{status(ride.status)}</Label></View>
    <Label>{ride.pickup}</Label><Icon name="arrow-down-outline" size={18}/><Label>{ride.destination}</Label><Label muted>{new Date(ride.created_at).toLocaleString(state.language==='ar'?'ar':'en')}</Label>
    {!driverMode&&live(ride)&&<>
-    <Button secondary title={t('إظهار رمز بدء الرحلة','Show ride start PIN')} disabled={busy} onPress={()=>void run(async token=>{const value=await cloudPassengerPin(token,ride.id);if(value)setPassengerPins(previous=>({...previous,[ride.id]:value}))})}/>
-    {!!passengerPins[ride.id]&&<><Label large>{passengerPins[ride.id]}</Label><Label muted>{t('أعط الرمز للسائق بعد التأكد من السيارة.','Give the PIN to the driver after checking the car.')}</Label></>}
+    {ride.status==='arrived'&&!ride.pickup_confirmed_at&&<>
+     <Label muted>{t('تأكد من السائق والسيارة أولًا، ثم أكّد الركوب من حسابك. لا يلزم إعطاء أي رمز.','Check the driver and car first, then confirm pickup in your account. No code needed.')}</Label>
+     <Button title={t('تأكيد ركوب السيارة','Confirm pickup')} disabled={busy} onPress={()=>void run(async token=>{if(!await cloudConfirmPickup(token,ride.id))throw Error('not_allowed')},t('تم تأكيد الركوب. يمكن للسائق بدء الرحلة الآن.','Pickup confirmed. The driver can start the ride.'))}/>
+    </>}
+    {ride.status==='arrived'&&ride.pickup_confirmed_at&&<Label muted>{t('تم تأكيد الركوب. بانتظار بدء الرحلة من السائق.','Pickup confirmed. Waiting for driver to start the ride.')}</Label>}
     {ride.status!=='riding'&&<Button secondary title={t('إلغاء الطلب','Cancel request')} disabled={busy} onPress={()=>void run(async token=>{if(!await cloudCancelRide(token,ride.id))throw Error('not_allowed')},t('تم إلغاء الطلب.','Request cancelled.'))}/>}
    </>}
    {driverMode&&['accepted','arrived','riding'].includes(ride.status)&&<>
     <RoutePanel currentLocation to={ride.status==='riding'?{latitude:ride.destination_lat,longitude:ride.destination_lng}:{latitude:ride.pickup_lat,longitude:ride.pickup_lng}} title={ride.status==='riding'?t('الطريق إلى وجهة الراكب','Route to destination'):t('الطريق إلى الراكب','Route to passenger')}/>
     {ride.status==='accepted'&&<Button title={t('وصلت إلى الراكب','I arrived at pickup')} disabled={busy} onPress={()=>void run(async token=>{if(await cloudAdvanceRide(token,ride.id,'arrived')!=='arrived')throw Error('not_allowed')})}/>}
-    {ride.status==='arrived'&&<><Field label={t('رمز الراكب — ٦ أرقام','Passenger PIN — 6 digits')} value={pin} onChangeText={setPin} keyboardType="number-pad" maxLength={6}/><Button title={t('بدء الرحلة','Start ride')} disabled={busy||!/^\d{6}$/.test(pin)} onPress={()=>void run(async token=>{const result=await cloudAdvanceRide(token,ride.id,'riding',pin);if(result!=='riding')throw Error(result);setPin('')})}/></>}
+    {ride.status==='arrived'&&<>
+     {!ride.pickup_confirmed_at&&<Label muted>{t('بانتظار تأكيد الراكب للركوب من حسابه. اضغط تحديث الرحلات بعد التأكيد.','Waiting for passenger confirmation. Refresh rides after pickup is confirmed.')}</Label>}
+     <Button title={ride.pickup_confirmed_at?t('بدء الرحلة','Start ride'):t('بانتظار تأكيد الراكب','Waiting for passenger')} disabled={busy||!ride.pickup_confirmed_at} onPress={()=>void run(async token=>{const result=await cloudAdvanceRide(token,ride.id,'riding');if(result!=='riding')throw Error(result)})}/>
+    </>
     {ride.status==='riding'?<Button title={t('إنهاء الرحلة','Finish ride')} disabled={busy} onPress={()=>void run(async token=>{if(await cloudAdvanceRide(token,ride.id,'completed')!=='completed')throw Error('not_allowed')})}/>:<Button secondary title={t('إعادة الطلب للبحث عن سائق','Release request to other drivers')} disabled={busy} onPress={()=>void run(async token=>{if(!await cloudReleaseRide(token,ride.id))throw Error('not_allowed')})}/>}
    </>}
   </Panel>)}

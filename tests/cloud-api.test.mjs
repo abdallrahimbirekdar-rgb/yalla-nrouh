@@ -145,3 +145,29 @@ test('stale requests cannot borrow the next signed-in account session',async()=>
  try{await withFetch(()=>{throw Error('must not send stale request')},async()=>assert.rejects(()=>cloudWhoAmI(token),e=>e.status===401))}
  finally{cloudSetSessionBridge(null,null)}
 });
+
+test('passenger confirms pickup and driver starts ride without a spoken PIN',async()=>{
+ const {cloudConfirmPickup,cloudAdvanceRide}=await import('../src/cloud-api.ts');
+ const ride='00000000-0000-4000-8000-000000000004';
+ const requests=[];
+ await withFetch(async(url,options)=>{
+  requests.push({url,body:JSON.parse(options.body)});
+  return reply(url.includes('confirm_pickup')?true:'riding');
+ },async()=>{
+  assert.equal(await cloudConfirmPickup(token,ride),true);
+  assert.equal(await cloudAdvanceRide(token,ride,'riding'),'riding');
+ });
+ assert.match(requests[0].url,/\/rpc\/confirm_pickup$/);
+ assert.deepEqual(requests[0].body,{p_ride_id:ride});
+ assert.match(requests[1].url,/\/rpc\/advance_ride$/);
+ assert.deepEqual(requests[1].body,{p_ride_id:ride,p_next:'riding',p_pin:null});
+});
+test('admin adds a verified driver email through a restricted server RPC',async()=>{
+ const {cloudAdminAddDriverByEmail}=await import('../src/cloud-api.ts');
+ await withFetch(async(url,options)=>{
+  assert.match(url,/\/rpc\/admin_add_driver_by_email$/);
+  assert.equal(options.headers.Authorization,'Bearer '+token);
+  assert.deepEqual(JSON.parse(options.body),{p_email:'driver@example.com',p_region:0,p_category:'classic'});
+  return reply(true);
+ },async()=>assert.equal(await cloudAdminAddDriverByEmail(token,' Driver@Example.com '),true));
+});

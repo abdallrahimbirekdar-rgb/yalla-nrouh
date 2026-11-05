@@ -17,7 +17,7 @@ export interface CloudRide {
   id:string; passenger_id:string;driver_id:string|null;pickup:string;destination:string;
   category:string;region:number;pickup_lat:number;pickup_lng:number;destination_lat:number;destination_lng:number;
   status:'requested'|'accepted'|'arrived'|'riding'|'completed'|'cancelled';
-  created_at:string;updated_at:string;
+  created_at:string;updated_at:string;pickup_confirmed_at:string|null;
 }
 export interface CloudDriver {user_id:string;region:number;category:string;approved:boolean;online:boolean;last_seen_at:string|null}
 export interface RidePreview {ride_id:string;region:number;category:string;created_at:string;pickup_lat_approx:number;pickup_lng_approx:number}
@@ -74,7 +74,7 @@ export async function cloudWhoAmI(token:string):Promise<{id:string;email?:string
 export async function cloudMyRides(token:string):Promise<CloudRide[]>{
   requireToken(token);
   const owner=readRideState().owner;
-  const rides=await call<CloudRide[]>('/rest/v1/rides?select=id,passenger_id,driver_id,pickup,destination,pickup_lat,pickup_lng,destination_lat,destination_lng,category,region,status,created_at,updated_at&order=created_at.desc&limit=30','GET',token);
+  const rides=await call<CloudRide[]>('/rest/v1/rides?select=id,passenger_id,driver_id,pickup,destination,pickup_lat,pickup_lng,destination_lat,destination_lng,category,region,status,created_at,updated_at,pickup_confirmed_at&order=created_at.desc&limit=30','GET',token);
   receiveRideState(owner,rides);return rides;
 }
 export async function cloudMyDriver(token:string):Promise<CloudDriver|null>{
@@ -96,17 +96,23 @@ export async function cloudRequestRide(token:string,draft:TripDraft):Promise<{ri
 }
 export const cloudCancelRide=(token:string,id:string)=>rpc<boolean>('cancel_ride',token,{p_ride_id:id});
 export const cloudReleaseRide=(token:string,id:string)=>rpc<boolean>('release_ride',token,{p_ride_id:id});
-export const cloudPassengerPin=(token:string,id:string)=>rpc<string|null>('passenger_ride_pin',token,{p_ride_id:id});
+export const cloudConfirmPickup=(token:string,id:string)=>rpc<boolean>('confirm_pickup',token,{p_ride_id:id});
 export const cloudRegisterDriver=(token:string,region:number,category:string)=>rpc<boolean>('register_driver',token,{p_region:region,p_category:category});
 export const cloudSetDriverOnline=(token:string,online:boolean)=>rpc<boolean>('set_driver_online',token,{p_online:online});
 export const cloudHeartbeat=(token:string)=>rpc<boolean>('driver_heartbeat',token);
 export const cloudOpenRides=(token:string)=>rpc<RidePreview[]>('open_ride_previews',token);
 export const cloudAcceptRide=(token:string,id:string)=>rpc<boolean>('accept_ride',token,{p_ride_id:id});
-export const cloudAdvanceRide=(token:string,id:string,next:'arrived'|'riding'|'completed',pin?:string)=>rpc<string>('advance_ride',token,{p_ride_id:id,p_next:next,p_pin:pin??null});
+export const cloudAdvanceRide=(token:string,id:string,next:'arrived'|'riding'|'completed')=>rpc<string>('advance_ride',token,{p_ride_id:id,p_next:next,p_pin:null});
 
 export const cloudIsAdmin=(token:string)=>rpc<boolean>('is_staff_admin',token);
 export const cloudStaffDrivers=(token:string)=>rpc<StaffDriver[]>('admin_pending_drivers',token);
 export const cloudApproveDriver=(token:string,id:string,approved:boolean)=>rpc<boolean>('admin_review_driver',token,{p_driver_id:id,p_approved:approved});
+// Admin adds only a verified existing Supabase Auth user, not credentials.
+export function cloudAdminAddDriverByEmail(token:string,email:string,region=0,category='classic'):Promise<boolean>{
+ const clean=email.trim().toLowerCase();
+ if(!clean.includes('@')||clean.length>200)throw new CloudError(400,'invalid_driver_data');
+ return rpc<boolean>('admin_add_driver_by_email',token,{p_email:clean,p_region:region,p_category:category});
+}
 
 export interface SavedPlace {id:string;label:string;coordinate:{latitude:number;longitude:number}}
 export function parseSavedPlaces(value:unknown):SavedPlace[]{
