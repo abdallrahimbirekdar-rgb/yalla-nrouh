@@ -1,3 +1,4 @@
+# Rebuild request: Android 0.9.1 foreground GPS fixes, re-publish verified test APK.
 name: Build Android test APK
 
 on:
