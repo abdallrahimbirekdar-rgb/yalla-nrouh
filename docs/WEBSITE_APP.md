@@ -91,3 +91,6 @@ Regression tests reproduce concurrent upper-map/navigation requests, delivery to
 - Destination entry uses Google Places Autocomplete suggestions after three characters and a 500 ms pause. New input invalidates older responses. The existing Search button remains available.
 - A per-picker session token groups predictions. Only selection fetches the place location; the selected prediction then sets the destination and map camera. No route or fare request is sent while typing.
 - Check on a real phone: type quickly, clear the field, select with the keyboard open, delay the network, retry Search, and verify that only the chosen destination moves the pin.
+
+### Map-first home
+The passenger home now gives its main space to the live current-location map. A compact destination search rectangle floats above the bottom of the map, with a separate recenter control. Tapping search opens destination entry with the keyboard ready. Pickup is not editable. Car category and work region remain available under Ride options on the review page. A saved destination or active ride keeps the matching continue action visible.

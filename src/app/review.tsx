@@ -11,6 +11,7 @@ import {pickupQuoteMatches} from '../pickup-policy';
 import {validateDraft} from '../domain';
 import {Summary} from '../components';
 import RoutePanel from '../route-panel';
+import RideOptions from '../ride-options';
 import {Button,Label,Page,Panel,useText} from '../ui';
 export default function Review(){
  const {draft,state,setDraft}=useApp();const auth=useAuth();const t=useText();const [busy,setBusy]=useState(false),[error,setError]=useState(''),[quoted,setQuoted]=useState(''),[pickupReady,setPickupReady]=useState(false),[locationAttempt,setLocationAttempt]=useState(0);const quoteKey=[draft.pickupPoint?.latitude,draft.pickupPoint?.longitude,draft.destinationPoint?.latitude,draft.destinationPoint?.longitude].join('|');const invalid=validateDraft(draft)||!draft.pickupPoint||!draft.destinationPoint;
@@ -25,6 +26,7 @@ export default function Review(){
  return <Page title={t('راجع رحلتك','Review your ride')}>
   {!pickupReady?<Panel><Label>{error||t('جارٍ قراءة موقع الانطلاق من الهاتف…','Reading pickup from your phone…')}</Label><Button secondary title={t('تحديث موقعي الحالي','Update my current location')} onPress={()=>setLocationAttempt(value=>value+1)}/></Panel>:invalid?<Panel><Label>{t('حدد نقطتي الانطلاق والوصول أولًا.','Choose pickup and destination first.')}</Label><Button title={t('اختيار النقاط','Choose points')} onPress={()=>router.replace('/')}/></Panel>:<>
    <Summary trip={draft}/>
+   <RideOptions/>
    {!auth.session?<Panel><Label>{t('سجّل الدخول للمتابعة وحساب الأجرة. ستبقى نقطتا رحلتك محفوظتين.','Sign in to check the fare and continue. Your points will stay saved.')}</Label><Button icon="log-in-outline" title={t('تسجيل الدخول والمتابعة','Sign in and continue')} onPress={()=>router.push({pathname:'/account',params:{next:'review'}})}/></Panel>:<>
     <RoutePanel from={draft.pickupPoint} to={draft.destinationPoint} estimate autoEstimate title={t('الطريق والأجرة المتوقعة','Route and fare estimate')} onQuote={value=>setQuoted(value!==null?quoteKey:'')}/>
     <Label muted>{t('السعر تقديري وفق الطريق وزمنه. الدفع نقدًا. هذه نسخة اختبار؛ إرسال الطلب لا يعني تأكيد توفر سيارة.','This is an estimated fare. Pay in cash. This is a test version. A request does not mean a car is available.')}</Label>

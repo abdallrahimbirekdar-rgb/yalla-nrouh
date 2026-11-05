@@ -16,7 +16,7 @@ import {type Place} from '../api';
 import {cloudSavedPlaces,cloudSavePlaces,type SavedPlace} from '../cloud-api';
 import {Button,Field,Label,Page,Panel,useText} from '../ui';
 export default function LocationPicker(){
- const {target,returnTo}=useLocalSearchParams<{target:string;returnTo?:string}>();
+ const {target,returnTo,focus}=useLocalSearchParams<{target:string;returnTo?:string;focus?:string}>();
  const pickup=target==='pickup',fromCloud=returnTo==='cloud';
  const {draft,setDraft,state,ready}=useApp();const auth=useAuth();const t=useText();
  const gps=useCurrentPosition(ready&&pickup);const original=pickup?undefined:draft.destinationPoint;
@@ -96,7 +96,7 @@ export default function LocationPicker(){
   <Label muted>{pickup?t('نقطة الانطلاق هي موقع الهاتف الحالي فقط، ولا يمكن تحريكها على الخريطة.','Pickup uses your current phone location only. You cannot move it on the map.'):t('اختر على الخريطة، أو ابحث باسم المكان، أو استخدم مكانًا محفوظًا في حسابك.','Choose on the map, search by name, or use a saved place.')}</Label>
   {pickup&&<Button icon="locate" title={t('استخدام موقعي الحالي','Use my current location')} onPress={()=>void selectCurrent()} disabled={gps.busy||busy}/>}
   {!pickup&&<Panel>
-   <Field label={t('البحث في Google Maps','Search Google Maps')} value={query} onChangeText={value=>{task.current++;setBusy(false);setSuggesting(false);setQuery(value);setResults([]);setSuggestions([]);setMessage('')}} maxLength={200} placeholder={t('اسم مكان أو شارع أو منطقة','Place, street or area')}/>
+   <Field autoFocus={!pickup&&focus==='1'} label={t('البحث في Google Maps','Search Google Maps')} value={query} onChangeText={value=>{task.current++;setBusy(false);setSuggesting(false);setQuery(value);setResults([]);setSuggestions([]);setMessage('')}} maxLength={200} placeholder={t('اسم مكان أو شارع أو منطقة','Place, street or area')}/>
    {suggesting&&<View style={{gap:6}}><ActivityIndicator/><Label muted>{t('جارٍ اقتراح الأماكن…','Finding place suggestions…')}</Label></View>}
    {suggestions.length>0&&<View style={{gap:6}}><Label muted>{t('اقتراحات Google Maps','Google Maps suggestions')}</Label>{suggestions.map(suggestion=><Button key={suggestion.id} secondary icon="location-outline" title={suggestion.label} disabled={busy} onPress={()=>void selectSuggestion(suggestion)}/>)}</View>}
    {!!suggestionError&&<Label muted>{suggestionError}</Label>}
