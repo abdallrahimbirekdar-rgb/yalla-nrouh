@@ -65,10 +65,14 @@ export function nativeCurrentPosition(askPermission:boolean,signal?:AbortSignal,
  * Never request a fresh permission on automatic location attempts.
  * Older installed wrappers do not understand this request and fall back to web GPS.
  */
-export async function siteCurrentPosition(askPermission:boolean):Promise<Coordinate>{
+export async function siteCurrentPosition(askPermission:boolean,signal?:AbortSignal):Promise<Coordinate>{
  if(isNativeWebView()){
   const host=window as SiteWindow;
   const controller=new AbortController();
+  const cancel=()=>controller.abort();
+  if(signal?.aborted)throw new PositionError('position');
+  signal?.addEventListener('abort',cancel,{once:true});
+  try{
   const nativeRequest=nativeCurrentPosition(askPermission,controller.signal);
   // Give the native foreground GPS an opportunity to answer promptly, without
   // opening an unnecessary second WebView-origin permission prompt.
@@ -105,6 +109,7 @@ export async function siteCurrentPosition(askPermission:boolean):Promise<Coordin
    result.error==='permission'||result.error==='accuracy'||result.error==='services'||result.error==='timeout'
     ?result.error:'position'
   );
+  }finally{signal?.removeEventListener('abort',cancel);controller.abort()}
  }
  // Ordinary browsers keep their existing geolocation behavior.
  if(!askPermission&&!await webLocationGranted())throw new PositionError('permission');

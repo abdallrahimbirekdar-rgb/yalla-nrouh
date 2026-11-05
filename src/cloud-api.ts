@@ -144,3 +144,11 @@ export async function cloudUpdateFareSettings(token:string,tariff:Tariff):Promis
  const actual=await cloudFareSettings(token);
  if(['base','perKm','perMinute','peakMultiplier'].some(key=>actual[key as keyof Tariff]!==tariff[key as keyof Tariff]))throw new CloudError(500,'bad_response');
 }
+
+// Renew availability before querying: a persisted online flag is not a fresh heartbeat.
+export async function cloudDriverInbox(token:string):Promise<{driver:CloudDriver|null;offers:RidePreview[]}>{
+ const driver=await cloudMyDriver(token);
+ if(!driver?.approved||!driver.online)return {driver,offers:[]};
+ if(!await cloudHeartbeat(token))throw new CloudError(409,'driver_not_approved');
+ return {driver,offers:await cloudOpenRides(token)};
+}

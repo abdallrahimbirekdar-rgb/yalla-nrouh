@@ -44,3 +44,11 @@ You can then sign into Server rides beta with that admin account and review the 
 ## Verify
 
 `npm ci && npm run typecheck && npm test && npm run lint`. The web workflow runs typecheck and tests before export. Android APK must also pass its separate workflow and a physical two-phone test; a source-code commit does not prove the build worked.
+
+
+## Driver inbox presence and foreground GPS recovery (2026-11-05)
+An approved driver's stored `online` flag could stay true for hours while `last_seen_at` expired. The old UI waited 50 seconds before its first heartbeat, and a mode change could drop the first driver refresh behind an in-flight passenger refresh. Loading the inbox now renews availability immediately, including in the server RPC, before applying the same region/category/approval/online matching. Refreshes queue the latest account/mode instead of skipping it. Resume and manual refresh renew presence too. Offline/unapproved drivers still receive no previews; exact pickup data remains available only after assignment.
+
+The website GPS controller now bounds the whole request (22 seconds automatic / 45 seconds explicit consent), cancels superseded/unmounted requests, and clears loading independently of camera revision changes. Recent-position display no longer invalidates the pending request generation. These website changes do not require a new Android host.
+
+Verified the existing administrator request is returned to the designated driver and can be accepted under its authenticated role inside a rolled-back database transaction. No test assignment was committed. Regression tests cover stale online presence, offline exclusion, dropped mode refreshes, hung GPS, cancellation and retry. Physical GPS reception on the owner's phone remains unverified.

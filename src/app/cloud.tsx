@@ -4,33 +4,34 @@ import {router,useLocalSearchParams} from 'expo-router';
 import {useApp} from '../context';
 import {useAuth} from '../auth';
 import {authErrorMessage} from '../auth-errors';
-import {cloudCurrentToken,cloudMyRides,cloudMyDriver,cloudOpenRides,cloudAcceptRide,cloudAdvanceRide,cloudReleaseRide,cloudCancelRide,cloudConfirmPickup,cloudRegisterDriver,cloudSetDriverOnline,cloudHeartbeat,type CloudRide,type CloudDriver,type RidePreview} from '../cloud-api';
+import {cloudCurrentToken,cloudMyRides,cloudMyDriver,cloudDriverInbox,cloudAcceptRide,cloudAdvanceRide,cloudReleaseRide,cloudCancelRide,cloudConfirmPickup,cloudRegisterDriver,cloudSetDriverOnline,type CloudRide,type CloudDriver,type RidePreview} from '../cloud-api';
 import {categories,regions} from '../domain';
 import RoutePanel from '../route-panel';
 import MapCanvas from '../map/MapCanvas';
 import {useCurrentPosition} from '../use-current-position';
+import {createRefreshQueue} from '../refresh-queue';
 import {Button,Icon,Label,Page,Panel,useText,useTheme} from '../ui';
 const live=(r:CloudRide)=>!['completed','cancelled'].includes(r.status);
 export default function Rides(){
  const auth=useAuth();const userId=auth.session?.user.id;const {state,draft,foreground}=useApp();const t=useText();const {colors}=useTheme();const params=useLocalSearchParams<{mode?:string}>();const driverMode=auth.driver||params.mode==='driver';
  const gps=useCurrentPosition(driverMode&&state.preferences.permissionsIntroSeen);
  const [rides,setRides]=useState<CloudRide[]>([]),[driver,setDriver]=useState<CloudDriver|null>(null),[offers,setOffers]=useState<RidePreview[]>([]),[busy,setBusy]=useState(false),[loading,setLoading]=useState(true),[notice,setNotice]=useState('');
- const alive=useRef(true),running=useRef(false),identity=useRef(auth.session?.user.id);identity.current=auth.session?.user.id;
+ const alive=useRef(true),queue=useRef(createRefreshQueue()).current,identity=useRef(auth.session?.user.id),mode=useRef(driverMode);identity.current=auth.session?.user.id;mode.current=driverMode;
  useEffect(()=>{alive.current=true;return()=>{alive.current=false}},[]);
  const refresh=useCallback(async()=>{
-  if(!userId||running.current)return;const owner=userId;running.current=true;
-  try{const token=await cloudCurrentToken();const [next,myDriver]=await Promise.all([cloudMyRides(token),cloudMyDriver(token)]);const available=driverMode&&myDriver?.approved&&myDriver.online?await cloudOpenRides(token):[];
-   if(alive.current&&identity.current===owner){setRides(next);setDriver(myDriver);setOffers(available);setLoading(false)}
-  }finally{running.current=false}
- },[userId,driverMode]);
+  if(!userId)return;const owner=userId;return queue.run(async()=>{if(!alive.current||identity.current!==owner||mode.current!==driverMode)return;
+  const token=await cloudCurrentToken();const [next,inbox]=await Promise.all([cloudMyRides(token),driverMode?cloudDriverInbox(token):cloudMyDriver(token).then(driver=>({driver,offers:[] as RidePreview[]}))]);const myDriver=inbox.driver,available=inbox.offers;
+   if(alive.current&&identity.current===owner&&mode.current===driverMode){setRides(next);setDriver(myDriver);setOffers(available);setLoading(false)}
+  });
+ },[userId,driverMode,queue]);
  useEffect(()=>{setRides([]);setOffers([]);setDriver(null);setLoading(true);if(!userId){setLoading(false);return}let active=true;void refresh().catch(()=>{if(active){setNotice(state.language==='ar'?'تعذر تحميل الرحلات. تحقق من الاتصال وأعد المحاولة.':'Could not load rides. Check internet and retry.');setLoading(false)}});return()=>{active=false}},[refresh,userId,state.language]);
  const activeRide=rides.some(live);const shouldPoll=foreground&&(activeRide||driverMode&&driver?.approved&&driver.online);
  useEffect(()=>{
   if(!userId||!shouldPoll)return;
-  const tick=()=>{if(AppState.currentState!=='background')void refresh().catch(()=>{})};
+  const tick=()=>{if(AppState.currentState!=='background')void refresh().catch(()=>{if(alive.current)setNotice(state.language==='ar'?'تعذر تحديث الطلبات. تحقق من الاتصال واضغط تحديث الرحلات.':'Could not update requests. Check internet and refresh.')})};
   const timer=setInterval(tick,state.preferences.dataSaver?30000:15000);return()=>clearInterval(timer);
- },[refresh,shouldPoll,userId,state.preferences.dataSaver]);
- useEffect(()=>{if(!driverMode||!driver?.approved||!driver.online||!foreground)return;const timer=setInterval(()=>{void cloudCurrentToken().then(token=>cloudHeartbeat(token)).catch(()=>{})},50000);return()=>clearInterval(timer)},[driverMode,driver?.approved,driver?.online,foreground]);
+ },[refresh,shouldPoll,userId,state.preferences.dataSaver,state.language]);
+ useEffect(()=>{if(!userId)return;const resume=()=>{if(document.visibilityState!=='hidden')void refresh().catch(()=>{if(alive.current)setNotice(state.language==='ar'?'تعذر تحديث الطلبات. تحقق من الاتصال واضغط تحديث الرحلات.':'Could not update requests. Check internet and refresh.')})};const native=(event:Event)=>{if((event as CustomEvent).detail?.active===true)resume()};window.addEventListener('focus',resume);window.addEventListener('pageshow',resume);document.addEventListener('visibilitychange',resume);window.addEventListener('yalla:native-visibility',native);return()=>{window.removeEventListener('focus',resume);window.removeEventListener('pageshow',resume);document.removeEventListener('visibilitychange',resume);window.removeEventListener('yalla:native-visibility',native)}},[userId,refresh,state.language]);
  async function run(work:(token:string)=>Promise<void>,success?:string){if(busy)return;setBusy(true);setNotice('');try{await work(await cloudCurrentToken());await refresh();if(success)setNotice(success)}catch(e){const kind=(e as {kind?:string})?.kind??(e as Error)?.message;setNotice(kind==='waiting_passenger_confirmation'?t('بانتظار تأكيد الراكب ركوب السيارة.','Waiting for passenger pickup confirmation.'):kind==='driver_not_approved'?t('حساب السائق بانتظار الاعتماد.','Driver account is waiting for approval.'):authErrorMessage(e,state.language==='ar'))}finally{setBusy(false)}}
  const status=(value:string)=>({requested:t('بانتظار السائق','Waiting for driver'),accepted:t('السائق في الطريق','Driver is on the way'),arrived:t('وصل السائق','Driver arrived'),riding:t('الرحلة جارية','Ride in progress'),completed:t('مكتملة','Completed'),cancelled:t('ملغاة','Cancelled')} as Record<string,string>)[value]??value;
  const mine=rides.filter(r=>driverMode?r.driver_id===auth.session?.user.id:r.passenger_id===auth.session?.user.id);
