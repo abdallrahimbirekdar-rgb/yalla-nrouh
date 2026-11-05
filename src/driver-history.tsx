@@ -7,16 +7,16 @@ import {categories,regions} from './domain';
 import {Button,Label,Panel,useText,useTheme} from './ui';
 
 const sections=[
- {kind:'completed',ar:'المنجزة',en:'Completed'},
- {kind:'cancelled',ar:'الملغاة',en:'Cancelled'},
- {kind:'released',ar:'غير المكتملة',en:'Unfinished'},
+ {kind:'completed',ar:'المنجزة',en:'Completed',icon:'checkmark-circle-outline'},
+ {kind:'cancelled',ar:'الملغاة',en:'Cancelled',icon:'close-circle-outline'},
+ {kind:'released',ar:'غير المكتملة',en:'Unfinished',icon:'time-outline'},
 ] as const;
 
 export function DriverHistoryBar({onOpen}:{onOpen:(kind:DriverHistoryKind)=>void}){
  const {state}=useApp();const {colors}=useTheme();const t=useText();
  return <View style={{backgroundColor:colors.background,borderTopWidth:1,borderColor:colors.line,paddingHorizontal:10,paddingVertical:8}}>
   <View style={{width:'100%',maxWidth:640,alignSelf:'center',flexDirection:state.language==='ar'?'row-reverse':'row',gap:6}}>
-   {sections.map(section=><View key={section.kind} style={{flex:1}}><Button secondary title={t(section.ar,section.en)} onPress={()=>onOpen(section.kind)}/></View>)}
+   {sections.map(section=><View key={section.kind} style={{flex:1}}><Button secondary stacked icon={section.icon} title={t(section.ar,section.en)} onPress={()=>onOpen(section.kind)}/></View>)}
   </View>
  </View>;
 }

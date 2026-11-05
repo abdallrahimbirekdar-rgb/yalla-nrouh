@@ -67,8 +67,8 @@ export default function DriverOffer({offer,remainingSeconds,position,disabled,ex
    <View style={metric}><Label>{t('للزبون','To pickup')}</Label><Label display>{away===null?'—':(away/1000).toFixed(1)}</Label><Label>{away!==null?t('كم','km')+(eta===null?'':' · '+Math.ceil(eta/60)+' '+t('د','min')):expanded&&pickupBusy?t('جارٍ الحساب','Calculating'):t('مسافة القيادة','Driving distance')}</Label></View>
   </View>
   <View style={row}>
-   <View style={{flex:1.25}}><Button prominent icon="checkmark-circle-outline" title={t('قبول','Accept')} disabled={disabled||error==='ride_unavailable'} onPress={()=>onAccept({trip:plan,pickup:pickupPlan})}/></View>
-   <View style={{flex:1}}><Button prominent secondary title={t('رفض','Decline')} disabled={disabled} onPress={onDecline}/></View>
+   <View style={{flex:1.25}}><Button prominent tone="positive" icon="checkmark-circle-outline" title={t('قبول','Accept')} disabled={disabled||error==='ride_unavailable'} onPress={()=>onAccept({trip:plan,pickup:pickupPlan})}/></View>
+   <View style={{flex:1}}><Button prominent secondary tone="danger" icon="close-circle-outline" title={t('رفض','Decline')} disabled={disabled} onPress={onDecline}/></View>
   </View>
   {!expanded&&<Button secondary icon="location-outline" title={t('عرض مكان الزبون','Show pickup location')} onPress={onExpand}/>}
   {expanded&&<>

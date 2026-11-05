@@ -15,7 +15,23 @@ export type IconName=React.ComponentProps<typeof Ionicons>['name'];
 export function Icon({name,size=22,color}:{name:IconName;size?:number;color?:string}){const {colors}=useTheme();return <Ionicons name={name} size={size} color={color??colors.ink} accessible={false} importantForAccessibility="no"/>}
 export function useText(){const {state}=useApp();return (ar:string,en:string)=>state.language==='ar'?ar:en}
 export function Label({children,muted=false,large=false,display=false}:{children:React.ReactNode;muted?:boolean;large?:boolean;display?:boolean}){const {state}=useApp();const {colors}=useTheme();return <Text style={[styles.text,{color:muted?colors.muted:colors.ink,textAlign:state.language==='ar'?'right':'left',writingDirection:state.language==='ar'?'rtl':'ltr',fontFamily:font(large||display?'bold':'regular')},muted&&styles.muted,large&&styles.large,display&&styles.display]}>{children}</Text>}
-export function Button({title,onPress,secondary=false,disabled=false,icon,prominent=false}:{title:string;onPress:()=>void;secondary?:boolean;disabled?:boolean;icon?:IconName;prominent?:boolean}){const {state}=useApp();const {colors}=useTheme();return <Pressable accessibilityLabel={title} accessibilityRole="button" accessibilityState={{disabled}} disabled={disabled} onPress={onPress} style={({pressed})=>[styles.button,prominent&&styles.prominentButton,{backgroundColor:secondary?colors.background:colors.ink},secondary&&{borderWidth:1,borderColor:colors.line},(pressed||disabled)&&{opacity:0.45}]}><View style={{flexDirection:state.language==='ar'?'row-reverse':'row',alignItems:'center',justifyContent:'center',gap:9}}>{icon&&<Icon name={icon} size={20} color={secondary?colors.ink:colors.background}/>}<Text style={{fontFamily:font(prominent?'bold':'medium'),fontSize:prominent?18:14,lineHeight:26,color:secondary?colors.ink:colors.background,textAlign:'center',flexShrink:1}}>{title}</Text></View></Pressable>}
+export function Button({title,onPress,secondary=false,disabled=false,icon,prominent=false,tone,stacked=false}:{title:string;onPress:()=>void;secondary?:boolean;disabled?:boolean;icon?:IconName;prominent?:boolean;tone?:'positive'|'danger';stacked?:boolean}){
+ const {state}=useApp();const {colors,dark}=useTheme();
+ const fill=tone==='positive'?'#116443':tone==='danger'?'#9a292f':colors.ink;
+ const accent=tone==='positive'?(dark?'#85dfb1':fill):tone==='danger'?(dark?'#ffb0b4':fill):colors.ink;
+ const foreground=secondary?accent:tone?'#ffffff':colors.background;
+ return <Pressable accessibilityLabel={title} accessibilityRole="button" accessibilityState={{disabled}} disabled={disabled} onPress={onPress} style={({pressed})=>[
+  styles.button,prominent&&styles.prominentButton,stacked&&{paddingHorizontal:4,paddingVertical:5},
+  {backgroundColor:secondary?colors.background:fill},
+  secondary&&{borderWidth:tone?2:1,borderColor:tone?accent:colors.line},
+  (pressed||disabled)&&{opacity:0.45},
+ ]}>
+  <View style={{flexDirection:stacked?'column':state.language==='ar'?'row-reverse':'row',alignItems:'center',justifyContent:'center',gap:stacked?2:9}}>
+   {icon&&<Icon name={icon} size={prominent?24:20} color={foreground}/>}
+   <Text style={{fontFamily:font(prominent?'bold':'medium'),fontSize:prominent?18:14,lineHeight:stacked?20:26,color:foreground,textAlign:'center',flexShrink:1}}>{title}</Text>
+  </View>
+ </Pressable>;
+}
 export function Panel({children}:{children:React.ReactNode}){const {colors}=useTheme();return <View style={[styles.panel,{backgroundColor:colors.surface}]}>{children}</View>}
 export function Field({label,...props}:TextInputProps&{label:string}){const {state}=useApp();const {colors,dark}=useTheme();return <View style={{gap:5}}><Label muted>{label}</Label><TextInput accessibilityLabel={label} placeholderTextColor={colors.muted} keyboardAppearance={dark?'dark':'light'} selectionColor={colors.purple} {...props} style={[styles.input,{color:colors.ink,backgroundColor:colors.background,borderColor:colors.line,textAlign:state.language==='ar'?'right':'left',writingDirection:state.language==='ar'?'rtl':'ltr',fontFamily:font()},props.style]}/></View>}
 export function RideHero({title}:{title:string}){return <Label large>{title}</Label>}
