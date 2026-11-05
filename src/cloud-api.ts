@@ -146,6 +146,23 @@ export async function cloudAcceptRide(token:string,id:string):Promise<boolean>{
 }
 export const cloudAdvanceRide=(token:string,id:string,next:'arrived'|'riding'|'completed')=>rpc<string>('advance_ride',token,{p_ride_id:id,p_next:next,p_pin:null});
 
+export type AdminRuleRevisionInfo={id:number;changed_section:string|null;summary:string;published_at:string};
+export type AdminRuleRevision=AdminRuleRevisionInfo&{sections:Record<string,{title:string;body:string}>};
+const ruleRevisionColumns='id,changed_section,summary,published_at';
+export async function cloudAdminRuleRevision(token:string,id?:number):Promise<AdminRuleRevision|null>{
+ requireToken(token);
+ const filter=id===undefined?'order=id.desc&limit=1':'id=eq.'+id+'&limit=1';
+ const rows=await call<AdminRuleRevision[]>('/rest/v1/admin_rule_revisions?select='+ruleRevisionColumns+',sections&'+filter,'GET',token);
+ return rows[0]??null;
+}
+export function cloudAdminRuleHistory(token:string,offset:number){
+ requireToken(token);
+ return call<AdminRuleRevisionInfo[]>('/rest/v1/admin_rule_revisions?select='+ruleRevisionColumns+'&order=id.desc&limit=15&offset='+offset,'GET',token);
+}
+export function cloudReviseAdminRule(token:string,expectedId:number,section:string,body:string,summary:string){
+ return rpc<number>('revise_admin_rules',token,{p_expected_id:expectedId,p_section:section,p_body:body,p_summary:summary});
+}
+
 export const cloudIsAdmin=(token:string)=>rpc<boolean>('is_staff_admin',token);
 export const cloudStaffDrivers=(token:string)=>rpc<StaffDriver[]>('admin_pending_drivers',token);
 export const cloudApproveDriver=(token:string,id:string,approved:boolean)=>rpc<boolean>('admin_review_driver',token,{p_driver_id:id,p_approved:approved});

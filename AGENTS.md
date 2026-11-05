@@ -84,3 +84,7 @@ Do not delete earlier hashed web bundles during publication. The Pages workflow 
 
 ## Isolated Android host (0.9.1)
 Do not restore native AppProvider/AuthProvider/storage gates to the Android root. Website state owns account, settings and drafts. SiteShell owns only WebView and bounded foreground native capabilities. GPS starts with high accuracy via foreground-fix.ts and shares jobs; keep both files in Android workflow filters. Never leave subscriptions running after success, deadline or backgrounding. Settings diagnostics must distinguish permission, approximate grant and provider/service failures.
+
+## Admin rules guide
+
+The admin guide is a versioned explanation of production behavior. Its first revision is seeded by `backend/admin-rules-guide.sql`. When changing booking, pricing, eligibility, offer expiry, trip stages, GPS sharing, or retry behavior, publish an updated guide revision as part of the same release. Base it on the latest revision so edits made by the owner in Admin are preserved. Use the revision lock and record a concise Arabic change summary. Keep previously published revisions readable. UI copy changes that leave the rules the same do not require a guide revision.

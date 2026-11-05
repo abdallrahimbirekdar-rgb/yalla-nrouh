@@ -4,6 +4,7 @@ import {router} from 'expo-router';
 import {useAuth} from '../auth';
 import {useApp} from '../context';
 import {cloudCurrentToken,cloudFareSettings,cloudUpdateFareSettings,cloudStaffDrivers,cloudApproveDriver,cloudAdminAddDriverByEmail,type StaffDriver} from '../cloud-api';
+import AdminRulesGuide from '../admin-rules-guide';
 import {authErrorMessage} from '../auth-errors';
 import {parseAmount,priceForRoute,type Tariff} from '../meter';
 import {regions} from '../domain';
@@ -13,6 +14,8 @@ export default function Admin(){
  const [loaded,setLoaded]=useState(false),[busy,setBusy]=useState(false),[notice,setNotice]=useState(''),[drivers,setDrivers]=useState<StaffDriver[]>([]),[updated,setUpdated]=useState('');
  const [base,setBase]=useState(''),[perKm,setPerKm]=useState(''),[perMinute,setPerMinute]=useState(''),[peak,setPeak]=useState('');
  const [newDriverEmail,setNewDriverEmail]=useState('');
+ const [guide,setGuide]=useState(false);
+ useEffect(()=>setGuide(false),[userId]);
  const load=useCallback(async()=>{
   if(!userId||!auth.admin)return;setBusy(true);setNotice('');
   try{const token=await cloudCurrentToken();const [rates,accounts]=await Promise.all([cloudFareSettings(token),cloudStaffDrivers(token)]);setBase(String(rates.base));setPerKm(String(rates.perKm));setPerMinute(String(rates.perMinute));setPeak(String(rates.peakMultiplier??1));setDrivers(accounts);setUpdated(rates.updatedAt);setLoaded(true);dispatch({type:'tariff',tariff:rates})}
@@ -43,8 +46,13 @@ export default function Admin(){
  if(!auth.ready||auth.checkingAdmin)return <Page title={t('لوحة الإدارة','Administration')}><ActivityIndicator color={colors.purple}/><Label muted>{t('جارٍ التحقق من صلاحيات الحساب…','Checking account access…')}</Label></Page>;
  if(!auth.session)return <Page title={t('لوحة الإدارة','Administration')}><Panel><Icon name="shield-checkmark-outline" size={44}/><Label>{t('ادخل ببريد حساب الإدارة وكلمة المرور لفتح لوحة التحكم.','Sign in with the admin email and password to open this page.')}</Label><Button title={t('تسجيل دخول الإدارة','Admin sign in')} onPress={()=>router.replace({pathname:'/account',params:{next:'admin'}})}/></Panel></Page>;
  if(!auth.admin)return <Page title={t('لوحة الإدارة','Administration')}><Panel><Label>{t('هذا الحساب لا يملك صلاحية الإدارة.','This account does not have admin access.')}</Label><Label muted>{auth.session.user.email}</Label><Button title={t('الذهاب إلى حسابي','Go to my account')} onPress={()=>router.replace('/account')}/><Button secondary title={t('إعادة التحقق من الصلاحية','Check access again')} onPress={()=>void auth.retry()}/></Panel></Page>;
+ if(guide)return <Page title={t('دليل الإدارة','Admin guide')} backTo="/account">
+  <Button secondary title={t('الرجوع للوحة الإدارة','Back to administration')} onPress={()=>setGuide(false)}/>
+  <AdminRulesGuide key={userId}/>
+ </Page>;
  return <Page title={t('لوحة الإدارة','Administration')} backTo="/account">
   <Panel><View style={{flexDirection:'row',alignItems:'center',gap:12}}><Icon name="shield-checkmark-outline" size={36} color={colors.purple}/><View style={{flex:1}}><Label>{t('أهلًا بك في الإدارة','Welcome to administration')}</Label><Label muted>{auth.session.user.email}</Label></View></View><Button secondary icon="refresh-outline" title={t('تحديث بيانات الإدارة','Refresh admin data')} disabled={busy} onPress={()=>void load()}/></Panel>
+  <Button icon="book-outline" title={t('كيف يعمل التطبيق · دليل القواعد','How the app works · Rules guide')} onPress={()=>setGuide(true)}/>
   {!loaded?<Panel><Label>{t('جارٍ تحميل إعدادات المشروع.','Loading project settings.')}</Label>{busy&&<ActivityIndicator/>}</Panel>:<>
    <Panel><Label large>{t('تسعيرة الرحلات','Ride rates')}</Label><Label muted>{t('الأجرة = (فتح العداد + كم × سعر الكيلومتر + دقائق × سعر الدقيقة) × معامل الذروة','Fare = (base + km × km price + minutes × minute price) × peak factor')}</Label>
     <Field label={t('فتح العداد — ل.س','Starting fare — SYP')} value={base} onChangeText={setBase} keyboardType="decimal-pad" editable={!busy}/>
