@@ -118,7 +118,9 @@ export async function siteCurrentPosition(askPermission:boolean,signal?:AbortSig
  }
  // Ordinary browsers keep their existing geolocation behavior.
  if(!askPermission&&!await webLocationGranted())throw new PositionError('permission');
- const point=await getWebPosition(6500);refineWebPosition();return point;
+ const point=await getWebPosition(6500,undefined,false,signal);
+ if(!signal?.aborted)refineWebPosition();
+ return point;
 }
 // Driver metering needs the actual native GPS timestamp and accuracy.
 // Invalid/inaccurate fixes are NOT counted as traveled distance.

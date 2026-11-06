@@ -1,7 +1,7 @@
 import React,{useCallback,useEffect} from 'react';
 import {ActivityIndicator,Image,Pressable,ScrollView,StyleSheet,View} from 'react-native';
 import {SafeAreaView} from 'react-native-safe-area-context';
-import {router,useFocusEffect} from 'expo-router';
+import {router,useFocusEffect,useIsFocused} from 'expo-router';
 import {cloudCurrentToken,cloudMyRides} from '../cloud-api';
 import {useRideState} from '../use-ride-state';
 import {readPendingRideOperation} from '../use-ride-recovery';
@@ -20,7 +20,8 @@ export default function Booking(){
  const canBook=auth.rolesReady&&(!auth.driver||auth.admin);
  const t=useText();
  const {colors,dark}=useTheme();
- const gps=useCurrentPosition(ready&&state.preferences.permissionsIntroSeen);
+ const isFocused=useIsFocused();
+ const gps=useCurrentPosition(isFocused&&ready&&state.preferences.permissionsIntroSeen);
  const rtl=state.language==='ar';
  const row={flexDirection:rtl?'row-reverse' as const:'row' as const};
 

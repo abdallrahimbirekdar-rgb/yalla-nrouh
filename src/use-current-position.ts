@@ -29,7 +29,7 @@ export type CameraTarget={point:Coordinate;revision:number;isLocation?:boolean;z
 export function useCurrentPosition(enabled:boolean){
  const [camera,setCamera]=useState<CameraTarget>();const [busy,setBusy]=useState(false),[failure,setFailure]=useState<PositionFailure|null>(null);
  const request=useRef<AbortController|null>(null),cameraRevision=useRef(0);
- const generation=useRef(0),alive=useRef(true),running=useRef<number|null>(null),located=useRef(false),manual=useRef(false);
+ const generation=useRef(0),alive=useRef(true),running=useRef<number|null>(null),manual=useRef(false);
  const locate=useCallback(async(ask=false)=>{
   // Never discard a deliberate tap because an automatic GPS request is still
   // pending. A newer request supersedes the older one without sharing results.
@@ -39,7 +39,7 @@ export function useCurrentPosition(enabled:boolean){
   try{
    const received=await positionDeadline(signal=>Platform.OS==='web'?webPositionRequest(ask,signal):currentPosition(adapter,ask),controller,ask?45000:22000);
    const point=Platform.OS==='web'?recentWebPosition()??received:received;
-   if(alive.current&&id===generation.current){located.current=true;setCamera({point,revision:++cameraRevision.current})}
+   if(alive.current&&id===generation.current)setCamera({point,revision:++cameraRevision.current});
    if(alive.current&&!controller.signal.aborted)return point;
   }catch(error){
    if(alive.current&&id===generation.current)setFailure(error instanceof PositionError?error.code:'position');
@@ -55,10 +55,10 @@ export function useCurrentPosition(enabled:boolean){
  useEffect(()=>{
   if(!enabled)return;
   let active=true,lastResumeAt=0;
-  // Auto-centre at cold start and when the user returns to the app. Never
-  // prompt again in the background; only read an already granted permission.
+  // Recheck on every activation even if an earlier visit already drew a pin.
+  // Automatic requests only read an already granted permission.
   const start=(onResume=false)=>{
-   if(!active||manual.current||!onResume&&located.current)return;
+   if(!active||manual.current)return;
    if(onResume&&Date.now()-lastResumeAt<2500)return;
    // A resume event during an existing GPS request must NOT queue a second
    // request. Previously it could restart the spinner immediately afterwards.
@@ -68,10 +68,10 @@ export function useCurrentPosition(enabled:boolean){
   };
   const recent=Platform.OS==='web'?recentWebPosition():null;
   if(recent&&!manual.current){
-   located.current=true;setFailure(null);
+   setFailure(null);
    setCamera({point:recent,revision:++cameraRevision.current});
-   void locate(false);
-  }else start(false);
+  }
+  start();
   const subscription=AppState.addEventListener('change',value=>{if(value==='active')start(true)});
   if(Platform.OS!=='web')return()=>{active=false;cancel();setBusy(false);subscription.remove()};
   // Diagnostics repeat the current permission after every GPS attempt. Only
@@ -83,7 +83,6 @@ export function useCurrentPosition(enabled:boolean){
    if(!isCoordinate(point)||manual.current)return;
    // A native fix can arrive as an event before the request promise resolves.
    // Finish the pending UI state here so the button never remains spinning.
-   located.current=true;
    setBusy(false);setFailure(null);setCamera({point,revision:++cameraRevision.current});
   };
   const onNativeVisibility=(event:Event)=>{

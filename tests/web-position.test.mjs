@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {getWebPosition,recentWebPosition,webLocationGranted} from '../src/web-position.ts';
+import {siteCurrentPosition} from '../src/site-bridge.web.ts';
 async function withBrowser(browser,work,host={}){
  const descriptor=Object.getOwnPropertyDescriptor(globalThis,'navigator');
  const oldWindow=globalThis.window;
@@ -76,4 +77,30 @@ test('a late older GPS result cannot replace the shared newer phone location',as
  const time=Date.now();announceWebPosition({latitude:51.5,longitude:7.2},{accuracy:20,time});
  announceWebPosition({latitude:51.4,longitude:7.1},{accuracy:20,time:time-5000});
  assert.equal(recentMeasuredWebPosition().latitude,51.5);assert.equal(recentMeasuredWebPosition().time,time);
+});
+
+test('leaving the home screen cancels its browser GPS read before the return attempt',()=> {
+ const callbacks=[];
+ return withBrowser({
+  permissions:{query:async()=>({state:'granted'})},
+  geolocation:{getCurrentPosition:success=>callbacks.push(success)},
+ },async()=>{
+  const {clearWebPosition}=await import('../src/web-position.ts');
+  clearWebPosition();
+  const controller=new AbortController();
+  const first=siteCurrentPosition(false,controller.signal);
+  const cancelled=assert.rejects(first,e=>e.code==='position');
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(callbacks.length,1);
+  controller.abort();
+  await cancelled;
+  const retry=siteCurrentPosition(false);
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(callbacks.length,2);
+  const current={latitude:51.5,longitude:7.2};
+  callbacks[1]({coords:{...current,accuracy:20},timestamp:Date.now()});
+  assert.deepEqual(await retry,current);
+  callbacks[0]({coords:{latitude:51.4,longitude:7.1,accuracy:20},timestamp:Date.now()+1});
+  assert.deepEqual(recentWebPosition(),current);
+ });
 });
