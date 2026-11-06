@@ -4,6 +4,7 @@ import {SafeAreaView} from 'react-native-safe-area-context';
 import {router,useFocusEffect} from 'expo-router';
 import {cloudCurrentToken,cloudMyRides} from '../cloud-api';
 import {useRideState} from '../use-ride-state';
+import {readPendingRideOperation} from '../use-ride-recovery';
 import {useApp} from '../context';
 import {useAuth} from '../auth';
 import {useCurrentPosition} from '../use-current-position';
@@ -15,6 +16,7 @@ export default function Booking(){
  const auth=useAuth();
  const rideState=useRideState();
  const userId=auth.session?.user.id;
+ const pendingRequest=readPendingRideOperation('request',userId);
  const canBook=auth.rolesReady&&(!auth.driver||auth.admin);
  const t=useText();
  const {colors,dark}=useTheme();
@@ -35,18 +37,22 @@ export default function Booking(){
   const resume=(event:Event)=>{if((event as CustomEvent).detail?.active===true)load()};
   const visible=()=>{if(document.visibilityState==='visible')load()};
   window.addEventListener('yalla:native-visibility',resume);
+  window.addEventListener('online',load);
   document.addEventListener('visibilitychange',visible);
   return ()=>{
    window.removeEventListener('yalla:native-visibility',resume);
+   window.removeEventListener('online',load);
    document.removeEventListener('visibilitychange',visible);
   };
  },[userId,canBook]));
 
  function choose(){
+  if(pendingRequest){router.push('/review');return}
   if(rideState.active){router.push('/cloud');return}
   router.push({pathname:'/location',params:{target:'destination',focus:'1'}});
  }
  function openPickup(){
+  if(pendingRequest){router.push('/review');return}
   if(rideState.active){router.push('/cloud');return}
   router.push({pathname:'/location',params:{target:'pickup'}});
  }
@@ -67,7 +73,7 @@ export default function Booking(){
      <Pressable accessibilityRole="button" accessibilityLabel={t('لوين بدك تروح؟ ابحث عن وجهتك','Where are you going? Search for a destination')} onPress={choose} style={[styles.search,row,{backgroundColor:colors.surface,borderColor:colors.line}]}>
       <Icon name="search-outline" size={25} color={colors.purple}/><View style={{flex:1}}><Label large>{t('لوين بدك تروح؟','Where are you going?')}</Label>{!!draft.destination&&<Label muted>{draft.destination}</Label>}</View><Icon name={rtl?'chevron-back':'chevron-forward'} size={20}/>
      </Pressable>
-     {(rideState.active||draft.destinationPoint)&&<Button icon="arrow-forward-outline" title={rideState.active?t('متابعة رحلتي الحالية','Continue my ride'):t('متابعة إلى نقطة الانطلاق','Continue to pickup')} onPress={openPickup}/>}
+     {(pendingRequest||rideState.active||draft.destinationPoint)&&<Button icon="arrow-forward-outline" title={pendingRequest?t('التحقق من طلب التاكسي','Check my taxi request'):rideState.active?t('متابعة رحلتي الحالية','Continue my ride'):t('متابعة إلى نقطة الانطلاق','Continue to pickup')} onPress={openPickup}/>}
      <View style={[row,{gap:8}]}>
       <View style={{flex:1}}><Button secondary icon="folder-outline" title={t('العناوين المحفوظة','Saved addresses')} onPress={()=>router.push({pathname:'/location',params:{view:'saved'}})}/></View>
       <View style={{flex:1}}><Button secondary icon="time-outline" title={t('الرحلات السابقة','Past rides')} onPress={()=>router.push({pathname:'/cloud',params:{mode:'history'}})}/></View>

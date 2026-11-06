@@ -14,9 +14,18 @@ export function newRideRequestId(){
  return [hex.slice(0,8),hex.slice(8,12),hex.slice(12,16),hex.slice(16,20),hex.slice(20)].join('-');
 }
 const idPattern=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+export function readPendingRideOperation(kind:Operation,owner:string|undefined):Pending|null{
+ if(!owner)return null;
+ try{
+  const saved=JSON.parse(localStorage.getItem(storageKey(kind,owner))??'null') as Partial<Pending>|null;
+  if(typeof saved?.id==='string'&&idPattern.test(saved.id)&&typeof saved.since==='number'&&Number.isFinite(saved.since))
+   return {owner,id:saved.id,since:saved.since};
+ }catch{}
+ return null;
+}
 
 export function useRideRecovery(kind:Operation,owner:string|undefined,foreground:boolean,busy:boolean,onFound:(ride:CloudRide)=>void){
- const [operation,setOperation]=useState<Pending|null>(null);
+ const [operation,setOperation]=useState(()=>readPendingRideOperation(kind,owner));
  const [absentId,setAbsentId]=useState<string|null>(null);
  const pending=operation?.owner===owner?operation:null;
  const found=useRef(onFound);found.current=onFound;
@@ -24,14 +33,8 @@ export function useRideRecovery(kind:Operation,owner:string|undefined,foreground
  const current=useRef(pending);current.current=pending;
 
  useEffect(()=>{
-  if(!owner)return;
-  try{
-   const raw=localStorage.getItem(storageKey(kind,owner));
-   if(!raw)return;
-   const saved=JSON.parse(raw) as Partial<Pending>;
-   if(typeof saved.id==='string'&&idPattern.test(saved.id)&&typeof saved.since==='number'&&Number.isFinite(saved.since))
-    setOperation({owner,id:saved.id,since:saved.since});
-  }catch{}
+  setOperation(readPendingRideOperation(kind,owner));
+  setAbsentId(null);
  },[kind,owner]);
 
  function remember(id:string){

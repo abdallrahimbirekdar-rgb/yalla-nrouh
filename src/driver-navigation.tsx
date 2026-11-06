@@ -14,15 +14,18 @@ import MapCanvas from './map/MapCanvas';
 import {Button,Label,Panel,useText,useTheme} from './ui';
 const formatDistance=(meters:number,ar:boolean)=>meters<1000?Math.round(meters/10)*10+' '+(ar?'م':'m'):(meters/1000).toFixed(1)+' '+(ar?'كم':'km');
 export default function DriverNavigation({to,title,targetLabel,action,initialPlan,devicePosition,deviceRevision}:{to:Coordinate;title:string;targetLabel:string;action:React.ReactNode;initialPlan?:RoutePlan|null;devicePosition?:Coordinate;deviceRevision?:number}){
- const {state}=useApp();const t=useText();const {colors}=useTheme();const ar=state.language==='ar';
+ const {state,connection}=useApp();const t=useText();const {colors}=useTheme();const ar=state.language==='ar';
  const [plan,setPlan]=useState<RoutePlan|null>(null),[gpsLost,setGpsLost]=useState(true),[accuracy,setAccuracy]=useState<number|null>(null),[position,setPosition]=useState<Coordinate|null>(devicePosition??null),[error,setError]=useState(''),[busy,setBusy]=useState(false),[busyStage,setBusyStage]=useState<'location'|'route'>('location'),[elapsed,setElapsed]=useState(0),[enabled,setEnabled]=useState(true),[follow,setFollow]=useState(true),[expanded,setExpanded]=useState(false),[attempt,setAttempt]=useState(0),[revision,setRevision]=useState(0);
  const shared=useRef(devicePosition);shared.current=devicePosition;const wake=useRef<(()=>void)|null>(null),needsFix=useRef(false);
  const latest=useRef<RoutePlan|null>(null);const lat=to.latitude,lng=to.longitude;
+ const target=useRef('');const [lastFixAt,setLastFixAt]=useState<number|null>(null);
  useEffect(()=>{
   const known=shared.current;if(known){const display=sharedNavigationDisplay(known);setPosition(known);setAccuracy(display.accuracy);setGpsLost(!display.guidanceReady)}else setGpsLost(true);
-  if(!enabled){setBusy(false);return}latest.current=null;setPlan(null);setError('');
+  const key=[lat,lng,state.language].join('|');
+  if(target.current!==key){target.current=key;latest.current=null;setPlan(null)}
+  if(!enabled){setBusy(false);return}setError('');
   let alive=true,running=false,nativeVisible:boolean|null=null,visible=Platform.OS!=='web'||document.visibilityState!=='hidden';
-  let timer:ReturnType<typeof setTimeout>|undefined,inflight:AbortController|null=null,lastRouteAt=0,offRouteCount=0,reroutes=0;
+  let timer:ReturnType<typeof setTimeout>|undefined,inflight:AbortController|null=null,lastRouteAt=0,offRouteCount=0,reroutes=0,forceRoute=attempt>0;
   async function tick(ask=false){
    if(!alive||!visible||running)return;clearTimeout(timer);needsFix.current=false;running=true;const controller=new AbortController();inflight=controller;let gpsFailed=false,phase:'location'|'route'='location';setError(previous=>['permission','accuracy','services','timeout','position'].includes(previous)?'':previous);setBusyStage('location');setBusy(!latest.current);
    try{
@@ -30,12 +33,12 @@ export default function DriverNavigation({to,title,targetLabel,action,initialPla
     const point=await positionDeadline(async signal=>{measurement.fix=await navigationPosition(ask,signal);return measurement.fix},controller,22000);
     const measured=measurement.fix;
     if(!alive||controller.signal.aborted)return;
-    setGpsLost(!navigationGuidanceReady(measured));setAccuracy(measured?.accuracy??null);setPosition(point);setBusy(false);setRevision(value=>value+1);setError(previous=>['permission','accuracy','services','timeout','position'].includes(previous)?'':previous);
+    setGpsLost(!navigationGuidanceReady(measured));setAccuracy(measured?.accuracy??null);setLastFixAt(measured?.time??null);setPosition(point);setBusy(false);setRevision(value=>value+1);setError(previous=>['permission','accuracy','services','timeout','position'].includes(previous)?'':previous);
     if(!latest.current&&initialPlan&&distanceMeters(point,initialPlan.from)<=100&&distanceMeters({latitude:lat,longitude:lng},initialPlan.to)<=10){latest.current=initialPlan;setPlan(initialPlan)}
     const existing=latest.current;const progress=existing?navigationProgress(existing,point):null;
     offRouteCount=progress&&progress.offRouteMeters>100?offRouteCount+1:0;
-    if(!existing&&(!lastRouteAt||Date.now()-lastRouteAt>=60000)||offRouteCount>=2&&reroutes<2&&Date.now()-lastRouteAt>=60000){
-     lastRouteAt=Date.now();phase='route';setError('');setBusyStage('route');setBusy(true);if(existing)reroutes++;
+    if((Platform.OS!=='web'||navigator.onLine!==false)&&(forceRoute||!existing&&(!lastRouteAt||Date.now()-lastRouteAt>=60000)||offRouteCount>=2&&reroutes<2&&Date.now()-lastRouteAt>=60000)){
+     forceRoute=false;lastRouteAt=Date.now();phase='route';setError('');setBusyStage('route');setBusy(true);if(existing)reroutes++;
      const token=await cloudCurrentToken();
      const next=await routeScheduler.run(()=>createRoutingClient(process.env.EXPO_PUBLIC_GOOGLE_ROUTES_PROXY||'https://gokosprcqpdvqgahvquk.supabase.co/functions/v1/fare-route').route(point,{latitude:lat,longitude:lng},controller.signal,state.language,token),controller.signal);
      if(alive&&!controller.signal.aborted){latest.current=next;setPlan(next);offRouteCount=0}
@@ -46,9 +49,10 @@ export default function DriverNavigation({to,title,targetLabel,action,initialPla
   const pause=()=>{clearTimeout(timer);inflight?.abort()};
   const resume=()=>{const next=nativeVisible??(document.visibilityState!=='hidden');visible=next;if(next){clearTimeout(timer);void tick()}else pause()};
   const native=(event:Event)=>{const active=(event as CustomEvent).detail?.active;if(typeof active==='boolean'){nativeVisible=active;resume()}};
-  if(Platform.OS==='web'){document.addEventListener('visibilitychange',resume);window.addEventListener('yalla:native-visibility',native)}
+  const reconnect=()=>{if(!latest.current)lastRouteAt=0;resume()};
+  if(Platform.OS==='web'){document.addEventListener('visibilitychange',resume);window.addEventListener('yalla:native-visibility',native);window.addEventListener('online',reconnect)}
   const receive=()=>void tick();wake.current=receive;void tick(attempt>0);
-  return()=>{alive=false;if(wake.current===receive)wake.current=null;pause();if(Platform.OS==='web'){document.removeEventListener('visibilitychange',resume);window.removeEventListener('yalla:native-visibility',native)}};
+  return()=>{alive=false;if(wake.current===receive)wake.current=null;pause();if(Platform.OS==='web'){document.removeEventListener('visibilitychange',resume);window.removeEventListener('yalla:native-visibility',native);window.removeEventListener('online',reconnect)}};
  },[lat,lng,state.language,enabled,attempt,initialPlan]);
  useEffect(()=>{if(!devicePosition)return;const display=sharedNavigationDisplay(devicePosition);setPosition(devicePosition);setAccuracy(display.accuracy);setGpsLost(!display.guidanceReady);if(needsFix.current&&display.accuracy!==null)wake.current?.()},[devicePosition,deviceRevision]);
  useEffect(()=>{setElapsed(0);if(!busy)return;const started=Date.now();const timer=setInterval(()=>setElapsed(Math.floor((Date.now()-started)/1000)),1000);return()=>clearInterval(timer)},[busy,busyStage]);
@@ -58,6 +62,8 @@ export default function DriverNavigation({to,title,targetLabel,action,initialPla
  const map=(height:number)=><View style={{height,borderRadius:16,overflow:'hidden'}}><MapCanvas compact readOnly minMapHeight={height} point={plan?.from??position} route={plan?.points} cameraTarget={position?{point:position,revision,isLocation:true,zoom:17,overview:!follow}:undefined} onChange={()=>{}}/></View>;
  const instruction=<View style={{padding:14,borderRadius:14,backgroundColor:colors.selected,gap:6}}><Label display>{gpsLost?(!enabled?t('المتابعة متوقفة مؤقتًا','Navigation is paused'):error?t('تعذر تحديث الملاحة','Navigation could not update'):position?t('بانتظار موقع أدق','Waiting for better GPS'):t('جارٍ قراءة موقع الهاتف','Reading phone location')):error&&!plan?t('تعذر حساب الطريق','Could not find the route'):progress?.arrived?t('اقتربت من نقطة الوصول','You are near the destination'):offRoute?t('أنت خارج المسار المعروض','You are off the shown route'):progress?.instruction||t('نجهّز الطريق إلى وجهتك…','Finding the route to your destination…')}</Label>{progress?.nextInstruction&&!gpsLost&&!offRoute&&!progress.arrived&&<Label>{t('بعد ','In ')}{formatDistance(progress.nextTurnMeters,ar)}: {progress.nextInstruction}</Label>}{progress&&!gpsLost&&!offRoute&&<Label large>{formatDistance(progress.remainingMeters,ar)} · {Math.max(1,Math.ceil(progress.remainingSeconds/60))} {t('دقيقة تقريبًا','min, estimated')}</Label>}</View>;
  return <Panel outlined><Label large>{title}</Label>{instruction}{action}
+  {connection==='offline'&&<Label muted>{plan?t('الاتصال منقطع. نعرض آخر مسار متاح.','Offline. Showing the last available route.'):t('الاتصال منقطع. سيُستأنف حساب الطريق عند عودته.','Offline. Route lookup resumes when you reconnect.')}</Label>}
+  {lastFixAt!==null&&<Label muted>{t('آخر تحديث للموقع: ','Location last updated: ')}{new Date(lastFixAt).toLocaleTimeString(ar?'ar':'en')}</Label>}
   <Label>{targetLabel}</Label>
   {!expanded&&map(290)}
   {busy&&<View style={{flexDirection:'row',gap:8,alignItems:'center'}}><ActivityIndicator color={colors.purple}/><Label muted>{busyStage==='location'?t('جارٍ قراءة موقع الهاتف…','Reading phone location…'):t('جارٍ حساب الطريق…','Finding the route…')} {elapsed} {t('ث','s')}</Label></View>}

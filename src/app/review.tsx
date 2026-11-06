@@ -17,7 +17,7 @@ import RoutePanel from '../route-panel';
 import RideOptions from '../ride-options';
 import {Button,Label,Page,Panel,useText} from '../ui';
 export default function Review(){
- const {draft,state,setDraft,foreground}=useApp();const auth=useAuth();const owner=auth.session?.user.id;const t=useText();const [quoteAttempt,setQuoteAttempt]=useState(0);const [busy,setBusy]=useState(false),[error,setError]=useState(''),[quoted,setQuoted]=useState<{key:string;quote:FareQuote}|null>(null),[pickupReady,setPickupReady]=useState(false),[locationAttempt,setLocationAttempt]=useState(0);const quoteKey=[draft.pickupPoint?.latitude,draft.pickupPoint?.longitude,draft.destinationPoint?.latitude,draft.destinationPoint?.longitude,owner,quoteAttempt].join('|');const manualPickup=draft.pickupMode==='manual';const invalid=validateDraft(draft)||!draft.pickupPoint||!draft.destinationPoint;
+ const {draft,state,setDraft,foreground,connection}=useApp();const auth=useAuth();const owner=auth.session?.user.id;const t=useText();const [quoteAttempt,setQuoteAttempt]=useState(0);const [busy,setBusy]=useState(false),[error,setError]=useState(''),[quoted,setQuoted]=useState<{key:string;quote:FareQuote}|null>(null),[pickupReady,setPickupReady]=useState(false),[locationAttempt,setLocationAttempt]=useState(0);const quoteKey=[draft.pickupPoint?.latitude,draft.pickupPoint?.longitude,draft.destinationPoint?.latitude,draft.destinationPoint?.longitude,owner,quoteAttempt].join('|');const manualPickup=draft.pickupMode==='manual';const invalid=validateDraft(draft)||!draft.pickupPoint||!draft.destinationPoint;
  useEffect(()=>{
   setPickupReady(false);setQuoted(null);setError('');
   if(manualPickup)return;
@@ -36,7 +36,7 @@ export default function Review(){
  }
  const recovery=useRideRecovery('request',owner,foreground,busy,ride=>openRide(ride.id));
  async function confirm(){
-  if(busy||!owner||invalid||(!manualPickup&&!pickupReady)||quoted?.key!==quoteKey||recovery.checking)return;
+  if(busy||connection==='offline'||!owner||invalid||(!manualPickup&&!pickupReady)||quoted?.key!==quoteKey||recovery.checking)return;
   setBusy(true);setError('');
   let submitted=false;
   try{
@@ -76,11 +76,11 @@ export default function Review(){
   onEditPickup={canEdit&&draft.destinationPoint?()=>editStop('pickup'):undefined}
   onEditDestination={canEdit?()=>editStop('destination'):undefined}/>;
  const footer=readyToReview&&auth.session?<RideFooter>
-  <Button icon="car-outline" title={busy?t('جارٍ إرسال الطلب…','Sending request…'):recovery.id?t('إعادة إرسال نفس الطلب','Retry the same request'):t('اطلب تاكسي','Request a taxi')} onPress={()=>void confirm()} disabled={busy||recovery.checking||quoted?.key!==quoteKey}/>
+  <Button icon="car-outline" title={busy?t('جارٍ إرسال الطلب…','Sending request…'):recovery.id?t('إعادة إرسال نفس الطلب','Retry the same request'):t('اطلب تاكسي','Request a taxi')} onPress={()=>void confirm()} disabled={busy||connection==='offline'||recovery.checking||quoted?.key!==quoteKey}/>
  </RideFooter>:undefined;
  return <Page compact simpleHeader footer={footer} title={t('راجع رحلتك','Review your ride')} backTo={!recovery.id&&draft.destinationPoint?{pathname:'/location',params:{target:'pickup',fromReview:'1'}}:'/'}>
   {recovery.id&&<Panel>
-   <Label>{busy||recovery.checking?t('جارٍ التحقق من وصول الطلب…','Checking whether your request arrived…'):t('لم يتأكد وصول الطلب بعد. يمكنك إعادة إرساله بنفس رقم الطلب.','Your request is still unconfirmed. You can retry with the same request ID.')}</Label>
+   <Label>{connection==='offline'?t('انقطع الاتصال بعد محاولة الإرسال. سنتحقق من نفس الطلب عند عودة الإنترنت.','Connection lost after sending. We will check the same request when you reconnect.'):busy||recovery.checking?t('جارٍ التحقق من وصول الطلب…','Checking whether your request arrived…'):t('لم يتأكد وصول الطلب بعد. يمكنك إعادة إرساله بنفس رقم الطلب.','Your request is still unconfirmed. You can retry with the same request ID.')}</Label>
   </Panel>}
   {!manualPickup&&!pickupReady?<Panel outlined>
    <Label>{error||t('جارٍ قراءة موقع الانطلاق من الهاتف…','Reading pickup from your phone…')}</Label>
