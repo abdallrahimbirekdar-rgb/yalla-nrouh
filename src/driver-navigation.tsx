@@ -70,7 +70,7 @@ export default function DriverNavigation({to,title,targetLabel,action,initialPla
     }
    }finally{
     if(routeRequest===controller)routeRequest=null;
-    if(alive&&!gpsRequest)setBusy(false);
+    if(alive)setBusy(false);
    }
   }
   async function tick(ask=false){
