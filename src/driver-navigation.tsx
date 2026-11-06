@@ -21,7 +21,7 @@ export default function DriverNavigation({to,title,targetLabel,action,initialPla
  const {state,connection}=useApp();const t=useText();const {colors}=useTheme();const ar=state.language==='ar';
  const [plan,setPlan]=useState<DriverRoutePlan|null>(null),[gpsLost,setGpsLost]=useState(true),[accuracy,setAccuracy]=useState<number|null>(null),[position,setPosition]=useState<Coordinate|null>(devicePosition??null),[error,setError]=useState(''),[routeError,setRouteError]=useState(''),[busy,setBusy]=useState(false),[busyStage,setBusyStage]=useState<'location'|'route'>('location'),[elapsed,setElapsed]=useState(0),[enabled,setEnabled]=useState(true),[follow,setFollow]=useState(true),[expanded,setExpanded]=useState(false),[attempt,setAttempt]=useState(0),[revision,setRevision]=useState(0);
  const shared=useRef(devicePosition);shared.current=devicePosition;
- const lastPrecise=useRef<Fix|null>(null),latest=useRef<DriverRoutePlan|null>(null);
+ const lastFix=useRef<Fix|null>(null),latest=useRef<DriverRoutePlan|null>(null);
  const lat=to.latitude,lng=to.longitude,originLat=routeOrigin?.latitude,originLng=routeOrigin?.longitude;
  const target=useRef('');const [lastFixAt,setLastFixAt]=useState<number|null>(null);
  useEffect(()=>{
@@ -29,7 +29,7 @@ export default function DriverNavigation({to,title,targetLabel,action,initialPla
   const start=originLat!==undefined&&originLng!==undefined?{latitude:originLat,longitude:originLng}:undefined;
   const destination={latitude:lat,longitude:lng};
   const key=[lat,lng,state.language,pilotActive].join('|');
-  if(target.current!==key){target.current=key;latest.current=null;lastPrecise.current=null;setPlan(null)}
+  if(target.current!==key){target.current=key;latest.current=null;setPlan(null)}
   if(!enabled){setBusy(false);setGpsLost(true);return}
   setError('');setRouteError('');
   let alive=true,nativeVisible=Platform.OS==='web'?(window as Window&{__YALLA_NATIVE_ACTIVE__?:boolean}).__YALLA_NATIVE_ACTIVE__:undefined;
@@ -38,15 +38,23 @@ export default function DriverNavigation({to,title,targetLabel,action,initialPla
   let firstFixTimer:ReturnType<typeof setTimeout>|undefined;
   let timer:ReturnType<typeof setTimeout>|undefined,gpsRequest:AbortController|null=null,routeRequest:AbortController|null=null;
   let nextRouteAt=0,offRouteCount=0,reroutes=0,forceRoute=attempt>0;
-  let hasPosition=!!known,lastPosition=start?undefined:known;
+  let hasPosition=!!known||!!lastFix.current,lastPosition=lastFix.current??(start?undefined:known);
+  let preciseStreamAt=0;
   function showFix(fix:Fix){
    const accurate=navigationGuidanceReady(fix);
-   if(accurate)lastPrecise.current=fix;
-   if(!accurate&&navigationGuidanceReady(lastPrecise.current))return;
+   if(lastFix.current&&fix.time<lastFix.current.time)return;
+   lastFix.current=fix;
    hasPosition=true;lastPosition=fix;setPosition(fix);setLastFixAt(fix.time);setAccuracy(fix.accuracy);setGpsLost(!accurate);setRevision(value=>value+1);
   }
+  function receiveFix(fix:Fix){
+   if(lastFix.current&&fix.time<lastFix.current.time)return;
+   const accurate=navigationGuidanceReady(fix);
+   showFix(fix);
+   setError('');
+   void updateRoute(fix,accurate);
+  }
   async function updateRoute(point:Coordinate,accurate=false){
-   if(!alive||!visible||routeRequest||pilotActive&&!accurate||(Platform.OS==='web'&&navigator.onLine===false))return;
+   if(!alive||!visible||routeRequest||pilotActive&&!accurate&&!!latest.current||(Platform.OS==='web'&&navigator.onLine===false))return;
    const existing=latest.current;
    if(!pilotActive&&!existing&&initialPlan&&distanceMeters(destination,initialPlan.to)<=10&&distanceMeters(point,initialPlan.from)<=150){
     latest.current=initialPlan;setPlan(initialPlan);
@@ -69,7 +77,7 @@ export default function DriverNavigation({to,title,targetLabel,action,initialPla
      const client=createRoutingClient(process.env.EXPO_PUBLIC_GOOGLE_ROUTES_PROXY||'https://gokosprcqpdvqgahvquk.supabase.co/functions/v1/fare-route');
      next=await routeScheduler.run(()=>client.route(point,destination,controller.signal,state.language,token),controller.signal);
     }
-    if(alive&&!controller.signal.aborted){latest.current=next;setPlan(next);offRouteCount=0;nextRouteAt=Date.now()+(pilotActive?15000:60000)}
+    if(alive&&!controller.signal.aborted){latest.current=next;setPlan(next);offRouteCount=0;nextRouteAt=Date.now()+(pilotActive?(accurate?15000:2000):60000)}
    }catch(error){
     if(alive&&!controller.signal.aborted){
      const cause=error as {code?:string;kind?:string};
@@ -91,13 +99,12 @@ export default function DriverNavigation({to,title,targetLabel,action,initialPla
    try{
     const fix=await positionDeadline(signal=>navigationPosition(ask,signal,hasPosition),controller,22000);
     if(!alive||controller.signal.aborted)return;
-    showFix(fix);setError('');
-    void updateRoute(fix,navigationGuidanceReady(fix));
+    receiveFix(fix);
    }catch(error){
     const code=(error as {code?:string}).code??'position';
     if(alive&&visible&&(!controller.signal.aborted||code==='timeout')){
      setError(code);
-     if(!navigationGuidanceReady(lastPrecise.current))setGpsLost(true);
+     if(!navigationGuidanceReady(lastFix.current))setGpsLost(true);
      if(code==='permission'||code==='services')delay=15000;
      if(lastPosition||start)void updateRoute(lastPosition??start!);
     }
@@ -106,34 +113,42 @@ export default function DriverNavigation({to,title,targetLabel,action,initialPla
      gpsRequest=null;
      if(alive){
       if(!routeRequest)setBusy(false);
-      if(visible)timer=setTimeout(()=>void tick(),delay);
+      if(visible&&(!stopWatch||Date.now()-preciseStreamAt>=9000))timer=setTimeout(()=>void tick(),delay);
      }
     }
    }
   }
-  const restartIfSilent=()=>{
+  const armLocationCheck=()=>{
    clearTimeout(firstFixTimer);
    firstFixTimer=setTimeout(()=>{
     if(!alive||!visible||!stopWatch)return;
-    setError('timeout');
-    stopWatch();stopWatch=null;
-    startLocation();
-   },12000);
+    // Keep the primary subscription alive while the one-shot provider acquires
+    // a fix. Reopening the same watcher repeatedly can interrupt acquisition.
+    void tick();
+   },10000);
   };
   const startLocation=(ask=false)=>{
    if(!visible||stopWatch||gpsRequest)return;
    stopWatch=watchDriverPosition(ask,fix=>{
     if(!alive||!visible)return;
-    restartIfSilent();
-    showFix(fix);setError('');
-    void updateRoute(fix,navigationGuidanceReady(fix));
+    const accurate=navigationGuidanceReady(fix);
+    if(accurate){
+     preciseStreamAt=fix.time;
+     clearTimeout(timer);
+     gpsRequest?.abort();gpsRequest=null;
+     if(!routeRequest)setBusy(false);
+     armLocationCheck();
+    }
+    receiveFix(fix);
    },code=>{
     if(!alive||!visible)return;
     if(['permission','services','accuracy'].includes(code))clearTimeout(firstFixTimer);
     setError(code);
    });
-   if(stopWatch)restartIfSilent();
-   else void tick(ask);
+   if(stopWatch){
+    armLocationCheck();
+    if(ask)void tick(true);
+   }else void tick(ask);
   };
   const pause=()=>{
    clearTimeout(timer);clearTimeout(firstFixTimer);
@@ -156,8 +171,10 @@ export default function DriverNavigation({to,title,targetLabel,action,initialPla
   const native=(event:Event)=>{const active=(event as CustomEvent).detail?.active;if(typeof active==='boolean'){nativeVisible=active;resume()}};
   if(Platform.OS==='web'){document.addEventListener('visibilitychange',resume);window.addEventListener('yalla:native-visibility',native);window.addEventListener('yalla:native-bootstrap',bootstrap);window.addEventListener('online',resume)}
   if(known){const display=sharedNavigationDisplay(known);if(display.fix)showFix(display.fix)}
+  const measured=lastFix.current;
+  if(measured)setGpsLost(!navigationGuidanceReady(measured));
   const first=lastPosition??start;
-  if(first)void updateRoute(first);
+  if(first)void updateRoute(first,measured===first&&navigationGuidanceReady(measured));
   startLocation(attempt>0);
   return()=>{alive=false;pause();if(Platform.OS==='web'){document.removeEventListener('visibilitychange',resume);window.removeEventListener('yalla:native-visibility',native);window.removeEventListener('yalla:native-bootstrap',bootstrap);window.removeEventListener('online',resume)}};
  },[lat,lng,originLat,originLng,state.language,enabled,attempt,initialPlan,pilotActive]);
@@ -173,7 +190,8 @@ export default function DriverNavigation({to,title,targetLabel,action,initialPla
  const offRoute=progress&&progress.offRouteMeters>(pilotActive?50:100);
  const pilotPosition=progress&&!gpsLost&&progress.offRouteMeters<=18?progress.snapped:position;
  const arrived=!gpsLost&&!!position&&distanceMeters(position,to)<=35;
- const stale=lastFixAt!==null&&Date.now()-lastFixAt>15000;
+ const stale=lastFixAt!==null&&Date.now()-lastFixAt>=15000;
+ const livePosition=enabled&&lastFixAt!==null&&!stale;
  const gpsMessage=error==='permission'?t('اسمح بالموقع أثناء استخدام التطبيق.','Allow location while using the app.'):error==='services'?t('فعّل خدمة الموقع في الهاتف.','Turn on phone location.'):error==='accuracy'||error==='timeout'||error==='position'?t('لم يصل تحديث جديد للموقع. يمكنك فتح خرائط Google أو تحديث الموقع من هنا.','No new location update arrived. You can open Google Maps or retry here.'):'';
  const routeMessage=pilotActive&&routeError!=='navigation'&&routeError?t('تعذّر حساب طريق Valhalla التجريبي. يمكنك الرجوع إلى الملاحة الحالية أو فتح خرائط Google.','The Valhalla pilot route could not load. Switch back or open Google Maps.'):routeError==='no_route'?t('لم تعثر Google على طريق قيادة إلى الوجهة.','Google found no driving route.'):routeError==='busy'?t('خدمة الطرق مشغولة. سنعيد المحاولة.','The route service is busy. We will retry.'):routeError==='login_required'||routeError==='unauthorized'?t('تعذر التحقق من حساب السائق لحساب الطريق.','Could not verify the driver account for routing.'):routeError==='navigation'?t('تعذر فتح خرائط Google.','Could not open Google Maps.'):routeError?t('تعذر تحميل مسار القيادة من Google.','Could not load the driving route from Google.'):'';
  const openGoogle=()=>{void Linking.openURL(googleDirections(to,undefined,true)).catch(()=>setRouteError('navigation'))};
@@ -183,12 +201,15 @@ export default function DriverNavigation({to,title,targetLabel,action,initialPla
   onPress={onPilotToggle}/>;
  const pilotDisclosure=pilotAvailable&&!pilotActive&&<Label muted>{t('اختبار خاص. عند تشغيله تُرسل إحداثيات المسار إلى خادم Valhalla التجريبي.','Private pilot. Enabling it sends route coordinates to the Valhalla demo server.')}</Label>;
  const mapContent=(height:number)=>pilotActive
-  ?<DriverPilotMap point={pilotPosition} destination={to} route={activePlan?.points} follow={follow} fresh={!gpsLost}/>
+  ?<DriverPilotMap point={pilotPosition} destination={to} route={activePlan?.points} follow={follow&&livePosition} fresh={livePosition}/>
   :<MapCanvas compact readOnly minMapHeight={height} point={activePlan?.from??routeOrigin??to} route={activePlan?.points} cameraTarget={position?{point:position,revision,isLocation:true,zoom:17,overview:!follow}:undefined} onChange={()=>{}}/>;
  const map=(height:number)=><View style={{height,borderRadius:16,overflow:'hidden'}}>{mapContent(height)}</View>;
+ const retry=<Button secondary title={t('تحديث الموقع والطريق','Update location and route')} onPress={()=>{setEnabled(true);setAttempt(value=>value+1)}}/>;
+ const preview=pilotActive&&gpsLost&&activePlan&&<Label muted>{t('هذا المسار من آخر موقع متاح أو من نقطة الانطلاق. تستأنف تعليمات الانعطاف عند وصول موقع حديث ودقيق.','Route preview from the last available position or pickup. Turn guidance resumes with a fresh, accurate position.')}</Label>;
  const instruction=<View style={{padding:14,borderRadius:14,backgroundColor:colors.selected,gap:6}}><Label display>{gpsLost?(!enabled?t('المتابعة متوقفة مؤقتًا','Navigation is paused'):stale?t('توقّف تحديث موقع السيارة','Car location has stopped updating'):position?t('بانتظار موقع أدق','Waiting for better GPS'):t('جارٍ قراءة موقع الهاتف','Reading phone location')):arrived?t('اقتربت من نقطة الوصول','You are near the destination'):routeError&&!activePlan?t('تعذر حساب الطريق','Could not find the route'):offRoute?t('أنت خارج المسار المعروض','You are off the shown route'):pilotActive&&progress?.nextInstruction?t('بعد ','In ')+formatDistance(progress.nextTurnMeters,ar)+' · '+progress.nextInstruction:progress?.instruction||t('نجهّز الطريق إلى وجهتك…','Finding the route to your destination…')}</Label>{!pilotActive&&progress?.nextInstruction&&!gpsLost&&!offRoute&&!arrived&&<Label>{t('بعد ','In ')}{formatDistance(progress.nextTurnMeters,ar)}: {progress.nextInstruction}</Label>}{progress&&!gpsLost&&!offRoute&&!arrived&&<Label large>{formatDistance(progress.remainingMeters,ar)} · {Math.max(1,Math.ceil(progress.remainingSeconds/60))} {t('دقيقة تقريبًا','min, estimated')}</Label>}</View>;
  return <Panel outlined><Label large>{title}</Label>{instruction}{action}{googleButton}{pilotToggle}
   {pilotDisclosure}
+  {preview}
   {connection==='offline'&&<Label muted>{activePlan?t('الاتصال منقطع. نعرض آخر مسار متاح.','Offline. Showing the last available route.'):t('الاتصال منقطع. سيُستأنف حساب الطريق عند عودته.','Offline. Route lookup resumes when you reconnect.')}</Label>}
   {lastFixAt!==null&&<Label muted>{t('آخر تحديث للموقع: ','Location last updated: ')}{new Date(lastFixAt).toLocaleTimeString(ar?'ar':'en')}</Label>}
   <Label>{targetLabel}</Label>
@@ -202,8 +223,8 @@ export default function DriverNavigation({to,title,targetLabel,action,initialPla
    {isNativeWebView()&&<Button secondary title={t('فتح أذونات موقع التطبيق','Open app location permissions')} onPress={()=>void nativeAction('location-settings').catch(()=>setError('permission'))}/>}
   </View>}
   {offRoute&&<Label muted>{t('نعيد حساب الطريق عند توفر موقع دقيق. يمكنك طلب التحديث يدويًا.','The route updates with an accurate location. You can also update it now.')}</Label>}
-  <View style={{gap:8}}><Button icon="expand-outline" title={t('تكبير الملاحة داخل التطبيق','Full-screen navigation')} onPress={()=>setExpanded(true)}/><Button secondary icon="locate" title={follow?t('عرض المسار كاملًا','Show the full route'):t('متابعة موقعي','Follow my location')} onPress={()=>setFollow(value=>!value)}/><Button secondary title={t('تحديث الموقع والطريق','Update location and route')} onPress={()=>{setEnabled(true);setAttempt(value=>value+1)}}/><Button secondary title={enabled?t('إيقاف المتابعة مؤقتًا','Pause navigation'):t('استئناف الملاحة','Resume navigation')} onPress={()=>setEnabled(value=>!value)}/></View>
+  <View style={{gap:8}}><Button icon="expand-outline" title={t('تكبير الملاحة داخل التطبيق','Full-screen navigation')} onPress={()=>setExpanded(true)}/><Button secondary icon="locate" title={follow?t('عرض المسار كاملًا','Show the full route'):t('متابعة موقعي','Follow my location')} onPress={()=>setFollow(value=>!value)}/>{retry}<Button secondary title={enabled?t('إيقاف المتابعة مؤقتًا','Pause navigation'):t('استئناف الملاحة','Resume navigation')} onPress={()=>setEnabled(value=>!value)}/></View>
   <Label muted>{pilotActive?'MapLibre · Valhalla · FOSSGIS':'Google Maps'} · {t('المتابعة أثناء فتح التطبيق','Navigation while the app is open')}</Label>
-  <Modal visible={expanded} animationType="none" onRequestClose={()=>setExpanded(false)}><View style={{flex:1,padding:16,paddingTop:32,backgroundColor:colors.background,gap:12}}>{instruction}{action}{googleButton}{pilotToggle}{pilotDisclosure}<View style={{flex:1,minHeight:200}}>{mapContent(200)}</View>{!!(routeMessage||gpsMessage)&&<Label muted>{routeMessage||gpsMessage}</Label>}<Button secondary title={follow?t('عرض المسار كاملًا','Show the full route'):t('متابعة موقعي','Follow my location')} onPress={()=>setFollow(value=>!value)}/><Button title={t('العودة إلى الطلب','Back to the ride')} onPress={()=>setExpanded(false)}/></View></Modal>
+  <Modal visible={expanded} animationType="none" onRequestClose={()=>setExpanded(false)}><View style={{flex:1,padding:16,paddingTop:32,backgroundColor:colors.background,gap:12}}>{instruction}{action}{googleButton}{pilotToggle}{pilotDisclosure}{preview}<View style={{flex:1,minHeight:200}}>{mapContent(200)}</View>{!!(routeMessage||gpsMessage)&&<Label muted>{routeMessage||gpsMessage}</Label>}{gpsLost&&retry}<Button secondary title={follow?t('عرض المسار كاملًا','Show the full route'):t('متابعة موقعي','Follow my location')} onPress={()=>setFollow(value=>!value)}/><Button title={t('العودة إلى الطلب','Back to the ride')} onPress={()=>setExpanded(false)}/></View></Modal>
  </Panel>;
 }
