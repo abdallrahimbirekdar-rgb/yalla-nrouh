@@ -18,3 +18,17 @@ test('zero-length geometry is bounded and has no invented progress',()=>{
  const p={...plan,points:[plan.from,plan.from],meters:0,seconds:0,steps:[]};const result=navigationProgress(p,plan.from);
  assert.equal(result.remainingMeters,0);assert.equal(result.instruction,'');assert.ok(Number.isFinite(result.remainingSeconds));
 });
+test('Valhalla times a turn by its point on the shape, independently of leg distance estimates',()=>{
+ const p={...plan,provider:'Valhalla',steps:[
+  {instruction:'Start',meters:2000,shapeIndex:0},
+  {instruction:'Turn left',meters:500,shapeIndex:1},
+  {instruction:'Turn left again',meters:1500,shapeIndex:2},
+ ]};
+ const before=navigationProgress(p,{latitude:.00004,longitude:.009});
+ assert.equal(before.nextInstruction,'Turn left');
+ assert.ok(before.nextTurnMeters>100&&before.nextTurnMeters<120);
+ assert.ok(before.offRouteMeters>4&&before.offRouteMeters<5);
+ assert.equal(before.snapped.latitude,0);
+ const after=navigationProgress(p,{latitude:.001,longitude:.01});
+ assert.equal(after.nextInstruction,'Turn left again');
+});

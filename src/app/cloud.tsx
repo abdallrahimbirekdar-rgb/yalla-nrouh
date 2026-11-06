@@ -1,3 +1,4 @@
+import {isValhallaPilotDriver} from '../valhalla-route';
 import React,{useCallback,useEffect,useMemo,useRef,useState} from 'react';
 import {AppState,View} from 'react-native';
 import {router,useLocalSearchParams} from 'expo-router';
@@ -24,6 +25,8 @@ const live=(r:CloudRide)=>!['completed','cancelled'].includes(r.status);
 export default function Rides(){
  const auth=useAuth();const userId=auth.session?.user.id;const {state,draft,setDraft,foreground,connection}=useApp();const t=useText();const {colors}=useTheme();const params=useLocalSearchParams<{mode?:string;ride?:string}>();const driverMode=auth.driver||params.mode==='driver';const historyMode=!driverMode&&params.mode==='history';
  const passengerTitle=historyMode?t('الرحلات السابقة','Past rides'):t('رحلتي الحالية','Current ride');
+ const [pilotOwner,setPilotOwner]=useState<string|null>(null);
+ const [pilotRide,setPilotRide]=useState<string|null>(null);
  const [offerLimit,setOfferLimit]=useState(3);
  const [workTarget,setWorkTarget]=useState<boolean|null>(null);
  const [focusedOffer,setFocusedOffer]=useState<string|null>(null);
@@ -82,6 +85,14 @@ export default function Rides(){
  },[userId,driverMode,queue]);
  useEffect(()=>{setRides([]);setOffers([]);setDriver(null);setInboxProblem(false);setLoading(true);if(!userId){setLoading(false);return}let active=true;void refresh().catch(()=>{if(active){setNotice(state.language==='ar'?'تعذر تحميل الرحلات. تحقق من الاتصال وأعد المحاولة.':'Could not load rides. Check internet and retry.');setLoading(false)}});return()=>{active=false}},[refresh,userId,state.language]);
  const currentDriverRide=driverMode?rides.find(r=>r.driver_id===userId&&live(r)):undefined;
+ useEffect(()=>{
+  let active=true;
+  if(userId&&driverMode&&driver?.approved){
+   void isValhallaPilotDriver(userId).then(allowed=>{if(active&&allowed)setPilotOwner(userId)}).catch(()=>{});
+  }else setPilotOwner(null);
+  return()=>{active=false};
+ },[userId,driverMode,driver?.approved]);
+ useEffect(()=>{if(pilotRide!==currentDriverRide?.id)setPilotRide(null)},[pilotRide,currentDriverRide?.id]);
  const gps=useCurrentPosition(driverMode&&Boolean(currentDriverRide||driver?.approved&&driver.online)&&state.preferences.permissionsIntroSeen);
  useEffect(()=>{
   if(!driverMode||!driver?.approved||!driver.online||currentDriverRide||!foreground||connection==='offline')return;
@@ -236,6 +247,9 @@ export default function Rides(){
        title={pickingUp?t('إلى الزبون','To pickup'):t('إلى الوجهة','To destination')}
        targetLabel={pickingUp?ride.pickup:ride.destination}
        action={action}
+       pilotAvailable={pilotOwner===userId&&!!driver?.approved}
+       pilotActive={pilotOwner===userId&&pilotRide===ride.id}
+       onPilotToggle={()=>setPilotRide(pilotRide===ride.id?null:ride.id)}
        devicePosition={gps.camera?.point}
        routeOrigin={ride.status==='riding'?{latitude:ride.pickup_lat,longitude:ride.pickup_lng}:undefined}
        initialPlan={acceptedPlans?.rideId===ride.id?(pickingUp?acceptedPlans.pickup:acceptedPlans.trip):null}
