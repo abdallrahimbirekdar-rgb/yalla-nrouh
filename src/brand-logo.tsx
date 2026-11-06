@@ -15,7 +15,7 @@ export function BrandLogo({menu=false}:{menu?:boolean}){
  const titleColor=colors.ink;
  const arabicFont=isLoaded('Cairo_700Bold')?'Cairo_700Bold':undefined;
  return <View accessible accessibilityRole="image" accessibilityLabel={arabic+' — Yalla Nrouh'}
-  style={{flexDirection:'row-reverse',alignItems:'center',justifyContent:'flex-start',gap:6,maxWidth:menu?202:153,minWidth:0,flexShrink:1}}>
+  style={{flexDirection:'row-reverse',alignItems:'center',justifyContent:'flex-start',gap:6,maxWidth:menu?202:138,minWidth:0,flexShrink:1}}>
   <View style={{width:menu?43:36,height:menu?43:36,alignItems:'center',justifyContent:'center',flexShrink:0}}>
    <Ionicons name="location" size={menu?42:36} color={colors.purple} accessible={false}/>
    <Ionicons name="car-sport" size={menu?18:15} color="#ffffff" style={{position:'absolute',top:menu?8:7,left:menu?12:10}} accessible={false}/>
