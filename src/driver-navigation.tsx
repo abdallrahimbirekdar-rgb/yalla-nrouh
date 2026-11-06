@@ -34,7 +34,7 @@ export default function DriverNavigation({to,title,targetLabel,action,initialPla
   setError('');setRouteError('');
   let alive=true,nativeVisible=Platform.OS==='web'?(window as Window&{__YALLA_NATIVE_ACTIVE__?:boolean}).__YALLA_NATIVE_ACTIVE__:undefined;
   const isVisible=()=>Platform.OS!=='web'||(nativeVisible!==false&&document.visibilityState!=='hidden');
-  let visible=isVisible(),stopWatch:(()=>void)|null=null;
+  let visible=isVisible(),stopWatch:(()=>void)|null=null,streamMode:'native'|'browser'|'none'='none';
   let firstFixTimer:ReturnType<typeof setTimeout>|undefined;
   let timer:ReturnType<typeof setTimeout>|undefined,gpsRequest:AbortController|null=null,routeRequest:AbortController|null=null;
   let nextRouteAt=0,offRouteCount=0,reroutes=0,forceRoute=attempt>0;
@@ -146,13 +146,14 @@ export default function DriverNavigation({to,title,targetLabel,action,initialPla
     setError(code);
    });
    if(stopWatch){
+    streamMode=isNativeWebView()&&(window as Window&{__YALLA_DRIVER_LOCATION_STREAM__?:boolean}).__YALLA_DRIVER_LOCATION_STREAM__===true?'native':'browser';
     armLocationCheck();
     if(ask)void tick(true);
-   }else void tick(ask);
+   }else{streamMode='none';void tick(ask)}
   };
   const pause=()=>{
    clearTimeout(timer);clearTimeout(firstFixTimer);
-   stopWatch?.();stopWatch=null;
+   stopWatch?.();stopWatch=null;streamMode='none';
    gpsRequest?.abort();gpsRequest=null;
    routeRequest?.abort();routeRequest=null;
   };
@@ -163,8 +164,11 @@ export default function DriverNavigation({to,title,targetLabel,action,initialPla
    startLocation();
   };
   const bootstrap=()=>{
-   if(!visible||stopWatch||!(window as Window&{__YALLA_DRIVER_LOCATION_STREAM__?:boolean}).__YALLA_DRIVER_LOCATION_STREAM__)return;
-   clearTimeout(timer);gpsRequest?.abort();gpsRequest=null;
+   if(!visible||!isNativeWebView()||streamMode==='native'||!(window as Window&{__YALLA_DRIVER_LOCATION_STREAM__?:boolean}).__YALLA_DRIVER_LOCATION_STREAM__)return;
+   // Replace the older WebView GPS watcher with the new direct Android stream.
+   // Do not retain two independent subscriptions competing for GPS fixes.
+   stopWatch?.();stopWatch=null;streamMode='none';
+   clearTimeout(timer);clearTimeout(firstFixTimer);gpsRequest?.abort();gpsRequest=null;
    if(!routeRequest)setBusy(false);
    startLocation();
   };
