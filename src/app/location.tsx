@@ -165,7 +165,11 @@ function LocationPicker({pickup,focus,savedView,edit}:{pickup:boolean;focus:bool
     setDraft(previous=>({...previous,destination:name,destinationPoint:selected}));
     router.replace({pathname:'/location',params:{target:'pickup'}});
    }
-  }catch(error){if(alive.current)setMessage(pickupPositionMessage(error,state.language==='ar'))}
+  }catch(error){
+   if(!alive.current)return;
+   if(pickup&&pickupMode==='current')setPoint(null);
+   setMessage(pickupPositionMessage(error,state.language==='ar'));
+  }
   finally{if(alive.current)setConfirming(false)}
  }
  async function savePlace(removeId?:string){
@@ -259,7 +263,7 @@ function LocationPicker({pickup,focus,savedView,edit}:{pickup:boolean;focus:bool
    {typing&&notice}
   </Panel></View>
   {!typing&&<>
-  {pickup&&<Button secondary icon="locate" title={locating?t('جارٍ تحديد موقعك…','Finding your location…'):t('استخدام موقعي الحالي','Use my current location')} onPress={()=>void selectCurrent()} disabled={confirming||busy||locating}/>}
+  {pickup&&(pickupMode==='manual'||!point||locating)&&<Button secondary icon="locate" title={locating?t('جارٍ تحديد موقعك…','Finding your location…'):t('استخدام موقعي الحالي','Use my current location')} onPress={()=>void selectCurrent()} disabled={confirming||busy||locating}/>}
   {pickup&&!message&&!locating&&!point&&gps.failure&&<Label muted>{pickupPositionMessage(new PositionError(gps.failure),state.language==='ar')}</Label>}
   {oldPlace&&!point&&!typing&&<Label muted>{t('العنوان المحفوظ حاليًا: ','Current saved address: ')}{oldPlace.label}</Label>}
   {point?<Panel>
