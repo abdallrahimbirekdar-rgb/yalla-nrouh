@@ -14,7 +14,6 @@ import android.os.IBinder
 import android.os.Looper
 import android.os.SystemClock
 import androidx.core.app.NotificationCompat
-import androidx.core.app.ServiceCompat
 import com.google.android.gms.location.*
 import expo.modules.kotlin.Promise
 import java.net.HttpURLConnection
@@ -77,8 +76,12 @@ class RideSharingService : Service() {
     }
     session = request
     try {
-      ServiceCompat.startForeground(this, ID, notification(request.arabic),
-        ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION)
+      val banner = notification(request.arabic)
+      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+        startForeground(ID, banner, ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION)
+      } else {
+        startForeground(ID, banner)
+      }
       currentRide = request.ride
       lastContact = SystemClock.elapsedRealtime()
       val config = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, 1000)
