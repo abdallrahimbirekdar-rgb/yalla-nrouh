@@ -215,7 +215,7 @@ export default function Rides(){
  }
  function showExternal(ride:CloudRide,point:{latitude:number;longitude:number},adjacent:boolean){
   if(adjacent)setCompactRide(ride.id);
-  void openRideMaps(point,adjacent).then(ok=>{
+  void openRideMaps(point,adjacent,sharing.capability===true).then(ok=>{
    if(!ok)setNotice(t('تعذّر فتح خرائط Google.','Could not open Google Maps.'));
   });
  }

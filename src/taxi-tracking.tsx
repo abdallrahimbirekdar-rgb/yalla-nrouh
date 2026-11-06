@@ -72,23 +72,25 @@ export function PassengerTaxiMap({rideId,pickup}:{rideId:string;pickup:Coordinat
  useEffect(()=>{
   if(!foreground||Platform.OS!=='web')return;
   const client=authClient(),controller=new AbortController();
-  let subscribed=false,reading=false;
+  let subscribed=false,reading=false,revision=0;
   function receive(row:unknown){
    if(controller.signal.aborted||!row||typeof row!=='object')return;
    const {ride_id,latitude,longitude,measured_at}=row as Record<string,unknown>;
    const point={latitude,longitude};
    const time=typeof measured_at==='string'?Date.parse(measured_at):NaN;
    if(ride_id!==rideId||!isCoordinate(point)||!Number.isFinite(time))return;
+   revision++;
    setFix(previous=>previous&&previous.time>=time?previous:{point,time});
   }
   async function snapshot(){
    if(reading||!foregroundTab()||controller.signal.aborted)return;
-   reading=true;
+   reading=true;const before=revision;
    try{
     const {data,error}=await client.from('ride_taxi_positions').select('ride_id,latitude,longitude,measured_at')
      .eq('ride_id',rideId).abortSignal(controller.signal).maybeSingle();
-    if(!error&&data===null&&!controller.signal.aborted)setFix(null);
-    else receive(data);
+    if(!error&&before===revision&&!controller.signal.aborted){
+     if(data===null)setFix(null);else receive(data);
+    }
    }catch{
     // The live channel or the next fallback read will supply the latest fix.
    }finally{reading=false}

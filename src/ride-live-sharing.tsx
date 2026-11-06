@@ -86,8 +86,8 @@ export function useRideSharing(){
  return {capability,activeRide,busy,problem,toggle};
 }
 
-export async function openRideMaps(point:Coordinate,adjacent:boolean):Promise<boolean>{
- if((await nativeRequest('ride-maps',{...point,adjacent},1500)).ok)return true;
+export async function openRideMaps(point:Coordinate,adjacent:boolean,nativeAvailable:boolean):Promise<boolean>{
+ if(nativeAvailable)return (await nativeRequest('ride-maps',{...point,adjacent})).ok;
  try{await Linking.openURL(googleDirections(point,undefined,true));return true}catch{return false}
 }
 
@@ -133,15 +133,24 @@ export function pickupChange(row:Record<string,unknown>|null){
 
 export function CustomerTracking({rideId,pickup,foreground,compact,onBack}:{rideId:string;pickup:Coordinate;foreground:boolean;compact?:boolean;onBack?:()=>void}){
  const t=useText();
- const row=useRideRow('ride_passenger_positions',rideId,foreground);
+ const [pageVisible,setPageVisible]=useState(()=>typeof document!=='undefined'&&document.visibilityState==='visible');
+ useEffect(()=>{
+  if(!compact||typeof document==='undefined')return;
+  const visibility=()=>setPageVisible(document.visibilityState==='visible');
+  document.addEventListener('visibilitychange',visibility);
+  return()=>document.removeEventListener('visibilitychange',visibility);
+ },[compact]);
+ // Older Android versions can pause the unfocused app while it is still visible in split screen.
+ const visible=compact?pageVisible:foreground;
+ const row=useRideRow('ride_passenger_positions',rideId,visible);
  const [now,setNow]=useState(Date.now);
  const [away,setAway]=useState(false);
  useEffect(()=>{
-  if(!foreground)return;
+  if(!visible)return;
   setNow(Date.now());
   const timer=setInterval(()=>setNow(Date.now()),1000);
   return()=>clearInterval(timer);
- },[foreground]);
+ },[visible]);
  const point={latitude:row?.latitude,longitude:row?.longitude};
  const measured=typeof row?.measured_at==='string'?Date.parse(row.measured_at):NaN;
  const age=Math.max(0,Math.floor((now-measured)/1000));
