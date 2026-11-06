@@ -5,6 +5,8 @@ export type WebMessage=
  |{type:'bootstrap';id:string;version:string|null}
  |{type:'location';id:string;askPermission:boolean;track:boolean}
  |{type:'location-cancel';id:string}
+  |{type:'driver-location-start';id:string;askPermission:boolean}
+  |{type:'driver-location-stop';id:string}
  |{type:'location-settings';id:string}
  |{type:'alerts-enable';id:string}
  |{type:'notify';id:string;title:string;body:string}
@@ -32,6 +34,8 @@ export function readWebMessage(raw:string):WebMessage|null{
     &&(v.track===undefined||typeof v.track==='boolean'))
    return {type:'location',id:v.id,askPermission:v.askPermission,track:v.track===true};
   if(v.type==='location-cancel'&&idOK(v.id))return {type:'location-cancel',id:v.id};
+   if(v.type==='driver-location-start'&&idOK(v.id)&&typeof v.askPermission==='boolean')return {type:'driver-location-start',id:v.id,askPermission:v.askPermission};
+   if(v.type==='driver-location-stop'&&idOK(v.id))return {type:'driver-location-stop',id:v.id};
   if(v.type==='location-settings'&&idOK(v.id))return {type:'location-settings',id:v.id};
   if(v.type==='alerts-enable'&&idOK(v.id))return {type:'alerts-enable',id:v.id};
   if(v.type==='notify'&&idOK(v.id)&&typeof v.title==='string'&&v.title.length<=200&&typeof v.body==='string'&&v.body.length<=1000)
@@ -50,7 +54,7 @@ export function eventScript(name:string,detail:unknown):string{
  return 'window.dispatchEvent(new CustomEvent('+js(name)+',{detail:'+js(detail)+'}));true;';
 }
 export function bootstrapScript(id:string,granted:boolean):string{
- return 'window.__YALLA_NATIVE_LOCATION_GRANTED__='+js(granted)+';'
+ return 'window.__YALLA_DRIVER_LOCATION_STREAM__=true;window.__YALLA_NATIVE_LOCATION_GRANTED__='+js(granted)+';'
   +eventScript('yalla:native-bootstrap',{id,savedState:null,locationGranted:granted})
   +eventScript('yalla:native-location-permission',{granted});
 }
