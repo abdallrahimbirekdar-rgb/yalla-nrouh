@@ -214,9 +214,22 @@ export default function Rides(){
   finally{clearTimeout(timer);setProposing(false)}
  }
  function showExternal(ride:CloudRide,point:{latitude:number;longitude:number},adjacent:boolean){
-  if(adjacent)setCompactRide(ride.id);
+  setCompactRide(adjacent?ride.id:null);
   void openRideMaps(point,adjacent,sharing.capability===true).then(ok=>{
-   if(!ok)setNotice(t('تعذّر فتح خرائط Google.','Could not open Google Maps.'));
+   if(!ok&&alive.current&&identity.current===userId)setNotice(adjacent
+    ?t('تعذّر فتح خرائط Google.','Could not open Google Maps.')
+    :t('بدأت الرحلة. لفتح الاتجاهات اضغط «ملاحة خارجية بملء الشاشة».','The ride has started. Tap Full-screen external navigation to open directions.'));
+  });
+ }
+
+ function startDriverRide(ride:CloudRide){
+  void run(async token=>{
+   const result=await cloudAdvanceRide(token,ride.id,'riding');
+   if(result!=='riding')throw Error(result);
+   // Dispatch navigation as soon as the ride transition is confirmed, even if the list refresh is slow.
+   if(alive.current&&identity.current===userId&&mode.current){
+    showExternal(ride,{latitude:ride.destination_lat,longitude:ride.destination_lng},false);
+   }
   });
  }
 
@@ -292,7 +305,7 @@ export default function Rides(){
   const tracking=pickingUp||ride.status==='arrived'&&!ride.pickup_confirmed_at;
   const atPickup=ride.status==='arrived';
   const action=atPickup
-   ? <Button prominent title={ride.pickup_confirmed_at?t('بدء الرحلة','Start ride'):t('بانتظار تأكيد الزبون','Waiting for passenger')} disabled={busy||!ride.pickup_confirmed_at} onPress={()=>void run(async token=>{const result=await cloudAdvanceRide(token,ride.id,'riding');if(result!=='riding')throw Error(result)})}/>
+   ? <Button prominent title={ride.pickup_confirmed_at?t('بدء الرحلة وفتح الملاحة','Start ride and open navigation'):t('بانتظار تأكيد الزبون','Waiting for passenger')} disabled={busy||!ride.pickup_confirmed_at} onPress={()=>startDriverRide(ride)}/>
    : pickingUp
     ? <Button prominent icon="location-outline" title={t('وصلت إلى الزبون','I arrived at pickup')} disabled={busy} onPress={()=>void run(async token=>{if(await cloudAdvanceRide(token,ride.id,'arrived')!=='arrived')throw Error('not_allowed')})}/>
     : <Button prominent icon="checkmark-circle-outline" title={t('إنهاء الرحلة','Finish ride')} disabled={busy} onPress={()=>void run(async token=>{if(await cloudAdvanceRide(token,ride.id,'completed')!=='completed')throw Error('not_allowed')})}/>;
