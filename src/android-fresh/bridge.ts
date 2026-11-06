@@ -9,6 +9,7 @@ export type WebMessage=
   |{type:'driver-location-stop';id:string}
  |{type:'driver-speak';id:string;text:string;language:'ar'|'en'}
  |{type:'driver-speech-stop'}
+ |{type:'driver-voice-setup'}
  |{type:'location-settings';id:string}
  |{type:'alerts-enable';id:string}
  |{type:'notify';id:string;title:string;body:string}
@@ -41,6 +42,7 @@ export function readWebMessage(raw:string):WebMessage|null{
   if(v.type==='driver-speak'&&idOK(v.id)&&typeof v.text==='string'&&v.text.trim()&&v.text.length<=240&&(v.language==='ar'||v.language==='en'))
    return {type:'driver-speak',id:v.id,text:v.text,language:v.language};
   if(v.type==='driver-speech-stop')return {type:'driver-speech-stop'};
+  if(v.type==='driver-voice-setup')return {type:'driver-voice-setup'};
   if(v.type==='location-settings'&&idOK(v.id))return {type:'location-settings',id:v.id};
   if(v.type==='alerts-enable'&&idOK(v.id))return {type:'alerts-enable',id:v.id};
   if(v.type==='notify'&&idOK(v.id)&&typeof v.title==='string'&&v.title.length<=200&&typeof v.body==='string'&&v.body.length<=1000)
@@ -58,8 +60,8 @@ const js=(value:unknown)=>JSON.stringify(value).replace(/</g,'\\u003c');
 export function eventScript(name:string,detail:unknown):string{
  return 'window.dispatchEvent(new CustomEvent('+js(name)+',{detail:'+js(detail)+'}));true;';
 }
-export function bootstrapScript(id:string,granted:boolean,driverSpeech=false):string{
- return 'window.__YALLA_DRIVER_LOCATION_STREAM__=true;window.__YALLA_DRIVER_SPEECH__='+js(driverSpeech)+';window.__YALLA_NATIVE_LOCATION_GRANTED__='+js(granted)+';'
+export function bootstrapScript(id:string,granted:boolean,driverSpeech=false,driverVoiceSetup=false):string{
+ return 'window.__YALLA_DRIVER_LOCATION_STREAM__=true;window.__YALLA_DRIVER_SPEECH__='+js(driverSpeech)+';window.__YALLA_DRIVER_VOICE_SETUP__='+js(driverVoiceSetup)+';window.__YALLA_NATIVE_LOCATION_GRANTED__='+js(granted)+';'
   +eventScript('yalla:native-bootstrap',{id,savedState:null,locationGranted:granted})
   +eventScript('yalla:native-location-permission',{granted});
 }

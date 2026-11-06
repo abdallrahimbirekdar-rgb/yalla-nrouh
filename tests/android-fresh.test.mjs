@@ -19,12 +19,14 @@ test('trusted website only; no JavaScript URL injection',()=>{
  assert.equal(readWebMessage('{"type":"driver-speak","id":"turn-1","text":"turn","language":"de"}'),null);
  assert.equal(readWebMessage(JSON.stringify({type:'driver-speak',id:'turn-1',text:'a'.repeat(241),language:'en'})),null);
  assert.deepEqual(readWebMessage('{"type":"driver-speech-stop"}'),{type:'driver-speech-stop'});
+ assert.deepEqual(readWebMessage('{"type":"driver-voice-setup"}'),{type:'driver-voice-setup'});
 });
 test('native bootstrap and position events serialize as data',()=>{
  const result=positionScript({id:'x',point:{latitude:50,longitude:7}});
  assert.match(result,/yalla:native-position/);
  assert.match(bootstrapScript('x',true),/YALLA_NATIVE_LOCATION_GRANTED__/);
  assert.match(bootstrapScript('x',true),/YALLA_DRIVER_LOCATION_STREAM__/);
+ assert.match(bootstrapScript('x',true,true,true),/YALLA_DRIVER_VOICE_SETUP__=true/);
  assert.match(autoFixScript({latitude:51.5,longitude:7.2},Date.now()),/YALLA_NATIVE_AUTOFIX__/);
  assert.doesNotMatch(positionScript({id:'x',point:null,error:'timeout'}),/eval\s*\(/);
 });

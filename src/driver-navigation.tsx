@@ -197,12 +197,17 @@ export default function DriverNavigation({to,title,targetLabel,action,initialPla
  const arrived=!gpsLost&&!!position&&distanceMeters(position,to)<=35;
  const stale=lastFixAt!==null&&Date.now()-lastFixAt>=15000;
  const speech=useDriverSpeech(activePlan,progress,enabled&&!stale&&!gpsLost&&!offRoute&&!arrived,state.language);
- const voiceButton=<Button secondary icon={speech.enabled?'volume-high-outline':'volume-mute-outline'}
-  title={speech.enabled?t('كتم صوت الاتجاهات','Mute directions'):t('تشغيل صوت الاتجاهات','Turn on voice directions')}
+ const voiceButton=<Button secondary disabled={speech.testing} icon={speech.enabled?'volume-high-outline':'volume-mute-outline'}
+  title={speech.testing?t('جارٍ اختبار الصوت…','Testing voice…'):speech.enabled?t('كتم صوت الاتجاهات','Mute directions'):t('تشغيل صوت الاتجاهات','Turn on voice directions')}
   onPress={()=>void speech.toggle()}/>;
- const voiceNotice=speech.problem&&<Label muted>{speech.available
-  ?t('الصوت غير متاح لهذه اللغة. ثبّت صوت النطق العربي أو الإنجليزي من إعدادات الهاتف ثم أعد المحاولة.','No voice is available for this language. Install the matching voice in your phone settings and try again.')
-  :t('الصوت يحتاج متصفحًا يدعم النطق أو نسخة أندرويد 1.0.6 فأحدث.','Voice needs a browser that supports speech or Android app 1.0.6 or later.')}</Label>;
+ const voiceNotice=speech.problem&&<View accessibilityRole="alert" style={{gap:6}}>
+  <Label muted>{speech.problem==='unsupported'
+   ?t('التوجيه الصوتي يحتاج نسخة أندرويد حديثة أو متصفحًا يدعم النطق.','Voice directions require a recent Android app or a browser that supports speech.')
+   :speech.problem==='voice-unavailable'
+    ?t('صوت لغة التطبيق غير متاح. ثبّت صوت النطق من إعدادات الهاتف ثم جرّب مجددًا.','The app language has no available voice. Install one in phone settings and try again.')
+    :t('تعذّر بدء تشغيل الصوت. جرّب مجددًا أو راجع إعدادات تحويل النص إلى كلام.','Voice could not start. Try again or check text-to-speech settings.')}</Label>
+  {speech.openVoiceSetup&&speech.problem!=='unsupported'&&<Button secondary title={t('إعدادات صوت النطق','Set up speech voice')} onPress={speech.openVoiceSetup}/>}
+ </View>;
  const livePosition=enabled&&lastFixAt!==null&&!stale;
  const gpsMessage=error==='permission'?t('اسمح بالموقع أثناء استخدام التطبيق.','Allow location while using the app.'):error==='services'?t('فعّل خدمة الموقع في الهاتف.','Turn on phone location.'):error==='accuracy'||error==='timeout'||error==='position'?t('لم يصل تحديث جديد للموقع. يمكنك فتح خرائط Google أو تحديث الموقع من هنا.','No new location update arrived. You can open Google Maps or retry here.'):'';
  const routeMessage=pilotActive&&routeError!=='navigation'&&routeError?t('تعذّر حساب طريق Valhalla التجريبي. يمكنك الرجوع إلى الملاحة الحالية أو فتح خرائط Google.','The Valhalla pilot route could not load. Switch back or open Google Maps.'):routeError==='no_route'?t('لم تعثر Google على طريق قيادة إلى الوجهة.','Google found no driving route.'):routeError==='busy'?t('خدمة الطرق مشغولة. سنعيد المحاولة.','The route service is busy. We will retry.'):routeError==='login_required'||routeError==='unauthorized'?t('تعذر التحقق من حساب السائق لحساب الطريق.','Could not verify the driver account for routing.'):routeError==='navigation'?t('تعذر فتح خرائط Google.','Could not open Google Maps.'):routeError?t('تعذر تحميل مسار القيادة من Google.','Could not load the driving route from Google.'):'';

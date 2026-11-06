@@ -69,9 +69,11 @@ class ForegroundLocation {
 type Run={controller:AbortController;id:string};
 type DriverStream={id:string;active:boolean;subscription:Location.LocationSubscription|null};
 const screenModule=requireOptionalNativeModule<{setScreenAwake:(active:boolean)=>Promise<void>;
- speakDirection:(text:string,language:'ar'|'en')=>Promise<boolean>;
+ speakDirection:(text:string,language:'ar'|'en')=>Promise<'started'|'voice-unavailable'|'playback'>;
+ openVoiceSetup:()=>Promise<boolean>;
  stopDirection:()=>Promise<void>}>('YallaDriverNavigation');
 const nativeDriverSpeech=typeof screenModule?.speakDirection==='function';
+const nativeVoiceSetup=typeof screenModule?.openVoiceSetup==='function';
 const stopDriverSpeech=()=>{if(nativeDriverSpeech)void screenModule?.stopDirection().catch(()=>{});};
 const btn={paddingVertical:13,paddingHorizontal:18,backgroundColor:'#d67749',borderRadius:12} as const;
 const websiteVersion=(v:unknown):string|null=>typeof v==='string'&&/^[a-f0-9]{40}$/i.test(v)?v:null;
@@ -242,9 +244,9 @@ export default function FreshAndroid(){
   }else if(message.type==='bootstrap'){
    websiteRevision.current=websiteVersion(message.version);
    void engine.permission(false).then(permission=>{
-    inject(bootstrapScript(message.id,permission.granted,nativeDriverSpeech));
+    inject(bootstrapScript(message.id,permission.granted,nativeDriverSpeech,nativeVoiceSetup));
     void syncPermission('ready');
-   }).catch(()=>inject(bootstrapScript(message.id,false,nativeDriverSpeech)));
+   }).catch(()=>inject(bootstrapScript(message.id,false,nativeDriverSpeech,nativeVoiceSetup)));
   }else if(message.type==='location'){
    locationRequestedByPage.current=true;
    void locate(message);
@@ -256,9 +258,12 @@ export default function FreshAndroid(){
    runs.current.get(message.id)?.controller.abort();
   }else if(message.type==='driver-speak'){
    const operation=nativeDriverSpeech&&AppState.currentState!=='background'
-    ?screenModule!.speakDirection(message.text,message.language):Promise.resolve(false);
-   void operation.then(ok=>inject(eventScript('yalla:native-result',{id:message.id,ok})))
-    .catch(()=>inject(eventScript('yalla:native-result',{id:message.id,ok:false})));
+    ?screenModule!.speakDirection(message.text,message.language):Promise.resolve('playback');
+   void operation.then(result=>inject(eventScript('yalla:native-result',{id:message.id,ok:result==='started',reason:result})))
+    .catch(()=>inject(eventScript('yalla:native-result',{id:message.id,ok:false,reason:'playback'})));
+  }else if(message.type==='driver-voice-setup'&&nativeVoiceSetup){
+   const showVoiceHelp=()=>setNotice(text('افتح إعدادات الهاتف وابحث عن تحويل النص إلى كلام.','Open phone settings and search for text-to-speech.'));
+   void screenModule!.openVoiceSetup().then(opened=>{if(!opened)showVoiceHelp()}).catch(showVoiceHelp);
   }else if(message.type==='driver-speech-stop'){
    stopDriverSpeech();
   }else if(message.type==='location-settings'){
@@ -275,7 +280,7 @@ export default function FreshAndroid(){
   else if(message.type==='back-default'){
    if(canGoBack.current)web.current?.goBack();else BackHandler.exitApp();
   }
- },[engine,inject,locate,refresh,syncPermission,startDriverStream,stopDriverStream]);
+ },[engine,inject,locate,refresh,syncPermission,startDriverStream,stopDriverStream,text]);
  const openExternal=(url:string)=>{
   if(externalTarget(url))void Linking.openURL(url).catch(()=>setNotice(text('تعذر فتح الرابط.','Could not open the link.')));
  };
