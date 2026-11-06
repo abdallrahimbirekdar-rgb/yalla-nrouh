@@ -62,16 +62,22 @@ class DriverNavigationModule : Module() {
 
     AsyncFunction("rideSharingStatus") { RideSharingService.currentRide }.runOnQueue(Queues.MAIN)
 
-    AsyncFunction("openRideMaps") { latitude: Double, longitude: Double, adjacent: Boolean ->
+    AsyncFunction("openRideMaps") { latitude: Double, longitude: Double, adjacent: Boolean, provider: String ->
       val activity = appContext.currentActivity ?: return@AsyncFunction false
       if (latitude !in -90.0..90.0 || longitude !in -180.0..180.0) return@AsyncFunction false
       val point = "$latitude,$longitude"
-      val intent = Intent(Intent.ACTION_VIEW, Uri.parse("google.navigation:q=$point&mode=d")).setPackage("com.google.android.apps.maps")
+      val intent = when (provider) {
+        "google" -> Intent(Intent.ACTION_VIEW, Uri.parse("google.navigation:q=$point&mode=d")).setPackage("com.google.android.apps.maps")
+        "yandex" -> Intent(Intent.ACTION_VIEW,
+          Uri.parse("yandexnavi://build_route_on_map?lat_to=$latitude&lon_to=$longitude")).setPackage("ru.yandex.yandexnavi")
+        else -> return@AsyncFunction false
+      }
       if (adjacent) intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_LAUNCH_ADJACENT)
       try {
         activity.startActivity(intent)
         true
       } catch (_: Exception) {
+        if (provider == "yandex") return@AsyncFunction false
         try {
           activity.startActivity(Intent(Intent.ACTION_VIEW,
             Uri.parse("https://www.google.com/maps/dir/?api=1&destination=$point&travelmode=driving&dir_action=navigate")))

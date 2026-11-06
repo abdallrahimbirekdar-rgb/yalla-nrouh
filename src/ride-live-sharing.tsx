@@ -1,11 +1,11 @@
-import {useEffect,useRef,useState} from 'react';
+import {useEffect,useMemo,useRef,useState} from 'react';
 import {Linking,View} from 'react-native';
 import {authClient} from './auth-client';
 import {isCoordinate,type Coordinate} from './geo';
 import {distanceMeters} from './navigation-progress';
 import {googleDirections} from './google-links';
 import MapCanvas from './map/MapCanvas';
-import {Button,Label,Panel,useText} from './ui';
+import {Label,Panel,useText} from './ui';
 
 type Reply={ok:boolean;rideId?:string|null};
 type SharingRole='driver'|'passenger';
@@ -86,8 +86,10 @@ export function useRideSharing(){
  return {capability,activeRide,busy,problem,toggle};
 }
 
-export async function openRideMaps(point:Coordinate,adjacent:boolean,nativeAvailable:boolean):Promise<boolean>{
- if(nativeAvailable)return (await nativeRequest('ride-maps',{...point,adjacent})).ok;
+export type NavigationProvider='google'|'yandex';
+export async function openRideMaps(point:Coordinate,adjacent:boolean,nativeAvailable:boolean,provider:NavigationProvider):Promise<boolean>{
+ if(nativeAvailable)return (await nativeRequest(provider==='yandex'?'ride-yandex':'ride-maps',{...point,adjacent})).ok;
+ if(provider==='yandex')return false;
  try{await Linking.openURL(googleDirections(point,undefined,true));return true}catch{return false}
 }
 
@@ -131,7 +133,7 @@ export function pickupChange(row:Record<string,unknown>|null){
  return isCoordinate(point)?{point,id:row.proposal_id,approved:row.approved===true}:null;
 }
 
-export function CustomerTracking({rideId,pickup,foreground,compact,onBack}:{rideId:string;pickup:Coordinate;foreground:boolean;compact?:boolean;onBack?:()=>void}){
+export function CustomerTracking({rideId,pickup,foreground,compact}:{rideId:string;pickup:Coordinate;foreground:boolean;compact?:boolean}){
  const t=useText();
  const [pageVisible,setPageVisible]=useState(()=>typeof document!=='undefined'&&document.visibilityState==='visible');
  useEffect(()=>{
@@ -151,7 +153,8 @@ export function CustomerTracking({rideId,pickup,foreground,compact,onBack}:{ride
   const timer=setInterval(()=>setNow(Date.now()),1000);
   return()=>clearInterval(timer);
  },[visible]);
- const point={latitude:row?.latitude,longitude:row?.longitude};
+ const latitude=row?.latitude,longitude=row?.longitude;
+ const point=useMemo(()=>({latitude,longitude}),[latitude,longitude]);
  const measured=typeof row?.measured_at==='string'?Date.parse(row.measured_at):NaN;
  const age=Math.max(0,Math.floor((now-measured)/1000));
  const shown=isCoordinate(point)&&age<180;
@@ -171,7 +174,6 @@ export function CustomerTracking({rideId,pickup,foreground,compact,onBack}:{ride
   {distance!==null&&<Label muted>{t('المسافة التقريبية عن نقطة الالتقاء الأصلية: '+distance+' متر','Approximate distance from original meeting point: '+distance+' m')}</Label>}
   {shown&&age>=30&&<Label muted>{t('موقع قديم · نعرض آخر موقع معروف','Location is stale · showing last known location')}</Label>}
   {shown&&age<30&&away&&<View accessibilityRole="alert"><Label>{t('الزبون بعيد عن نقطة الالتقاء الأصلية.','The customer is away from the original meeting point.')}</Label></View>}
-  {compact&&<Label muted>{t('إذا فتحت الخرائط بملء الشاشة، افتح التطبيقات الأخيرة، واضغط أيقونة «يلّا نروح»، واختر «فتح في عرض تقسيم الشاشة»، ثم اختر الخرائط إذا ظهر الخيار.','If Maps opens full screen, open Recents, tap the Yalla Nrouh app icon, choose split screen if available, then select Maps.')}</Label>}
-  {onBack&&<Button title={t('العودة إلى الرحلة','Back to the ride')} onPress={onBack}/>}
+  {compact&&<Label muted>{t('إذا فُتحت الملاحة بملء الشاشة، افتح التطبيقات الأخيرة واختر تقسيم الشاشة من أيقونة «يلّا نروح»، ثم اختر تطبيق الملاحة.','If Maps opens full screen, open Recents, tap the Yalla Nrouh app icon, choose split screen if available, then select the navigation app.')}</Label>}
  </Panel>;
 }

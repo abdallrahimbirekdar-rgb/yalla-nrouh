@@ -105,6 +105,9 @@ test('ride sharing and external maps are narrow native operations',()=>{
  assert.equal(readWebMessage(JSON.stringify({...start,secret:'account-token'})),null);
  const maps={type:'ride-maps',id:'test-2',latitude:51.481,longitude:7.219,adjacent:true};
  assert.deepEqual(readWebMessage(JSON.stringify(maps)),maps);
+ const yandex={...maps,type:'ride-yandex'};
+ assert.deepEqual(readWebMessage(JSON.stringify(yandex)),yandex);
+ assert.equal(readWebMessage(JSON.stringify({...yandex,longitude:181})),null);
  assert.equal(readWebMessage(JSON.stringify({...maps,latitude:91})),null);
  assert.equal(readWebMessage(JSON.stringify({...maps,adjacent:'true'})),null);
 });

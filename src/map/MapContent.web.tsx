@@ -40,8 +40,8 @@ export default function MapContent({point,taxiPoint,passengerPoint,onChange,comp
  useEffect(()=>{
   const instance=map.current,pin=marker.current;if(!ready||!instance||!pin)return;
   pin.position=point?position(point):undefined;
-  if(point&&instance.getBounds()&&!instance.getBounds()?.contains(position(point)))instance.setCenter(position(point));
- },[point,ready]);
+  if(point&&!passengerPoint&&instance.getBounds()&&!instance.getBounds()?.contains(position(point)))instance.setCenter(position(point));
+ },[point,passengerPoint,ready]);
  useEffect(()=>{
   if(!ready||!map.current||!api.current||!line.current)return;
   const path=route?.map(position)??[];line.current.setPath(path);
@@ -69,6 +69,11 @@ export default function MapContent({point,taxiPoint,passengerPoint,onChange,comp
    Object.assign(icon.style,{display:'grid',placeItems:'center',width:'34px',height:'34px',background:passengerPoint?'#15803d':'#102a43',color:'white',border:'2px solid white',borderRadius:'50%',fontSize:'21px'});
    taxiMarker.current=new maps.marker.AdvancedMarkerElement({map:instance,position:taxi,content:icon,title:passengerPoint?(state.language==='ar'?'موقع الزبون':'Customer location'):(state.language==='ar'?'موقع التاكسي':'Taxi location')});
   }else taxiMarker.current.position=taxi;
+  if(passengerPoint){
+   instance.setCenter(taxi);
+   if(first)instance.setZoom(18);
+   return;
+  }
   const bounds=instance.getBounds();
   if(point&&(first||bounds&&!bounds.contains(taxi))){
    if(Math.abs(point.latitude-tracked.latitude)<0.0003&&Math.abs(point.longitude-tracked.longitude)<0.0003){

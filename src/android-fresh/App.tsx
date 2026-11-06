@@ -5,7 +5,9 @@ import {WebView,type WebViewMessageEvent} from 'react-native-webview';
 import * as Location from 'expo-location';
 import Constants from 'expo-constants';
 import {requireOptionalNativeModule} from 'expo-modules-core';
-import {enableLocalAlerts,notifyLocal} from '../alerts';
+import {localAlertsGranted,readLocalAlerts,requestLocalAlerts,notifyLocal} from '../alerts';
+import Storage from 'expo-sqlite/kv-store';
+import {setupPermission} from './permission-setup';
 import {acceptableFix,awaitFreshFix,deadlineOr,GpsTaskPool} from './gps';
 import {SITE,bootstrapScript,diagnosticScript,eventScript,autoFixScript,externalTarget,positionScript,readWebMessage,trustedSite,trustedWebMessage,
  type WebMessage,type PositionResponse} from './bridge';
@@ -15,15 +17,11 @@ import {SITE,bootstrapScript,diagnosticScript,eventScript,autoFixScript,external
 // second WebView geolocation permission. The website owns accounts, fares and trips.
 class ForegroundLocation {
  private permissionTask:Promise<Location.LocationPermissionResponse>|null=null;
- private askedThisLaunch=false;
+
  async permission(request:boolean):Promise<Location.LocationPermissionResponse>{
   if(this.permissionTask)return this.permissionTask;
-  const task=(async()=>{
-   const existing=await Location.getForegroundPermissionsAsync();
-   if(existing.granted||!request||!existing.canAskAgain||this.askedThisLaunch)return existing;
-   this.askedThisLaunch=true;
-   return Location.requestForegroundPermissionsAsync();
-  })();
+  if(!request)return Location.getForegroundPermissionsAsync();
+  const task=setupPermission(Storage,'android-permission-location-v1',Location.getForegroundPermissionsAsync,Location.requestForegroundPermissionsAsync);
   this.permissionTask=task;
   void task.finally(()=>{if(this.permissionTask===task)this.permissionTask=null}).catch(()=>{});
   return task;
@@ -43,7 +41,6 @@ class ForegroundLocation {
   if(!permission.granted)throw new Error('permission');
   if(permission.android?.accuracy==='coarse')throw new Error('accuracy');
   if(!await Location.hasServicesEnabledAsync())throw new Error('services');
-  if(ask){const providers=await Location.getProviderStatusAsync();if(!providers.networkAvailable)await Location.enableNetworkProviderAsync().catch(()=>{})}
   if(signal.aborted)throw new Error('GPS_CANCELLED');
   const accuracy=track?50:250;
   if(!track){
@@ -58,7 +55,7 @@ class ForegroundLocation {
    awaitFreshFix<Location.LocationObject>(
     (next,error)=>Location.watchPositionAsync({
       accuracy:mode,timeInterval:1000,distanceInterval:0,
-      mayShowUserSettingsDialog:ask,
+      mayShowUserSettingsDialog:false,
     },next,error),
     fix=>acceptableFix(fix,accuracy,30000),
     20000,signal,
@@ -75,7 +72,7 @@ const screenModule=requireOptionalNativeModule<{setScreenAwake:(active:boolean)=
  startRideSharing:(ride:string,secret:string,arabic:boolean)=>Promise<boolean>;
  stopRideSharing:(ride:string)=>Promise<void>;
  rideSharingStatus:()=>Promise<string|null>;
- openRideMaps:(latitude:number,longitude:number,adjacent:boolean)=>Promise<boolean>;
+ openRideMaps:(latitude:number,longitude:number,adjacent:boolean,provider:'google'|'yandex')=>Promise<boolean>;
  addListener:(event:'rideSharing',callback:(event:ShareEvent)=>void)=>{remove:()=>void};
  stopDirection:()=>Promise<void>}>('YallaDriverNavigation');
 const supportsSharing=typeof screenModule?.startRideSharing==='function';
@@ -117,6 +114,9 @@ export default function FreshAndroid(){
   try{const permission=await engine.permission(true);
    inject(eventScript('yalla:native-location-permission',{granted:permission.granted}));
   }catch{/* The website still offers manual pickup. */}
+  if(active.current&&AppState.currentState!=='background'){
+   await setupPermission(Storage,'android-permission-notifications-v1',readLocalAlerts,requestLocalAlerts).catch(()=>{});
+  }
  },[engine,inject]);
  const setScreenAwake=useCallback((awake:boolean)=>{
    if(screenAwake.current===awake)return;
@@ -303,7 +303,7 @@ export default function FreshAndroid(){
    const start=async()=>{
     if(!supportsSharing||sharing.current||AppState.currentState==='background')return false;
     const permission=await engine.permission(true);
-    if(!permission.granted||permission.android?.accuracy==='coarse'||!await Location.hasServicesEnabledAsync()||!await enableLocalAlerts())return false;
+    if(!permission.granted||permission.android?.accuracy==='coarse'||!await Location.hasServicesEnabledAsync()||!await localAlertsGranted())return false;
     if(sharing.current||String(AppState.currentState)==='background')return false;
     sharing.current=message.rideId;
     for(const task of runs.current.values())task.controller.abort();
@@ -324,8 +324,8 @@ export default function FreshAndroid(){
    const stop=supportsSharing?screenModule!.stopRideSharing(message.rideId):Promise.resolve();
    void stop.then(()=>inject(eventScript('yalla:native-result',{id:message.id,ok:supportsSharing})))
     .catch(()=>inject(eventScript('yalla:native-result',{id:message.id,ok:false})));
-  }else if(message.type==='ride-maps'){
-   const open=supportsSharing?screenModule!.openRideMaps(message.latitude,message.longitude,message.adjacent):Promise.resolve(false);
+  }else if(message.type==='ride-maps'||message.type==='ride-yandex'){
+   const open=supportsSharing?screenModule!.openRideMaps(message.latitude,message.longitude,message.adjacent,message.type==='ride-yandex'?'yandex':'google'):Promise.resolve(false);
    void open.then(ok=>inject(eventScript('yalla:native-result',{id:message.id,ok})))
     .catch(()=>inject(eventScript('yalla:native-result',{id:message.id,ok:false})));
   }else if(message.type==='driver-speak'){
@@ -345,7 +345,7 @@ export default function FreshAndroid(){
     ()=>inject(eventScript('yalla:native-result',{id:message.id,ok:false})),
    );
   }else if(message.type==='alerts-enable'||message.type==='notify'){
-   const operation=message.type==='alerts-enable'?enableLocalAlerts():notifyLocal(message.title,message.body).then(()=>true);
+   const operation=message.type==='alerts-enable'?localAlertsGranted():notifyLocal(message.title,message.body).then(()=>true);
    void operation.then(ok=>inject(eventScript('yalla:native-result',{id:message.id,ok})))
     .catch(()=>inject(eventScript('yalla:native-result',{id:message.id,ok:false})));
   }else if(message.type==='refresh')refresh();
@@ -365,7 +365,7 @@ export default function FreshAndroid(){
   </View>}
   <WebView ref={web} source={{uri}} style={{flex:1,backgroundColor:background}}
    originWhitelist={['https://abdallrahimbirekdar-rgb.github.io']}
-   javaScriptEnabled domStorageEnabled geolocationEnabled={true}
+   javaScriptEnabled domStorageEnabled geolocationEnabled={false}
    cacheEnabled cacheMode="LOAD_DEFAULT" mixedContentMode="never"
    allowFileAccess={false} allowFileAccessFromFileURLs={false} allowUniversalAccessFromFileURLs={false}
    javaScriptCanOpenWindowsAutomatically={false} setSupportMultipleWindows={false}
