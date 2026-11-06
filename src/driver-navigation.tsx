@@ -46,7 +46,7 @@ export default function DriverNavigation({to,title,targetLabel,action,initialPla
    hasPosition=true;lastPosition=fix;setPosition(fix);setLastFixAt(fix.time);setAccuracy(fix.accuracy);setGpsLost(!accurate);setRevision(value=>value+1);
   }
   async function updateRoute(point:Coordinate,accurate=false){
-   if(!alive||!visible||routeRequest||(Platform.OS==='web'&&navigator.onLine===false))return;
+   if(!alive||!visible||routeRequest||pilotActive&&!accurate||(Platform.OS==='web'&&navigator.onLine===false))return;
    const existing=latest.current;
    if(!pilotActive&&!existing&&initialPlan&&distanceMeters(destination,initialPlan.to)<=10&&distanceMeters(point,initialPlan.from)<=150){
     latest.current=initialPlan;setPlan(initialPlan);
@@ -181,13 +181,14 @@ export default function DriverNavigation({to,title,targetLabel,action,initialPla
  const pilotToggle=pilotAvailable&&onPilotToggle&&Platform.OS==='web'&&<Button secondary icon="map-outline"
   title={pilotActive?t('العودة إلى الملاحة الحالية','Return to current navigation'):t('تجربة MapLibre وValhalla','Try MapLibre and Valhalla')}
   onPress={onPilotToggle}/>;
+ const pilotDisclosure=pilotAvailable&&!pilotActive&&<Label muted>{t('اختبار خاص. عند تشغيله تُرسل إحداثيات المسار إلى خادم Valhalla التجريبي.','Private pilot. Enabling it sends route coordinates to the Valhalla demo server.')}</Label>;
  const mapContent=(height:number)=>pilotActive
   ?<DriverPilotMap point={pilotPosition} destination={to} route={activePlan?.points} follow={follow} fresh={!gpsLost}/>
   :<MapCanvas compact readOnly minMapHeight={height} point={activePlan?.from??routeOrigin??to} route={activePlan?.points} cameraTarget={position?{point:position,revision,isLocation:true,zoom:17,overview:!follow}:undefined} onChange={()=>{}}/>;
  const map=(height:number)=><View style={{height,borderRadius:16,overflow:'hidden'}}>{mapContent(height)}</View>;
  const instruction=<View style={{padding:14,borderRadius:14,backgroundColor:colors.selected,gap:6}}><Label display>{gpsLost?(!enabled?t('المتابعة متوقفة مؤقتًا','Navigation is paused'):stale?t('توقّف تحديث موقع السيارة','Car location has stopped updating'):position?t('بانتظار موقع أدق','Waiting for better GPS'):t('جارٍ قراءة موقع الهاتف','Reading phone location')):arrived?t('اقتربت من نقطة الوصول','You are near the destination'):routeError&&!activePlan?t('تعذر حساب الطريق','Could not find the route'):offRoute?t('أنت خارج المسار المعروض','You are off the shown route'):pilotActive&&progress?.nextInstruction?t('بعد ','In ')+formatDistance(progress.nextTurnMeters,ar)+' · '+progress.nextInstruction:progress?.instruction||t('نجهّز الطريق إلى وجهتك…','Finding the route to your destination…')}</Label>{!pilotActive&&progress?.nextInstruction&&!gpsLost&&!offRoute&&!arrived&&<Label>{t('بعد ','In ')}{formatDistance(progress.nextTurnMeters,ar)}: {progress.nextInstruction}</Label>}{progress&&!gpsLost&&!offRoute&&!arrived&&<Label large>{formatDistance(progress.remainingMeters,ar)} · {Math.max(1,Math.ceil(progress.remainingSeconds/60))} {t('دقيقة تقريبًا','min, estimated')}</Label>}</View>;
  return <Panel outlined><Label large>{title}</Label>{instruction}{action}{googleButton}{pilotToggle}
-  {pilotAvailable&&!pilotActive&&<Label muted>{t('اختبار خاص. عند تشغيله تُرسل إحداثيات المسار إلى خادم Valhalla التجريبي.','Private pilot. Enabling it sends route coordinates to the Valhalla demo server.')}</Label>}
+  {pilotDisclosure}
   {connection==='offline'&&<Label muted>{activePlan?t('الاتصال منقطع. نعرض آخر مسار متاح.','Offline. Showing the last available route.'):t('الاتصال منقطع. سيُستأنف حساب الطريق عند عودته.','Offline. Route lookup resumes when you reconnect.')}</Label>}
   {lastFixAt!==null&&<Label muted>{t('آخر تحديث للموقع: ','Location last updated: ')}{new Date(lastFixAt).toLocaleTimeString(ar?'ar':'en')}</Label>}
   <Label>{targetLabel}</Label>
@@ -203,6 +204,6 @@ export default function DriverNavigation({to,title,targetLabel,action,initialPla
   {offRoute&&<Label muted>{t('نعيد حساب الطريق عند توفر موقع دقيق. يمكنك طلب التحديث يدويًا.','The route updates with an accurate location. You can also update it now.')}</Label>}
   <View style={{gap:8}}><Button icon="expand-outline" title={t('تكبير الملاحة داخل التطبيق','Full-screen navigation')} onPress={()=>setExpanded(true)}/><Button secondary icon="locate" title={follow?t('عرض المسار كاملًا','Show the full route'):t('متابعة موقعي','Follow my location')} onPress={()=>setFollow(value=>!value)}/><Button secondary title={t('تحديث الموقع والطريق','Update location and route')} onPress={()=>{setEnabled(true);setAttempt(value=>value+1)}}/><Button secondary title={enabled?t('إيقاف المتابعة مؤقتًا','Pause navigation'):t('استئناف الملاحة','Resume navigation')} onPress={()=>setEnabled(value=>!value)}/></View>
   <Label muted>{pilotActive?'MapLibre · Valhalla · FOSSGIS':'Google Maps'} · {t('المتابعة أثناء فتح التطبيق','Navigation while the app is open')}</Label>
-  <Modal visible={expanded} animationType="none" onRequestClose={()=>setExpanded(false)}><View style={{flex:1,padding:16,paddingTop:32,backgroundColor:colors.background,gap:12}}>{instruction}{action}{googleButton}{pilotToggle}<View style={{flex:1,minHeight:200}}>{mapContent(200)}</View>{!!(routeMessage||gpsMessage)&&<Label muted>{routeMessage||gpsMessage}</Label>}<Button secondary title={follow?t('عرض المسار كاملًا','Show the full route'):t('متابعة موقعي','Follow my location')} onPress={()=>setFollow(value=>!value)}/><Button title={t('العودة إلى الطلب','Back to the ride')} onPress={()=>setExpanded(false)}/></View></Modal>
+  <Modal visible={expanded} animationType="none" onRequestClose={()=>setExpanded(false)}><View style={{flex:1,padding:16,paddingTop:32,backgroundColor:colors.background,gap:12}}>{instruction}{action}{googleButton}{pilotToggle}{pilotDisclosure}<View style={{flex:1,minHeight:200}}>{mapContent(200)}</View>{!!(routeMessage||gpsMessage)&&<Label muted>{routeMessage||gpsMessage}</Label>}<Button secondary title={follow?t('عرض المسار كاملًا','Show the full route'):t('متابعة موقعي','Follow my location')} onPress={()=>setFollow(value=>!value)}/><Button title={t('العودة إلى الطلب','Back to the ride')} onPress={()=>setExpanded(false)}/></View></Modal>
  </Panel>;
 }

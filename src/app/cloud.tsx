@@ -248,7 +248,7 @@ export default function Rides(){
        targetLabel={pickingUp?ride.pickup:ride.destination}
        action={action}
        pilotAvailable={pilotOwner===userId&&!!driver?.approved}
-       pilotActive={pilotOwner===userId&&pilotRide===ride.id}
+       pilotActive={pilotOwner===userId&&!!driver?.approved&&pilotRide===ride.id}
        onPilotToggle={()=>setPilotRide(pilotRide===ride.id?null:ride.id)}
        devicePosition={gps.camera?.point}
        routeOrigin={ride.status==='riding'?{latitude:ride.pickup_lat,longitude:ride.pickup_lng}:undefined}
