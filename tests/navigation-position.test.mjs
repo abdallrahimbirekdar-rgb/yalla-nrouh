@@ -33,3 +33,20 @@ test('the upper map position stays visible below even when its precision is unkn
  const {sharedNavigationDisplay}=await import('../src/navigation-position.ts');const display=sharedNavigationDisplay(point);
  assert.deepEqual(display.point,point);assert.equal(display.accuracy,null);assert.equal(display.guidanceReady,false);
 }));
+
+test('driver guidance requests precise Android GPS after a 100 m fix and ignores coarse updates',()=>host(async window=>{
+ const messages=[];
+ window.ReactNativeWebView={postMessage:raw=>messages.push(JSON.parse(raw))};
+ announceWebPosition(point,{accuracy:100,time:Date.now()});
+ const pending=navigationPosition(false,undefined,true);
+ const request=messages.find(message=>message.type==='location');
+ assert.equal(request.track,true);
+ let settled=false;void pending.then(()=>{settled=true});
+ announceWebPosition(point,{accuracy:95,time:Date.now()});
+ await Promise.resolve();
+ assert.equal(settled,false);
+ window.dispatchEvent(new CustomEvent('yalla:native-position',{detail:{id:request.id,point,fix:{accuracy:18,time:Date.now()}}}));
+ const fix=await pending;
+ assert.equal(fix.accuracy,18);
+ assert.equal(navigationGuidanceReady(fix),true);
+}));

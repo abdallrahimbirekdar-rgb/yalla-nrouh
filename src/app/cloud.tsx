@@ -235,7 +235,8 @@ export default function Rides(){
        title={pickingUp?t('إلى الزبون','To pickup'):t('إلى الوجهة','To destination')}
        targetLabel={pickingUp?ride.pickup:ride.destination}
        action={action}
-       devicePosition={gps.camera?.point} deviceRevision={gps.camera?.revision}
+       devicePosition={gps.camera?.point}
+       routeOrigin={ride.status==='riding'?{latitude:ride.pickup_lat,longitude:ride.pickup_lng}:undefined}
        initialPlan={acceptedPlans?.rideId===ride.id?(pickingUp?acceptedPlans.pickup:acceptedPlans.trip):null}
        to={pickingUp?{latitude:ride.pickup_lat,longitude:ride.pickup_lng}:{latitude:ride.destination_lat,longitude:ride.destination_lng}}/>}
    {ride.status!=='riding'&&<Button secondary title={t('إعادة الطلب للبحث عن سائق','Release request to other drivers')} disabled={busy} onPress={()=>void run(async token=>{if(!await cloudReleaseRide(token,ride.id))throw Error('not_allowed')})}/>}
