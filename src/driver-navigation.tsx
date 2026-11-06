@@ -10,6 +10,7 @@ import {createRoutingClient,type RoutePlan} from './routing';
 import {routeScheduler} from './route-scheduler';
 import {getValhallaRoute,type DriverRoutePlan} from './valhalla-route';
 import DriverPilotMap from './map/DriverPilotMap';
+import {useDriverSpeech} from './driver-speech';
 import {distanceMeters,navigationProgress} from './navigation-progress';
 import type {Coordinate} from './geo';
 import type {Fix} from './meter';
@@ -195,6 +196,13 @@ export default function DriverNavigation({to,title,targetLabel,action,initialPla
  const pilotPosition=progress&&!gpsLost&&progress.offRouteMeters<=18?progress.snapped:position;
  const arrived=!gpsLost&&!!position&&distanceMeters(position,to)<=35;
  const stale=lastFixAt!==null&&Date.now()-lastFixAt>=15000;
+ const speech=useDriverSpeech(activePlan,progress,enabled&&!stale&&!gpsLost&&!offRoute&&!arrived,state.language);
+ const voiceButton=<Button secondary icon={speech.enabled?'volume-high-outline':'volume-mute-outline'}
+  title={speech.enabled?t('كتم صوت الاتجاهات','Mute directions'):t('تشغيل صوت الاتجاهات','Turn on voice directions')}
+  onPress={()=>void speech.toggle()}/>;
+ const voiceNotice=speech.problem&&<Label muted>{speech.available
+  ?t('الصوت غير متاح لهذه اللغة. ثبّت صوت النطق العربي أو الإنجليزي من إعدادات الهاتف ثم أعد المحاولة.','No voice is available for this language. Install the matching voice in your phone settings and try again.')
+  :t('الصوت يحتاج متصفحًا يدعم النطق أو نسخة أندرويد 1.0.6 فأحدث.','Voice needs a browser that supports speech or Android app 1.0.6 or later.')}</Label>;
  const livePosition=enabled&&lastFixAt!==null&&!stale;
  const gpsMessage=error==='permission'?t('اسمح بالموقع أثناء استخدام التطبيق.','Allow location while using the app.'):error==='services'?t('فعّل خدمة الموقع في الهاتف.','Turn on phone location.'):error==='accuracy'||error==='timeout'||error==='position'?t('لم يصل تحديث جديد للموقع. يمكنك فتح خرائط Google أو تحديث الموقع من هنا.','No new location update arrived. You can open Google Maps or retry here.'):'';
  const routeMessage=pilotActive&&routeError!=='navigation'&&routeError?t('تعذّر حساب طريق Valhalla التجريبي. يمكنك الرجوع إلى الملاحة الحالية أو فتح خرائط Google.','The Valhalla pilot route could not load. Switch back or open Google Maps.'):routeError==='no_route'?t('لم تعثر Google على طريق قيادة إلى الوجهة.','Google found no driving route.'):routeError==='busy'?t('خدمة الطرق مشغولة. سنعيد المحاولة.','The route service is busy. We will retry.'):routeError==='login_required'||routeError==='unauthorized'?t('تعذر التحقق من حساب السائق لحساب الطريق.','Could not verify the driver account for routing.'):routeError==='navigation'?t('تعذر فتح خرائط Google.','Could not open Google Maps.'):routeError?t('تعذر تحميل مسار القيادة من Google.','Could not load the driving route from Google.'):'';
@@ -211,7 +219,7 @@ export default function DriverNavigation({to,title,targetLabel,action,initialPla
  const retry=<Button secondary title={t('تحديث الموقع والطريق','Update location and route')} onPress={()=>{setEnabled(true);setAttempt(value=>value+1)}}/>;
  const preview=pilotActive&&gpsLost&&activePlan&&<Label muted>{t('هذا المسار من آخر موقع متاح أو من نقطة الانطلاق. تستأنف تعليمات الانعطاف عند وصول موقع حديث ودقيق.','Route preview from the last available position or pickup. Turn guidance resumes with a fresh, accurate position.')}</Label>;
  const instruction=<View style={{padding:14,borderRadius:14,backgroundColor:colors.selected,gap:6}}><Label display>{gpsLost?(!enabled?t('المتابعة متوقفة مؤقتًا','Navigation is paused'):stale?t('توقّف تحديث موقع السيارة','Car location has stopped updating'):position?t('بانتظار موقع أدق','Waiting for better GPS'):t('جارٍ قراءة موقع الهاتف','Reading phone location')):arrived?t('اقتربت من نقطة الوصول','You are near the destination'):routeError&&!activePlan?t('تعذر حساب الطريق','Could not find the route'):offRoute?t('أنت خارج المسار المعروض','You are off the shown route'):pilotActive&&progress?.nextInstruction?t('بعد ','In ')+formatDistance(progress.nextTurnMeters,ar)+' · '+progress.nextInstruction:progress?.instruction||t('نجهّز الطريق إلى وجهتك…','Finding the route to your destination…')}</Label>{!pilotActive&&progress?.nextInstruction&&!gpsLost&&!offRoute&&!arrived&&<Label>{t('بعد ','In ')}{formatDistance(progress.nextTurnMeters,ar)}: {progress.nextInstruction}</Label>}{progress&&!gpsLost&&!offRoute&&!arrived&&<Label large>{formatDistance(progress.remainingMeters,ar)} · {Math.max(1,Math.ceil(progress.remainingSeconds/60))} {t('دقيقة تقريبًا','min, estimated')}</Label>}</View>;
- return <Panel outlined><Label large>{title}</Label>{instruction}{action}{googleButton}{pilotToggle}
+ return <Panel outlined><Label large>{title}</Label>{instruction}{action}{voiceButton}{voiceNotice}{googleButton}{pilotToggle}
   {pilotDisclosure}
   {preview}
   {connection==='offline'&&<Label muted>{activePlan?t('الاتصال منقطع. نعرض آخر مسار متاح.','Offline. Showing the last available route.'):t('الاتصال منقطع. سيُستأنف حساب الطريق عند عودته.','Offline. Route lookup resumes when you reconnect.')}</Label>}
@@ -229,6 +237,6 @@ export default function DriverNavigation({to,title,targetLabel,action,initialPla
   {offRoute&&<Label muted>{t('نعيد حساب الطريق عند توفر موقع دقيق. يمكنك طلب التحديث يدويًا.','The route updates with an accurate location. You can also update it now.')}</Label>}
   <View style={{gap:8}}><Button icon="expand-outline" title={t('تكبير الملاحة داخل التطبيق','Full-screen navigation')} onPress={()=>setExpanded(true)}/><Button secondary icon="locate" title={follow?t('عرض المسار كاملًا','Show the full route'):t('متابعة موقعي','Follow my location')} onPress={()=>setFollow(value=>!value)}/>{retry}<Button secondary title={enabled?t('إيقاف المتابعة مؤقتًا','Pause navigation'):t('استئناف الملاحة','Resume navigation')} onPress={()=>setEnabled(value=>!value)}/></View>
   <Label muted>{pilotActive?'MapLibre · Valhalla · FOSSGIS':'Google Maps'} · {t('المتابعة أثناء فتح التطبيق','Navigation while the app is open')}</Label>
-  <Modal visible={expanded} animationType="none" onRequestClose={()=>setExpanded(false)}><View style={{flex:1,padding:16,paddingTop:32,backgroundColor:colors.background,gap:12}}>{instruction}{action}{googleButton}{pilotToggle}{pilotDisclosure}{preview}<View style={{flex:1,minHeight:200}}>{mapContent(200)}</View>{!!(routeMessage||gpsMessage)&&<Label muted>{routeMessage||gpsMessage}</Label>}{gpsLost&&retry}<Button secondary title={follow?t('عرض المسار كاملًا','Show the full route'):t('متابعة موقعي','Follow my location')} onPress={()=>setFollow(value=>!value)}/><Button title={t('العودة إلى الطلب','Back to the ride')} onPress={()=>setExpanded(false)}/></View></Modal>
+  <Modal visible={expanded} animationType="none" onRequestClose={()=>setExpanded(false)}><View style={{flex:1,padding:16,paddingTop:32,backgroundColor:colors.background,gap:12}}>{instruction}{action}{voiceButton}{voiceNotice}{googleButton}{pilotToggle}{pilotDisclosure}{preview}<View style={{flex:1,minHeight:200}}>{mapContent(200)}</View>{!!(routeMessage||gpsMessage)&&<Label muted>{routeMessage||gpsMessage}</Label>}{gpsLost&&retry}<Button secondary title={follow?t('عرض المسار كاملًا','Show the full route'):t('متابعة موقعي','Follow my location')} onPress={()=>setFollow(value=>!value)}/><Button title={t('العودة إلى الطلب','Back to the ride')} onPress={()=>setExpanded(false)}/></View></Modal>
  </Panel>;
 }

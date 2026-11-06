@@ -22,10 +22,11 @@ export function navigationProgress(plan:DriverRoutePlan,position:Coordinate){
  const ratio=total?Math.max(0,Math.min(1,along/total)):0;
  const traveled=ratio*plan.meters,remainingMeters=Math.max(0,plan.meters-traveled);
  if(plan.provider==='Valhalla'){
-  const next=plan.steps.find(step=>shapeMeters[step.shapeIndex]>along+2);
+  const nextStepIndex=plan.steps.findIndex(step=>shapeMeters[step.shapeIndex]>along+2);
+  const next=plan.steps[nextStepIndex];
   return {remainingMeters,remainingSeconds:Math.max(0,plan.seconds*(1-ratio)),offRouteMeters:best,
    instruction:next?.instruction??plan.steps.at(-1)?.instruction??'',
-   nextInstruction:next?.instruction??'',
+   nextInstruction:next?.instruction??'',nextStepIndex,
    nextTurnMeters:next?shapeMeters[next.shapeIndex]-along:0,
    arrived:distanceMeters(position,plan.to)<=35,snapped};
  }
@@ -34,7 +35,7 @@ export function navigationProgress(plan:DriverRoutePlan,position:Coordinate){
  while(index<plan.steps.length-1&&edge+plan.steps[index].meters<=stepPosition){edge+=plan.steps[index].meters;index++}
  const step=plan.steps[index];
  return {remainingMeters,remainingSeconds:Math.max(0,plan.seconds*(1-ratio)),offRouteMeters:best,
-  instruction:step?.instruction??'',nextInstruction:plan.steps[index+1]?.instruction??'',
+  instruction:step?.instruction??'',nextInstruction:plan.steps[index+1]?.instruction??'',nextStepIndex:index+1,
   nextTurnMeters:Math.max(0,edge+(step?.meters??0)-stepPosition),
   arrived:distanceMeters(position,plan.to)<=35,snapped};
 }

@@ -14,6 +14,11 @@ test('trusted website only; no JavaScript URL injection',()=>{
  assert.deepEqual(readWebMessage('{"type":"driver-location-stop","id":"drive-1"}'),{type:'driver-location-stop',id:'drive-1'});
  assert.equal(readWebMessage('{"type":"driver-location-start","id":"drive-1"}'),null);
  assert.equal(readWebMessage('{"type":"driver-location-stop","id":"<script>"}'),null);
+ assert.deepEqual(readWebMessage('{"type":"driver-speak","id":"turn-1","text":"انعطف يمينًا","language":"ar"}'),{type:'driver-speak',id:'turn-1',text:'انعطف يمينًا',language:'ar'});
+ assert.equal(readWebMessage('{"type":"driver-speak","id":"turn-1","text":" ","language":"ar"}'),null);
+ assert.equal(readWebMessage('{"type":"driver-speak","id":"turn-1","text":"turn","language":"de"}'),null);
+ assert.equal(readWebMessage(JSON.stringify({type:'driver-speak',id:'turn-1',text:'a'.repeat(241),language:'en'})),null);
+ assert.deepEqual(readWebMessage('{"type":"driver-speech-stop"}'),{type:'driver-speech-stop'});
 });
 test('native bootstrap and position events serialize as data',()=>{
  const result=positionScript({id:'x',point:{latitude:50,longitude:7}});

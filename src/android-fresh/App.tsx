@@ -68,7 +68,11 @@ class ForegroundLocation {
 }
 type Run={controller:AbortController;id:string};
 type DriverStream={id:string;active:boolean;subscription:Location.LocationSubscription|null};
-const screenModule=requireOptionalNativeModule<{setScreenAwake:(active:boolean)=>Promise<void>}>('YallaDriverNavigation');
+const screenModule=requireOptionalNativeModule<{setScreenAwake:(active:boolean)=>Promise<void>;
+ speakDirection:(text:string,language:'ar'|'en')=>Promise<boolean>;
+ stopDirection:()=>Promise<void>}>('YallaDriverNavigation');
+const nativeDriverSpeech=typeof screenModule?.speakDirection==='function';
+const stopDriverSpeech=()=>{if(nativeDriverSpeech)void screenModule?.stopDirection().catch(()=>{});};
 const btn={paddingVertical:13,paddingHorizontal:18,backgroundColor:'#d67749',borderRadius:12} as const;
 const websiteVersion=(v:unknown):string|null=>typeof v==='string'&&/^[a-f0-9]{40}$/i.test(v)?v:null;
 export default function FreshAndroid(){
@@ -118,7 +122,7 @@ export default function FreshAndroid(){
    setScreenAwake(false);
   },[setScreenAwake]);
   useEffect(()=>{const requests=runs.current;active.current=true;void boot();return()=>{
-  active.current=false;stopDriverStream();for(const task of requests.values())task.controller.abort();requests.clear();
+  active.current=false;stopDriverSpeech();stopDriverStream();for(const task of requests.values())task.controller.abort();requests.clear();
  }},[boot,stopDriverStream]);
  const refresh=useCallback(()=>{
   if(!safeToReload.current){
@@ -148,7 +152,7 @@ export default function FreshAndroid(){
   const state=AppState.addEventListener('change',value=>{
    // Android permission sheets can briefly mark the activity inactive.
    // Cancel only on actual backgrounding so the first GPS request survives consent.
-   if(value==='background'){stopDriverStream();autoStarted.current=false;locationRequestedByPage.current=false;for(const task of runs.current.values()){inject(positionScript({id:task.id,point:null,error:'timeout'}));task.controller.abort()}inject(eventScript('yalla:native-visibility',{active:false}));return}
+   if(value==='background'){stopDriverSpeech();stopDriverStream();autoStarted.current=false;locationRequestedByPage.current=false;for(const task of runs.current.values()){inject(positionScript({id:task.id,point:null,error:'timeout'}));task.controller.abort()}inject(eventScript('yalla:native-visibility',{active:false}));return}
    if(value==='active'){
     inject(eventScript('yalla:native-visibility',{active:true}));
     void syncPermission('resumed');
@@ -238,9 +242,9 @@ export default function FreshAndroid(){
   }else if(message.type==='bootstrap'){
    websiteRevision.current=websiteVersion(message.version);
    void engine.permission(false).then(permission=>{
-    inject(bootstrapScript(message.id,permission.granted));
+    inject(bootstrapScript(message.id,permission.granted,nativeDriverSpeech));
     void syncPermission('ready');
-   }).catch(()=>inject(bootstrapScript(message.id,false)));
+   }).catch(()=>inject(bootstrapScript(message.id,false,nativeDriverSpeech)));
   }else if(message.type==='location'){
    locationRequestedByPage.current=true;
    void locate(message);
@@ -250,6 +254,13 @@ export default function FreshAndroid(){
     stopDriverStream(message.id);
    }else if(message.type==='location-cancel'){
    runs.current.get(message.id)?.controller.abort();
+  }else if(message.type==='driver-speak'){
+   const operation=nativeDriverSpeech&&AppState.currentState!=='background'
+    ?screenModule!.speakDirection(message.text,message.language):Promise.resolve(false);
+   void operation.then(ok=>inject(eventScript('yalla:native-result',{id:message.id,ok})))
+    .catch(()=>inject(eventScript('yalla:native-result',{id:message.id,ok:false})));
+  }else if(message.type==='driver-speech-stop'){
+   stopDriverSpeech();
   }else if(message.type==='location-settings'){
    // Opening system settings must never wait for a GPS fix.
    void Linking.openSettings().then(
@@ -289,7 +300,7 @@ export default function FreshAndroid(){
    onOpenWindow={event=>openExternal(event.nativeEvent.targetUrl)}
    onMessage={handleMessage}
    onNavigationStateChange={nav=>{canGoBack.current=nav.canGoBack;if(!nav.loading)setLoading(false)}}
-   onLoadStart={()=>{stopDriverStream();autoStarted.current=false;locationRequestedByPage.current=false;for(const task of runs.current.values())task.controller.abort();setLoading(true);setFailed(false)}}
+   onLoadStart={()=>{stopDriverSpeech();stopDriverStream();autoStarted.current=false;locationRequestedByPage.current=false;for(const task of runs.current.values())task.controller.abort();setLoading(true);setFailed(false)}}
    onLoadEnd={()=>{
     setLoading(false);void syncPermission('page-loaded');
     // If the website cannot post its location request to Android,
