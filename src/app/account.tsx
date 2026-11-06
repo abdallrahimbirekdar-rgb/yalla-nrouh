@@ -1,12 +1,13 @@
 import React,{useEffect,useState} from 'react';
-import {ActivityIndicator,Image,Pressable,View} from 'react-native';
+import {ActivityIndicator,Pressable,View} from 'react-native';
 import {router,useLocalSearchParams} from 'expo-router';
 import {useAuth} from '../auth';
 import {authErrorMessage} from '../auth-errors';
 import {useApp} from '../context';
-import {Button,Field,Icon,Label,Page,Panel,useText,useTheme} from '../ui';
+import {BrandLogo} from '../brand-logo';
+import {Button,Field,Icon,Label,Page,Panel,useText} from '../ui';
 export default function Account(){
- const auth=useAuth();const {state}=useApp();const t=useText();const {dark}=useTheme();const {next}=useLocalSearchParams<{next?:string}>();
+ const auth=useAuth();const {state}=useApp();const t=useText();const {next}=useLocalSearchParams<{next?:string}>();
  const [mode,setMode]=useState<'login'|'signup'|'reset'>('login'),[email,setEmail]=useState(''),[password,setPassword]=useState(''),[repeat,setRepeat]=useState(''),[visible,setVisible]=useState(false),[busy,setBusy]=useState(false),[notice,setNotice]=useState('');
  const allowedNext=next==='admin'?'/admin':next==='review'?'/review':next==='destination'||next==='saved'?'/location':null;
  useEffect(()=>{if(auth.recovery)setNotice('')},[auth.recovery]);
@@ -21,7 +22,7 @@ export default function Account(){
   }catch(error){setNotice(authErrorMessage(error,state.language==='ar'))}finally{setBusy(false)}
  }
  return <Page title={auth.recovery?t('كلمة مرور جديدة','New password'):auth.session?t('حسابي','My account'):t('تسجيل الدخول','Sign in')}>
-  <View style={{alignItems:'center',gap:8}}><Image source={dark?require('../../assets/logo-header-dark.png'):require('../../assets/logo-approved.png')} style={{width:160,height:88}} resizeMode="contain" accessibilityLabel="يلا نروح"/><Label muted>{t('حساب واحد للموقع والتطبيق','One account for the website and app')}</Label></View>
+  <View style={{alignItems:'center',gap:8}}><BrandLogo menu/><Label muted>{t('حساب واحد للموقع والتطبيق','One account for the website and app')}</Label></View>
   {!auth.ready||auth.session&&!auth.rolesReady?<ActivityIndicator/>:auth.session&&!auth.recovery?<>
    <Panel><Icon name="person-circle-outline" size={44}/><Label>{auth.session.user.email}</Label><Label muted>{auth.admin?t('حساب الإدارة','Administrator'):auth.driver?t('حساب سائق معتمد','Approved driver'):t('تم تسجيل الدخول','Signed in')}</Label></Panel>
    {auth.admin&&<Button icon="shield-checkmark-outline" title={t('لوحة الإدارة','Administration')} onPress={()=>router.push('/admin')}/>}
