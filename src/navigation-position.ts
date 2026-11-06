@@ -89,11 +89,13 @@ export function watchDriverPosition(ask:boolean,onFix:(fix:Fix)=>void,onError:(c
   if(!isCoordinate(point)||typeof accuracy!=='number'||!Number.isFinite(accuracy)||accuracy<0||accuracy>250
      ||typeof time!=='number'||!Number.isFinite(time)||time<=lastTime||time<Date.now()-5000||time>Date.now()+3000)return;
   lastTime=time;
+  announceWebPosition(point,{accuracy,time});
   onFix({...point,accuracy,time});
  };
  const bridge=host.ReactNativeWebView;
- if(bridge){
-  if(!host.__YALLA_DRIVER_LOCATION_STREAM__)return null;
+ // New Android builds stream Expo GPS directly. Older installed builds can
+ // still use the WebView geolocation watcher without waiting for a new APK.
+ if(bridge&&host.__YALLA_DRIVER_LOCATION_STREAM__===true){
   const id=Date.now().toString(36)+'-'+Math.random().toString(36).slice(2);
   const update=(event:Event)=>{
    const detail=(event as CustomEvent).detail;
