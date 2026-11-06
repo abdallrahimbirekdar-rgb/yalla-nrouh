@@ -1,5 +1,5 @@
 import React,{useCallback,useEffect} from 'react';
-import {ActivityIndicator,Image,Pressable,ScrollView,StyleSheet,View} from 'react-native';
+import {ActivityIndicator,Pressable,ScrollView,StyleSheet,View} from 'react-native';
 import {SafeAreaView} from 'react-native-safe-area-context';
 import {router,useFocusEffect,useIsFocused} from 'expo-router';
 import {cloudCurrentToken,cloudMyRides} from '../cloud-api';
@@ -9,6 +9,7 @@ import {useApp} from '../context';
 import {useAuth} from '../auth';
 import {useCurrentPosition} from '../use-current-position';
 import MapCanvas from '../map/MapCanvas';
+import {BrandLogo} from '../brand-logo';
 import {AccountButton,AppMenu,Button,DeviceStatus,Icon,Label,useText,useTheme} from '../ui';
 
 export default function Booking(){
@@ -19,7 +20,7 @@ export default function Booking(){
  const pendingRequest=readPendingRideOperation('request',userId);
  const canBook=auth.rolesReady&&(!auth.driver||auth.admin);
  const t=useText();
- const {colors,dark}=useTheme();
+ const {colors}=useTheme();
  const isFocused=useIsFocused();
  const gps=useCurrentPosition(isFocused&&ready&&state.preferences.permissionsIntroSeen);
  const rtl=state.language==='ar';
@@ -62,7 +63,7 @@ export default function Booking(){
  const status=gps.busy?t('جارٍ تحديد موقعك…','Finding your location…'):gps.failure==='permission'?t('اسمح بالموقع لعرض مكانك على الخريطة','Allow location to show your position'):gps.failure==='accuracy'?t('فعّل الموقع الدقيق من أذونات التطبيق','Turn on precise location in app settings'):gps.failure==='services'?t('فعّل خدمة الموقع في الهاتف','Turn on phone location'):t('تعذر تحديد الموقع؛ اضغط زر موقعي للمحاولة','Location failed. Tap My location to retry');
  return <SafeAreaView style={{flex:1,backgroundColor:colors.background}}>
   <View style={styles.frame}>
-   <View style={[styles.header,row]}><AppMenu/><Image source={dark?require('../../assets/logo-header-dark.png'):require('../../assets/logo-approved.png')} accessibilityLabel="يلا نروح" resizeMode="contain" style={{width:90,height:48,flex:1}}/><AccountButton/></View>
+   <View style={[styles.header,{flexDirection:'row-reverse'}]}><BrandLogo/><View style={{flex:1}}/><AccountButton/><AppMenu/></View>
    <ScrollView contentContainerStyle={styles.scroll}>
     <View style={{backgroundColor:colors.surface}}>
      <MapCanvas compact readOnly minMapHeight={300} cameraTarget={gps.camera} point={gps.camera?.point??null} onChange={()=>{}}/>
