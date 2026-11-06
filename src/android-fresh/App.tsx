@@ -4,6 +4,7 @@ import {SafeAreaView} from 'react-native-safe-area-context';
 import {WebView,type WebViewMessageEvent} from 'react-native-webview';
 import * as Location from 'expo-location';
 import Constants from 'expo-constants';
+import * as Notifications from 'expo-notifications';
 import {enableLocalAlerts,notifyLocal} from '../alerts';
 import {acceptableFix,awaitFreshFix,deadlineOr,GpsTaskPool} from './gps';
 import {SITE,bootstrapScript,diagnosticScript,eventScript,autoFixScript,externalTarget,positionScript,readWebMessage,trustedSite,
@@ -68,6 +69,14 @@ class ForegroundLocation {
 type Run={controller:AbortController;id:string};
 const btn={paddingVertical:13,paddingHorizontal:18,backgroundColor:'#d67749',borderRadius:12} as const;
 const websiteVersion=(v:unknown):string|null=>typeof v==='string'&&/^[a-f0-9]{40}$/i.test(v)?v:null;
+const driverPushConfigured=Constants.expoConfig?.extra?.driverPushConfigured===true;
+async function driverPushToken(){
+ if(!driverPushConfigured)return null;
+ await Notifications.setNotificationChannelAsync('ride-offers',{name:'طلبات يلا نروح',importance:Notifications.AndroidImportance.HIGH});
+ if(!await enableLocalAlerts())return null;
+ const token=await Notifications.getDevicePushTokenAsync();
+ return token.type==='android'&&typeof token.data==='string'?token.data:null;
+}
 export default function FreshAndroid(){
  const web=useRef<WebView>(null);
  const engine=useRef(new ForegroundLocation()).current;
@@ -75,6 +84,7 @@ export default function FreshAndroid(){
  const gpsPool=useRef(new GpsTaskPool<Location.LocationObject>()).current;
  const autoStarted=useRef(false),locationRequestedByPage=useRef(false);
  const safeToReload=useRef(false),websiteRevision=useRef<string|null>(null);
+ const tappedOffer=useRef<string|null>(null),siteReady=useRef(false);
  const [uri,setUri]=useState(()=>SITE+'?app=android&launch='+Date.now());
  const [loading,setLoading]=useState(true),[failed,setFailed]=useState(false),[newWeb,setNewWeb]=useState(false);
  const [language,setLanguage]=useState<'ar'|'en'>('ar');
@@ -87,6 +97,25 @@ export default function FreshAndroid(){
  const inject=useCallback((script:string)=>{
   if(active.current)web.current?.injectJavaScript(script);
  },[]);
+ const openOffer=useCallback(()=>{
+  if(!siteReady.current||!tappedOffer.current)return;
+  const id=tappedOffer.current;
+  tappedOffer.current=null;
+  inject('window.__YALLA_DRIVER_OFFER__='+JSON.stringify(id)+';'+eventScript('yalla:driver-offer',id));
+ },[inject]);
+ useEffect(()=>{
+  if(!driverPushConfigured)return;
+  const receive=(response:Notifications.NotificationResponse|null)=>{
+   const data=response?.notification.request.content.data;
+   if(data?.type!=='driver-offer'||typeof data.rideId!=='string'||!/^[a-f0-9-]{36}$/i.test(data.rideId))return;
+   tappedOffer.current=data.rideId;
+   openOffer();
+   void Notifications.clearLastNotificationResponseAsync().catch(()=>{});
+  };
+  const subscription=Notifications.addNotificationResponseReceivedListener(receive);
+  void Notifications.getLastNotificationResponseAsync().then(receive).catch(()=>{});
+  return()=>subscription.remove();
+ },[openOffer]);
  const syncPermission=useCallback(async(stage:string)=>{
   try{
    const state=await engine.status(stage);
@@ -179,6 +208,9 @@ export default function FreshAndroid(){
   const message=readWebMessage(event.nativeEvent.data);
   if(!message)return;
   if(message.type==='status'){
+   siteReady.current=true;
+   inject('window.__YALLA_DRIVER_PUSH__='+JSON.stringify(driverPushConfigured)+';'+eventScript('yalla:driver-push-capability',driverPushConfigured));
+   openOffer();
    safeToReload.current=message.safeToReload;
    canGoBack.current=message.canGoBack;
    if(message.language)setLanguage(message.language);
@@ -201,6 +233,9 @@ export default function FreshAndroid(){
     ()=>inject(eventScript('yalla:native-result',{id:message.id,ok:true})),
     ()=>inject(eventScript('yalla:native-result',{id:message.id,ok:false})),
    );
+  }else if(message.type==='driver-push-enable'){
+   void driverPushToken().then(token=>inject(eventScript('yalla:driver-push-token',{id:message.id,token})))
+    .catch(()=>inject(eventScript('yalla:driver-push-token',{id:message.id,token:null})));
   }else if(message.type==='alerts-enable'||message.type==='notify'){
    const operation=message.type==='alerts-enable'?enableLocalAlerts():notifyLocal(message.title,message.body).then(()=>true);
    void operation.then(ok=>inject(eventScript('yalla:native-result',{id:message.id,ok})))
@@ -209,7 +244,7 @@ export default function FreshAndroid(){
   else if(message.type==='back-default'){
    if(canGoBack.current)web.current?.goBack();else BackHandler.exitApp();
   }
- },[engine,inject,locate,refresh,syncPermission]);
+ },[engine,inject,locate,openOffer,refresh,syncPermission]);
  const openExternal=(url:string)=>{
   if(externalTarget(url))void Linking.openURL(url).catch(()=>setNotice(text('تعذر فتح الرابط.','Could not open the link.')));
  };
@@ -234,7 +269,7 @@ export default function FreshAndroid(){
    onOpenWindow={event=>openExternal(event.nativeEvent.targetUrl)}
    onMessage={handleMessage}
    onNavigationStateChange={nav=>{canGoBack.current=nav.canGoBack;if(!nav.loading)setLoading(false)}}
-   onLoadStart={()=>{autoStarted.current=false;locationRequestedByPage.current=false;for(const task of runs.current.values())task.controller.abort();setLoading(true);setFailed(false)}}
+   onLoadStart={()=>{siteReady.current=false;autoStarted.current=false;locationRequestedByPage.current=false;for(const task of runs.current.values())task.controller.abort();setLoading(true);setFailed(false)}}
    onLoadEnd={()=>{
     setLoading(false);void syncPermission('page-loaded');
     // If the website cannot post its location request to Android,

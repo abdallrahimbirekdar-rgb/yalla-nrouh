@@ -73,7 +73,15 @@ jobs:
       - name: Test booking and network client
         run: npm test
       - name: Generate Android project
-        run: npx expo prebuild --platform android --no-install
+        env:
+          YALLA_FIREBASE_ANDROID_CONFIG: ${{ secrets.FIREBASE_ANDROID_GOOGLE_SERVICES_JSON }}
+        run: |
+          if [[ -n "${YALLA_FIREBASE_ANDROID_CONFIG:-}" ]]; then
+            export YALLA_GOOGLE_SERVICES_FILE="$RUNNER_TEMP/yalla-google-services.json"
+            printf '%s' "$YALLA_FIREBASE_ANDROID_CONFIG" > "$YALLA_GOOGLE_SERVICES_FILE"
+            printf 'YALLA_GOOGLE_SERVICES_FILE=%s\n' "$YALLA_GOOGLE_SERVICES_FILE" >> "$GITHUB_ENV"
+          fi
+          npx expo prebuild --platform android --no-install
       - name: Check embedded Google Maps configuration
         run: |
           set -euo pipefail

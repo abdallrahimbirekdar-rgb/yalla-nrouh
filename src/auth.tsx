@@ -4,6 +4,7 @@ import {authClient} from './auth-client';
 import {Platform} from 'react-native';
 import {type Session} from '@supabase/supabase-js';
 import {cloudIsAdmin,cloudMyDriver,cloudSetSessionBridge,CloudError} from './cloud-api';
+import {removeDriverPush} from './driver-push-registration';
 const SITE='https://abdallrahimbirekdar-rgb.github.io/yalla-nrouh/';
 type AuthValue={session:Session|null;ready:boolean;admin:boolean;checkingAdmin:boolean;driver:boolean;rolesReady:boolean;recovery:boolean;problem:string;signIn:(email:string,password:string)=>Promise<void>;signUp:(email:string,password:string)=>Promise<boolean>;signOut:()=>Promise<void>;reset:(email:string)=>Promise<void>;updatePassword:(password:string)=>Promise<void>;retry:()=>Promise<void>};
 const noAuth=async()=>{throw Error('login_required')};
@@ -13,7 +14,10 @@ export function AuthProvider({children}:{children:React.ReactNode}){
  const [driver,setDriver]=useState(false),[rolesReady,setRolesReady]=useState(false);
  const userId=session?.user.id;const accessToken=session?.access_token;
  const current=useRef<Session|null>(null),alive=useRef(true);
- const accept=useCallback((next:Session|null)=>{setRideOwner(next?.user.id??null);current.current=next;setSession(next);setReady(true);setProblem('')},[]);
+ const accept=useCallback((next:Session|null)=>{
+  if(current.current?.user.id!==next?.user.id){setAdmin(false);setDriver(false);setRolesReady(false)}
+  setRideOwner(next?.user.id??null);current.current=next;setSession(next);setReady(true);setProblem('');
+ },[]);
  const retry=useCallback(async()=>{
   try{const {data,error}=await authClient().auth.getSession();if(error)throw error;if(alive.current){accept(data.session);setRoleAttempt(value=>value+1)}}
   catch{if(alive.current){setReady(true);setProblem('session_unavailable')}}
@@ -31,17 +35,18 @@ export function AuthProvider({children}:{children:React.ReactNode}){
   const deadline=setTimeout(()=>{if(alive.current){setReady(true);if(!current.current)setProblem('session_unavailable')}},15000);
   void retry().finally(()=>clearTimeout(deadline));
   const changed=(event:StorageEvent)=>{if(event.key==='yalla-nrouh-auth-v1')void retry()};window.addEventListener('storage',changed);
-  return()=>{alive.current=false;clearTimeout(deadline);subscription.unsubscribe();window.removeEventListener('storage',changed);cloudSetSessionBridge(null,null)};
+  const reconnect=()=>void retry();window.addEventListener('online',reconnect);
+  return()=>{alive.current=false;clearTimeout(deadline);subscription.unsubscribe();window.removeEventListener('storage',changed);window.removeEventListener('online',reconnect);cloudSetSessionBridge(null,null)};
  },[accept,retry]);
  useEffect(()=>{
-  setAdmin(false);setDriver(false);setRolesReady(false);if(!accessToken){setCheckingAdmin(false);setRolesReady(true);return}let active=true;setCheckingAdmin(true);
+  if(!accessToken){setAdmin(false);setDriver(false);setCheckingAdmin(false);setRolesReady(true);return}let active=true;setCheckingAdmin(true);
   void Promise.all([cloudIsAdmin(accessToken),cloudMyDriver(accessToken)]).then(([staff,account])=>{if(active){setAdmin(staff);setDriver(!staff&&account?.approved===true);setRolesReady(true)}}).catch(()=>{if(active)setProblem('admin_unavailable')}).finally(()=>{if(active)setCheckingAdmin(false)});
   return()=>{active=false};
  },[accessToken,userId,roleAttempt]);
  const value=useMemo<AuthValue>(()=>({session,ready,admin,checkingAdmin,driver,rolesReady,recovery,problem,retry,
   signIn:async(email,password)=>{const {data,error}=await authClient().auth.signInWithPassword({email:email.trim(),password});if(error)throw error;accept(data.session)},
   signUp:async(email,password)=>{const {data,error}=await authClient().auth.signUp({email:email.trim(),password,options:{emailRedirectTo:SITE}});if(error)throw error;if(data.session)accept(data.session);return Boolean(data.session)},
-  signOut:async()=>{const {error}=await authClient().auth.signOut({scope:'local'});if(error)throw error;setAdmin(false);setRecovery(false);accept(null)},
+  signOut:async()=>{const owner=current.current?.user.id;if(owner)await removeDriverPush(owner).catch(()=>{});const {error}=await authClient().auth.signOut({scope:'local'});if(error)throw error;setAdmin(false);setRecovery(false);accept(null)},
   reset:async(email)=>{const {error}=await authClient().auth.resetPasswordForEmail(email.trim(),{redirectTo:SITE});if(error)throw error},
   updatePassword:async(password)=>{const {error}=await authClient().auth.updateUser({password});if(error)throw error;setRecovery(false)},
  }),[session,ready,admin,checkingAdmin,driver,rolesReady,recovery,problem,retry,accept]);

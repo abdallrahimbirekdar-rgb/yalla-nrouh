@@ -2,7 +2,7 @@ import React,{useEffect,useRef,useState} from 'react';
 import {ActivityIndicator,Linking,View} from 'react-native';
 import {router} from 'expo-router';
 import {useAuth} from './auth';
-import {cloudCurrentToken} from './cloud-api';
+import {cloudCurrentToken,cloudReportRouteProblem} from './cloud-api';
 import {siteCurrentPosition} from './site-bridge';
 import {type Coordinate} from './geo';
 import {googleDirections} from './google-links';
@@ -22,8 +22,9 @@ export default function RoutePanel({from,to,fromAddress,toAddress,currentLocatio
  async function calculate(){
   if(running.current||!to||(!from&&!currentLocation))return;if(!auth.session){setError('unauthorized');return}
   const id=++generation.current;const active=()=>alive.current&&id===generation.current;running.current=true;setBusy(true);setError('');setPlan(null);setQuotedFare(null);quoteCallback.current?.(null);abort.current?.abort();const controller=new AbortController();abort.current=controller;
+  let token:string|undefined;
   try{
-   const token=await cloudCurrentToken();const start=currentLocation?await siteCurrentPosition(false):from;if(!start||!active())return;
+   token=await cloudCurrentToken();const start=currentLocation?await siteCurrentPosition(false):from;if(!start||!active())return;
    const client=createRoutingClient(process.env.EXPO_PUBLIC_GOOGLE_ROUTES_PROXY||'https://gokosprcqpdvqgahvquk.supabase.co/functions/v1/fare-route');
    if(onQuote){
     const {plan:next,quote}=await client.quote(start,to,controller.signal,state.language,token,auth.admin);
@@ -32,7 +33,13 @@ export default function RoutePanel({from,to,fromAddress,toAddress,currentLocatio
     const next=await client.route(start,to,controller.signal,state.language,token,auth.admin);
     if(active())setPlan(next);
    }
-  }catch(e){if(active())setError(e instanceof ServiceError?e.code:(e as {status?:number})?.status===401?'unauthorized':'network')}
+  }catch(e){
+   if(active()&&!controller.signal.aborted){
+    const code=e instanceof ServiceError?e.code:(e as {status?:number})?.status===401?'unauthorized':'network';
+    setError(code);
+    if(token&&code!=='unauthorized')void cloudReportRouteProblem(token,code).catch(()=>{});
+   }
+  }
   finally{if(active()){running.current=false;setBusy(false)}}
  }
  const action=useRef(calculate);action.current=calculate;

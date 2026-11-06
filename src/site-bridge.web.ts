@@ -2,7 +2,7 @@ import {isCoordinate,type Coordinate} from './geo.ts';
 import {announceWebPosition,getWebPosition,recentMeasuredWebPosition,refineWebPosition,webLocationGranted} from './web-position.ts';
 import {PositionError} from './current-position.ts';
 import type {Fix} from './meter.ts';
-export type SiteWindow=Window&{ReactNativeWebView?:{postMessage:(message:string)=>void};__YALLA_NATIVE_LOCATION_GRANTED__?:boolean;__YALLA_NATIVE_AUTOFIX__?:{point:Coordinate;time:number}};
+export type SiteWindow=Window&{ReactNativeWebView?:{postMessage:(message:string)=>void};__YALLA_NATIVE_LOCATION_GRANTED__?:boolean;__YALLA_NATIVE_AUTOFIX__?:{point:Coordinate;time:number};__YALLA_DRIVER_PUSH__?:boolean;__YALLA_DRIVER_OFFER__?:string};
 // The website owns its local data. Never block a launch or save while trying
 // to import older APK data; the owner chose to start without that migration.
 // Keep the native handshake only for optional foreground location status.

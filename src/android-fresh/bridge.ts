@@ -7,6 +7,7 @@ export type WebMessage=
  |{type:'location-cancel';id:string}
  |{type:'location-settings';id:string}
  |{type:'alerts-enable';id:string}
+ |{type:'driver-push-enable';id:string}
  |{type:'notify';id:string;title:string;body:string}
  |{type:'status';safeToReload:boolean;canGoBack:boolean;language?:'ar'|'en';theme?:'system'|'light'|'dark'}
  |{type:'refresh'}
@@ -34,6 +35,7 @@ export function readWebMessage(raw:string):WebMessage|null{
   if(v.type==='location-cancel'&&idOK(v.id))return {type:'location-cancel',id:v.id};
   if(v.type==='location-settings'&&idOK(v.id))return {type:'location-settings',id:v.id};
   if(v.type==='alerts-enable'&&idOK(v.id))return {type:'alerts-enable',id:v.id};
+  if(v.type==='driver-push-enable'&&idOK(v.id))return {type:'driver-push-enable',id:v.id};
   if(v.type==='notify'&&idOK(v.id)&&typeof v.title==='string'&&v.title.length<=200&&typeof v.body==='string'&&v.body.length<=1000)
    return {type:'notify',id:v.id,title:v.title,body:v.body};
   if(v.type==='status'&&typeof v.safeToReload==='boolean'&&typeof v.canGoBack==='boolean')
