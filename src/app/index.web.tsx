@@ -63,7 +63,10 @@ export default function Booking(){
  const status=gps.busy?t('جارٍ تحديد موقعك…','Finding your location…'):gps.failure==='permission'?t('اسمح بالموقع لعرض مكانك على الخريطة','Allow location to show your position'):gps.failure==='accuracy'?t('فعّل الموقع الدقيق من أذونات التطبيق','Turn on precise location in app settings'):gps.failure==='services'?t('فعّل خدمة الموقع في الهاتف','Turn on phone location'):t('تعذر تحديد الموقع؛ اضغط زر موقعي للمحاولة','Location failed. Tap My location to retry');
  return <SafeAreaView style={{flex:1,backgroundColor:colors.background}}>
   <View style={styles.frame}>
-   <View style={[styles.header,{flexDirection:'row-reverse'}]}><BrandLogo/><View style={{flex:1}}/><AccountButton/><AppMenu/></View>
+   <View style={[styles.header,{borderColor:colors.line}]}>
+    <BrandLogo/>
+    <View style={styles.headerActions}><AccountButton/><AppMenu/></View>
+   </View>
    <ScrollView contentContainerStyle={styles.scroll}>
     <View style={{backgroundColor:colors.surface}}>
      <MapCanvas compact readOnly minMapHeight={300} cameraTarget={gps.camera} point={gps.camera?.point??null} onChange={()=>{}}/>
@@ -88,7 +91,8 @@ export default function Booking(){
 const styles=StyleSheet.create({
  loading:{flex:1,justifyContent:'center',alignItems:'center'},
  frame:{flex:1,width:'100%',maxWidth:1000,alignSelf:'center'},
- header:{height:64,paddingHorizontal:16,alignItems:'center',gap:12},
+ header:{minHeight:74,paddingHorizontal:12,paddingVertical:8,flexDirection:'row-reverse',alignItems:'center',justifyContent:'space-between',gap:8,borderBottomWidth:1},
+ headerActions:{flexDirection:'row',alignItems:'center',gap:8,flexShrink:0},
  scroll:{paddingBottom:28},
  content:{width:'100%',maxWidth:640,alignSelf:'center',paddingHorizontal:16,gap:12},
  status:{position:'absolute',top:12,left:16,right:16,borderRadius:12,paddingVertical:7,paddingHorizontal:12,elevation:2},

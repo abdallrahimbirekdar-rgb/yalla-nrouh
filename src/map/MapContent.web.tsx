@@ -45,7 +45,7 @@ export default function MapContent({point,taxiPoint,onChange,compact=false,route
  useEffect(()=>{
   if(!ready||!map.current||!api.current||!line.current)return;
   const path=route?.map(position)??[];line.current.setPath(path);
-  if(path.length>1){if(marker.current){const dot=document.createElement('div');dot.textContent=state.language==='ar'?'أ':'A';Object.assign(dot.style,{background:'#202529',color:'white',border:'2px solid white',borderRadius:'50%',width:'28px',height:'28px',display:'grid',placeItems:'center',fontWeight:'bold'});marker.current.content=dot}if(!endMarker.current){const dot=document.createElement('div');dot.textContent=state.language==='ar'?'ب':'B';Object.assign(dot.style,{background:'#d67749',color:'white',border:'2px solid white',borderRadius:'50%',width:'28px',height:'28px',display:'grid',placeItems:'center',fontWeight:'bold'});endMarker.current=new api.current.marker.AdvancedMarkerElement({map:map.current,content:dot,title:state.language==='ar'?'ب: الوصول':'B: destination'})}endMarker.current.position=path[path.length-1]}else if(endMarker.current){endMarker.current.map=null;endMarker.current=null}
+  if(path.length>1){if(marker.current){const dot=document.createElement('div');dot.textContent=state.language==='ar'?'أ':'A';Object.assign(dot.style,{background:'#102a43',color:'white',border:'2px solid white',borderRadius:'50%',width:'28px',height:'28px',display:'grid',placeItems:'center',fontWeight:'bold'});marker.current.content=dot}if(!endMarker.current){const dot=document.createElement('div');dot.textContent=state.language==='ar'?'ب':'B';Object.assign(dot.style,{background:'#006da5',color:'white',border:'2px solid white',borderRadius:'50%',width:'28px',height:'28px',display:'grid',placeItems:'center',fontWeight:'bold'});endMarker.current=new api.current.marker.AdvancedMarkerElement({map:map.current,content:dot,title:state.language==='ar'?'ب: الوصول':'B: destination'})}endMarker.current.position=path[path.length-1]}else if(endMarker.current){endMarker.current.map=null;endMarker.current=null}
   if(path.length>1){const bounds=new api.current.LatLngBounds();path.forEach(p=>bounds.extend(p));map.current.fitBounds(bounds,30)}
  },[route,ready,state.language]);
  useEffect(()=>{
@@ -65,7 +65,7 @@ export default function MapContent({point,taxiPoint,onChange,compact=false,route
   const taxi=position(taxiPoint),first=!taxiMarker.current;
   if(!taxiMarker.current){
    const icon=document.createElement('div');icon.textContent='🚕';
-   Object.assign(icon.style,{display:'grid',placeItems:'center',width:'34px',height:'34px',background:'#202529',border:'2px solid white',borderRadius:'50%',fontSize:'21px'});
+   Object.assign(icon.style,{display:'grid',placeItems:'center',width:'34px',height:'34px',background:'#102a43',border:'2px solid white',borderRadius:'50%',fontSize:'21px'});
    taxiMarker.current=new maps.marker.AdvancedMarkerElement({map:instance,position:taxi,content:icon,title:state.language==='ar'?'موقع التاكسي':'Taxi location'});
   }else taxiMarker.current.position=taxi;
   const bounds=instance.getBounds();

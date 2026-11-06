@@ -6,18 +6,17 @@ import {useTheme} from './theme';
 /** The live website uses a bilingual lockup with real, shaped Arabic text. */
 export function BrandLogo({menu=false}:{menu?:boolean}){
  const arabic='يلّا نروّح';
- const {colors,dark}=useTheme();
+ const {colors}=useTheme();
  const arabicFont=isLoaded('Cairo_700Bold')?'Cairo_700Bold':undefined;
  return <View accessible accessibilityRole="image" accessibilityLabel={arabic+' — Yalla Nrouh'}
-  style={{direction:'ltr',flexDirection:'row-reverse',alignItems:'center',justifyContent:'center',gap:6,
-   maxWidth:menu?202:138,minWidth:0,flexShrink:1,paddingHorizontal:menu?11:5,paddingVertical:menu?6:4,borderRadius:menu?13:10,
-   backgroundColor:colors.background,borderWidth:1,borderColor:colors.line}}>
+  style={{direction:'ltr',flexDirection:'row-reverse',alignItems:'center',justifyContent:'center',gap:8,
+   maxWidth:menu?228:192,minWidth:0,flexShrink:1}}>
   <Image source={require('../assets/brand-web-pin.webp')} resizeMode="contain" accessible={false}
-   style={{width:menu?48:33,height:menu?43:32}}/>
+   style={{width:menu?64:52,height:menu?54:44,flexShrink:1}}/>
   <View style={{flexShrink:1,alignItems:'center',justifyContent:'center'}}>
-   <Text style={{color:colors.ink,fontFamily:arabicFont,fontWeight:arabicFont?undefined:'700',
-    fontSize:menu?20:16,lineHeight:menu?33:27,writingDirection:'rtl'}}>{arabic}</Text>
-   <Text style={{color:dark?'#f19b75':colors.purple,fontSize:menu?12:10,lineHeight:menu?17:14,letterSpacing:.2,writingDirection:'ltr'}}>Yalla Nrouh</Text>
+   <Text numberOfLines={1} style={{color:colors.ink,fontFamily:arabicFont,fontWeight:arabicFont?undefined:'700',
+    fontSize:menu?26:22,lineHeight:menu?39:32,writingDirection:'rtl'}}>{arabic}</Text>
+   <Text numberOfLines={1} style={{color:colors.purple,fontSize:menu?14:12,lineHeight:menu?19:16,letterSpacing:.2,writingDirection:'ltr'}}>Yalla Nrouh</Text>
   </View>
  </View>;
 }

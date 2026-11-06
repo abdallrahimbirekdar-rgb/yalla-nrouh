@@ -112,7 +112,7 @@ export default function DriverPilotMap({point,destination,route,follow,fresh}:Dr
  },[attempt]);
  useEffect(()=>{
   const instance=map.current,lib=api.current;if(!ready||!instance||!lib)return;
-  if(!end.current)end.current=new lib.Marker({color:'#bc5d36'}).setLngLat(lonLat(destination)).addTo(instance);
+  if(!end.current)end.current=new lib.Marker({color:'#006da5'}).setLngLat(lonLat(destination)).addTo(instance);
   else end.current.setLngLat(lonLat(destination));
  },[ready,destination]);
  useEffect(()=>{

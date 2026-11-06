@@ -1,6 +1,16 @@
 import {useColorScheme} from 'react-native';
 import {useApp} from './context';
-export const lightColors={ink:'#202529',muted:'#73787d',green:'#d67749',soft:'#f5f6f7',line:'#e8eaec',white:'#fff',error:'#bb4343',background:'#fff',surface:'#f7f8f9',purple:'#d67749',cyan:'#d67749',rose:'#d67749',gold:'#d67749',selected:'#fff5ef'};
-export const darkColors={ink:'#f1f3f4',muted:'#aab2ba',green:'#f19b75',soft:'#20262c',line:'#353d46',white:'#fff',error:'#ff9e9e',background:'#11161b',surface:'#1c232a',purple:'#f19b75',cyan:'#f19b75',rose:'#f19b75',gold:'#f19b75',selected:'#382b25'};
+const lightAccent='#006da5';
+const darkAccent='#65c8f0';
+export const lightColors={
+ ink:'#102a43',muted:'#4d6578',soft:'#f0f7fc',line:'#d3e5f1',white:'#fff',
+ error:'#bb4343',background:'#fff',surface:'#f3f9fd',selected:'#e2f3fc',
+ green:lightAccent,purple:lightAccent,cyan:lightAccent,rose:lightAccent,gold:lightAccent,
+};
+export const darkColors={
+ ink:'#eaf5fc',muted:'#aec5d6',soft:'#102437',line:'#28475c',white:'#fff',
+ error:'#ff9e9e',background:'#0b1b2b',surface:'#142b40',selected:'#163a53',
+ green:darkAccent,purple:darkAccent,cyan:darkAccent,rose:darkAccent,gold:darkAccent,
+};
 export type Palette=typeof lightColors;
 export function useTheme(){const {state}=useApp();const system=useColorScheme();const dark=state.preferences.theme==='dark'||state.preferences.theme==='system'&&system==='dark';return {dark,colors:dark?darkColors:lightColors};}
