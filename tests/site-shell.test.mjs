@@ -5,7 +5,7 @@ import {initialState} from '../src/domain.ts';
 import {loadRecoverable,readSaved,emptyDraft} from '../src/persistence.ts';
 const oldState=JSON.stringify({storageVersion:2,state:initialState,draft:emptyDraft});
 import {isSiteUrl,externalLink,readShellMessage,bootstrapScript,locationScript} from '../src/site-shell-policy.ts';
-import {loadSiteState,nativeAction,nativeCurrentPosition,openNativeGoogleNavigation,siteMigrationPending} from '../src/site-bridge.web.ts';
+import {loadSiteState,nativeAction,nativeCurrentPosition,siteMigrationPending} from '../src/site-bridge.web.ts';
 test('only the exact HTTPS site origin and project path stay inside the app',()=>{
  assert.equal(isSiteUrl('https://abdallrahimbirekdar-rgb.github.io/yalla-nrouh/?app=android'),true);
  assert.equal(isSiteUrl('https://abdallrahimbirekdar-rgb.github.io/yalla-nrouh/driver'),true);
@@ -140,15 +140,3 @@ test('valid data is not rewritten and failed backup or reads never erase the ori
  await assert.rejects(loadRecoverable(()=>{throw Error('disk read failed')},()=>writes.push('unexpected'),'state'));assert.equal(writes.length,0);
  await assert.rejects(loadRecoverable(()=>'{broken',()=>{throw Error('backup failed')},'state'));
 });
-
-test('Google navigation opens only with typed, bounded coordinates and waits for native acknowledgement',()=>withBrowser(async host=>{
- const data={latitude:51.48,longitude:7.21};
- host.ReactNativeWebView={postMessage:raw=>{
-  const request=JSON.parse(raw);
-  assert.deepEqual(readShellMessage(raw),{type:'google-navigation',id:request.id,...data,label:'Bochum',arabic:true});
-  assert.equal(readShellMessage(JSON.stringify({...request,latitude:91})),null);
-  assert.equal(readShellMessage(JSON.stringify({...request,label:'x'.repeat(161)})),null);
-  host.dispatchEvent(new CustomEvent('yalla:native-result',{detail:{id:request.id,ok:true}}));
- }};
- assert.equal(await openNativeGoogleNavigation(data,'Bochum',true),true);
-}));

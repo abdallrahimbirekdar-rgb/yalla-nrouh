@@ -134,7 +134,7 @@ jobs:
           (cd release-apk && sha256sum yalla-nrouh-test.apk > yalla-nrouh-test.apk.sha256)
           APP_VERSION=$(node -p "require('./app.json').expo.version")
           APP_CODE=$(node -p "require('./app.json').expo.android.versionCode")
-          MAPS_STATUS="Google Navigation SDK for the driver, screen stays awake during guidance, and live website updates."
+          MAPS_STATUS="Continuous foreground driver GPS, screen stays awake during guidance, and live website updates."
           if ! gh release view android-test-unified >/dev/null 2>&1; then
             gh release create android-test-unified --title "Yalla Nrouh Android $APP_VERSION (test)" --notes "Test build only; not a live taxi booking service." --prerelease
           fi

@@ -2,7 +2,7 @@ import React,{useEffect,useRef,useState} from 'react';
 import {ActivityIndicator,Linking,Modal,Platform,View} from 'react-native';
 import {useApp} from './context';
 import {cloudCurrentToken} from './cloud-api';
-import {isNativeWebView,nativeAction,openNativeGoogleNavigation} from './site-bridge';
+import {isNativeWebView,nativeAction} from './site-bridge';
 import {navigationPosition,navigationGuidanceReady,sharedNavigationDisplay,watchDriverPosition} from './navigation-position';
 import {router} from 'expo-router';
 import {positionDeadline} from './position-deadline';
@@ -105,19 +105,28 @@ export default function DriverNavigation({to,title,targetLabel,action,initialPla
     }
    }
   }
+  const restartIfSilent=()=>{
+   clearTimeout(firstFixTimer);
+   firstFixTimer=setTimeout(()=>{
+    if(!alive||!visible||!stopWatch)return;
+    setError('timeout');
+    stopWatch();stopWatch=null;
+    startLocation();
+   },12000);
+  };
   const startLocation=(ask=false)=>{
    if(!visible||stopWatch||gpsRequest)return;
    stopWatch=watchDriverPosition(ask,fix=>{
     if(!alive||!visible)return;
-    clearTimeout(firstFixTimer);
+    restartIfSilent();
     showFix(fix);setError('');
     void updateRoute(fix,navigationGuidanceReady(fix));
    },code=>{
     if(!alive||!visible)return;
-    clearTimeout(firstFixTimer);
+    if(['permission','services','accuracy'].includes(code))clearTimeout(firstFixTimer);
     setError(code);
    });
-   if(stopWatch)firstFixTimer=setTimeout(()=>setError('timeout'),15000);
+   if(stopWatch)restartIfSilent();
    else void tick(ask);
   };
   const pause=()=>{
@@ -158,30 +167,12 @@ export default function DriverNavigation({to,title,targetLabel,action,initialPla
  const arrived=!gpsLost&&!!position&&distanceMeters(position,to)<=35;
  const stale=lastFixAt!==null&&Date.now()-lastFixAt>15000;
  const gpsMessage=error==='permission'?t('اسمح بالموقع أثناء استخدام التطبيق.','Allow location while using the app.'):error==='services'?t('فعّل خدمة الموقع في الهاتف.','Turn on phone location.'):error==='accuracy'||error==='timeout'||error==='position'?t('لم يصل تحديث جديد للموقع. يمكنك فتح خرائط Google أو تحديث الموقع من هنا.','No new location update arrived. You can open Google Maps or retry here.'):'';
- const routeMessage=routeError==='no_route'?t('لم تعثر Google على طريق قيادة إلى الوجهة.','Google found no driving route.'):routeError==='busy'?t('خدمة الطرق مشغولة. سنعيد المحاولة.','The route service is busy. We will retry.'):routeError==='login_required'||routeError==='unauthorized'?t('تعذر التحقق من حساب السائق لحساب الطريق.','Could not verify the driver account for routing.'):routeError==='native_navigation'?t('تعذّر فتح الملاحة الداخلية. يمكنك فتح خرائط Google.','Could not open in-app navigation. You can open Google Maps.'):routeError==='navigation'?t('تعذر فتح خرائط Google.','Could not open Google Maps.'):routeError?t('تعذر تحميل مسار القيادة من Google.','Could not load the driving route from Google.'):'';
- const [nativeGoogle,setNativeGoogle]=useState(false);
- const openingGoogle=useRef(false);
- useEffect(()=>{
-  if(Platform.OS!=='web')return;
-  const detect=()=>setNativeGoogle((window as Window&{__YALLA_GOOGLE_NAVIGATION__?:boolean}).__YALLA_GOOGLE_NAVIGATION__===true);
-  detect();
-  window.addEventListener('yalla:native-bootstrap',detect);
-  return()=>window.removeEventListener('yalla:native-bootstrap',detect);
- },[]);
- const openInApp=async()=>{
-  if(openingGoogle.current)return;
-  openingGoogle.current=true;
-  try{
-   if(!await openNativeGoogleNavigation(to,targetLabel,ar))setRouteError('native_navigation');
-  }catch{setRouteError('native_navigation')}
-  finally{openingGoogle.current=false}
- };
+ const routeMessage=routeError==='no_route'?t('لم تعثر Google على طريق قيادة إلى الوجهة.','Google found no driving route.'):routeError==='busy'?t('خدمة الطرق مشغولة. سنعيد المحاولة.','The route service is busy. We will retry.'):routeError==='login_required'||routeError==='unauthorized'?t('تعذر التحقق من حساب السائق لحساب الطريق.','Could not verify the driver account for routing.'):routeError==='navigation'?t('تعذر فتح خرائط Google.','Could not open Google Maps.'):routeError?t('تعذر تحميل مسار القيادة من Google.','Could not load the driving route from Google.'):'';
  const openGoogle=()=>{void Linking.openURL(googleDirections(to,undefined,true)).catch(()=>setRouteError('navigation'))};
  const googleButton=<Button secondary icon="navigate-outline" title={t('فتح الملاحة في خرائط Google','Open navigation in Google Maps')} onPress={openGoogle}/>;
- const inAppButton=nativeGoogle&&<Button icon="navigate" title={t('ملاحة Google داخل يلا نروح · تجريبية','Google navigation in Yalla Nrouh · beta')} onPress={()=>void openInApp()}/>;
  const map=(height:number)=><View style={{height,borderRadius:16,overflow:'hidden'}}><MapCanvas compact readOnly minMapHeight={height} point={plan?.from??routeOrigin??to} route={plan?.points} cameraTarget={position?{point:position,revision,isLocation:true,zoom:17,overview:!follow}:undefined} onChange={()=>{}}/></View>;
  const instruction=<View style={{padding:14,borderRadius:14,backgroundColor:colors.selected,gap:6}}><Label display>{gpsLost?(!enabled?t('المتابعة متوقفة مؤقتًا','Navigation is paused'):stale?t('توقّف تحديث موقع السيارة','Car location has stopped updating'):position?t('بانتظار موقع أدق','Waiting for better GPS'):t('جارٍ قراءة موقع الهاتف','Reading phone location')):arrived?t('اقتربت من نقطة الوصول','You are near the destination'):routeError&&!plan?t('تعذر حساب الطريق','Could not find the route'):offRoute?t('أنت خارج المسار المعروض','You are off the shown route'):progress?.instruction||t('نجهّز الطريق إلى وجهتك…','Finding the route to your destination…')}</Label>{progress?.nextInstruction&&!gpsLost&&!offRoute&&!arrived&&<Label>{t('بعد ','In ')}{formatDistance(progress.nextTurnMeters,ar)}: {progress.nextInstruction}</Label>}{progress&&!gpsLost&&!offRoute&&!arrived&&<Label large>{formatDistance(progress.remainingMeters,ar)} · {Math.max(1,Math.ceil(progress.remainingSeconds/60))} {t('دقيقة تقريبًا','min, estimated')}</Label>}</View>;
- return <Panel outlined><Label large>{title}</Label>{instruction}{action}{inAppButton}{googleButton}
+ return <Panel outlined><Label large>{title}</Label>{instruction}{action}{googleButton}
   {connection==='offline'&&<Label muted>{plan?t('الاتصال منقطع. نعرض آخر مسار متاح.','Offline. Showing the last available route.'):t('الاتصال منقطع. سيُستأنف حساب الطريق عند عودته.','Offline. Route lookup resumes when you reconnect.')}</Label>}
   {lastFixAt!==null&&<Label muted>{t('آخر تحديث للموقع: ','Location last updated: ')}{new Date(lastFixAt).toLocaleTimeString(ar?'ar':'en')}</Label>}
   <Label>{targetLabel}</Label>
@@ -197,6 +188,6 @@ export default function DriverNavigation({to,title,targetLabel,action,initialPla
   {offRoute&&<Label muted>{t('نعيد حساب الطريق عند توفر موقع دقيق. يمكنك طلب التحديث يدويًا.','The route updates with an accurate location. You can also update it now.')}</Label>}
   <View style={{gap:8}}><Button icon="expand-outline" title={t('تكبير الملاحة داخل التطبيق','Full-screen navigation')} onPress={()=>setExpanded(true)}/><Button secondary icon="locate" title={follow?t('عرض المسار كاملًا','Show the full route'):t('متابعة موقعي','Follow my location')} onPress={()=>setFollow(value=>!value)}/><Button secondary title={t('تحديث الموقع والطريق','Update location and route')} onPress={()=>{setEnabled(true);setAttempt(value=>value+1)}}/><Button secondary title={enabled?t('إيقاف المتابعة مؤقتًا','Pause navigation'):t('استئناف الملاحة','Resume navigation')} onPress={()=>setEnabled(value=>!value)}/></View>
   <Label muted>Google Maps · {t('المتابعة أثناء فتح التطبيق','Navigation while the app is open')}</Label>
-  <Modal visible={expanded} animationType="none" onRequestClose={()=>setExpanded(false)}><View style={{flex:1,padding:16,paddingTop:32,backgroundColor:colors.background,gap:12}}>{instruction}{action}{inAppButton}{googleButton}<View style={{flex:1,minHeight:200}}><MapCanvas compact readOnly minMapHeight={200} point={plan?.from??routeOrigin??to} route={plan?.points} cameraTarget={position?{point:position,revision,isLocation:true,zoom:17,overview:!follow}:undefined} onChange={()=>{}}/></View>{!!(routeMessage||gpsMessage)&&<Label muted>{routeMessage||gpsMessage}</Label>}<Button secondary title={follow?t('عرض المسار كاملًا','Show the full route'):t('متابعة موقعي','Follow my location')} onPress={()=>setFollow(value=>!value)}/><Button title={t('العودة إلى الطلب','Back to the ride')} onPress={()=>setExpanded(false)}/></View></Modal>
+  <Modal visible={expanded} animationType="none" onRequestClose={()=>setExpanded(false)}><View style={{flex:1,padding:16,paddingTop:32,backgroundColor:colors.background,gap:12}}>{instruction}{action}{googleButton}<View style={{flex:1,minHeight:200}}><MapCanvas compact readOnly minMapHeight={200} point={plan?.from??routeOrigin??to} route={plan?.points} cameraTarget={position?{point:position,revision,isLocation:true,zoom:17,overview:!follow}:undefined} onChange={()=>{}}/></View>{!!(routeMessage||gpsMessage)&&<Label muted>{routeMessage||gpsMessage}</Label>}<Button secondary title={follow?t('عرض المسار كاملًا','Show the full route'):t('متابعة موقعي','Follow my location')} onPress={()=>setFollow(value=>!value)}/><Button title={t('العودة إلى الطلب','Back to the ride')} onPress={()=>setExpanded(false)}/></View></Modal>
  </Panel>;
 }

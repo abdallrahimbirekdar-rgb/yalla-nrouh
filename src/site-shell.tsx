@@ -12,7 +12,6 @@ import {enableLocalAlerts,notifyLocal} from './alerts';
 import {SITE_URL,isSiteUrl,externalLink,buildVersion,readShellMessage,bootstrapScript,resultScript,locationScript} from './site-shell-policy';
 const nativeNavigation=Platform.OS==='android'?requireOptionalNativeModule<{
  setScreenAwake:(active:boolean)=>Promise<void>;
- open:(latitude:number,longitude:number,label:string,arabic:boolean)=>Promise<boolean>;
 }>('YallaDriverNavigation'):null;
 export default function SiteShell(){
  const [language,setLanguage]=useState('ar'),[dark,setDark]=useState(false);
@@ -116,12 +115,6 @@ export default function SiteShell(){
     if(message.type==='refresh'){refresh();return}
     if(message.type==='back-default'){if(canGoBack.current)web.current?.goBack();else BackHandler.exitApp();return}
     if(message.type==='location-settings'){void Linking.openSettings().then(()=>web.current?.injectJavaScript(resultScript(message.id,true))).catch(()=>web.current?.injectJavaScript(resultScript(message.id,false)));return}
-    if(message.type==='google-navigation'){
-     const reply=(ok:boolean)=>{if(alive.current)web.current?.injectJavaScript(resultScript(message.id,ok))};
-     if(!nativeNavigation||AppState.currentState!=='active'){reply(false);return}
-     void nativeNavigation.open(message.latitude,message.longitude,message.label,message.arabic).then(reply,()=>reply(false));
-     return;
-    }
     if(message.type==='driver-location-start'){
      if(AppState.currentState==='active')keepNavigationScreenAwake(message.id);
      void startDriverWatch(message.id,message.askPermission);return;
@@ -180,7 +173,7 @@ export default function SiteShell(){
     if(message.type==='alerts-enable'||message.type==='notify'){const task=message.type==='alerts-enable'?enableLocalAlerts():notifyLocal(message.title,message.body).then(()=>true);void task.then(ok=>{if(alive.current)web.current?.injectJavaScript(resultScript(message.id,ok))}).catch(()=>{if(alive.current)web.current?.injectJavaScript(resultScript(message.id,false))});return}
     loadedVersion.current=message.version;
     void gpsStatus('ready').catch(()=>{});
-    void Location.getForegroundPermissionsAsync().then(permission=>{if(alive.current)web.current?.injectJavaScript(bootstrapScript(message.id,null,permission.granted,true,!!nativeNavigation))}).catch(()=>{if(alive.current)web.current?.injectJavaScript(bootstrapScript(message.id,null,false,true,!!nativeNavigation))});
+    void Location.getForegroundPermissionsAsync().then(permission=>{if(alive.current)web.current?.injectJavaScript(bootstrapScript(message.id,null,permission.granted,true))}).catch(()=>{if(alive.current)web.current?.injectJavaScript(bootstrapScript(message.id,null,false,true))});
    }}/>
   {loading&&!failed&&<View pointerEvents="none" style={{position:'absolute',left:0,right:0,top:0,bottom:0,backgroundColor:colors.background,justifyContent:'center',alignItems:'center',gap:12}}><ActivityIndicator color={colors.purple}/><Label>{t('جارٍ فتح يلا نروح…','Opening Yalla Nrouh…')}</Label></View>}
   {failed&&<View style={{position:'absolute',left:0,right:0,top:0,bottom:0,padding:24,backgroundColor:colors.background,justifyContent:'center',gap:16}}><Label>{t('تعذر فتح الموقع. تحقق من الإنترنت ثم أعد المحاولة.','Could not open the website. Check your internet and try again.')}</Label><Label muted>{t('بياناتك المحفوظة تبقى على الجهاز.','Your saved data stays on this device.')}</Label><Button title={t('إعادة المحاولة','Try again')} onPress={()=>{setFailed(false);setLoading(true);web.current?.reload()}}/></View>}

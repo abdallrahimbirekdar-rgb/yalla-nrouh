@@ -5,7 +5,6 @@ export default ({config}:ConfigContext):ExpoConfig=>{
   return {...config,...(webBasePath?{experiments:{...config.experiments,baseUrl:webBasePath}}:{}),extra:{...config.extra,googleMapsConfigured:Boolean(mapsKey)},name:config.name??'يلا نروح',slug:config.slug??'yalla-nrouh',plugins:[
     ...(config.plugins??[]).filter(plugin=>(Array.isArray(plugin)?plugin[0]:plugin)!=='expo-location'),
     ...(mapsKey?[['react-native-maps',{androidGoogleMapsApiKey:mapsKey}] as [string,Record<string,string>]]:[]),
-    './plugins/with-driver-navigation.js',
     ['expo-location',{locationWhenInUsePermission:'اسمح ليلا نروح باستخدام موقعك الدقيق لتحديد الانطلاق وإظهار الطريق وتسجيل الرحلة أثناء استخدام التطبيق. Allow precise location for pickup, routes and ride recording while you use the app.',isIosBackgroundLocationEnabled:false,isAndroidBackgroundLocationEnabled:false,isAndroidForegroundServiceEnabled:false}],
   ]};
 };

@@ -23,5 +23,3 @@ export async function siteCurrentPosition(askPermission:boolean):Promise<Coordin
 
 // Only the website sends typed native bridge actions.
 export async function nativeAction(_type:'alerts-enable'|'notify'|'location-settings',_text?:{title:string;body:string}):Promise<boolean>{return false}
-
-export async function openNativeGoogleNavigation(_to:Coordinate,_label:string,_arabic:boolean):Promise<boolean>{return false}
