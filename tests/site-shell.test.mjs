@@ -23,6 +23,10 @@ test('GPS bridge accepts only typed permission requests with bounded IDs',()=>{
  assert.equal(readShellMessage('{"type":"location","id":"gps-2","askPermission":false,"track":"true"}'),null);
  assert.equal(readShellMessage('{"type":"location","id":"gps-1","askPermission":"yes"}'),null);
  assert.equal(readShellMessage('{"type":"location","id":"<script>","askPermission":true}'),null);
+ assert.deepEqual(readShellMessage('{"type":"driver-location-start","id":"drive-1","askPermission":false}'),{type:'driver-location-start',id:'drive-1',askPermission:false});
+ assert.deepEqual(readShellMessage('{"type":"driver-location-stop","id":"drive-1"}'),{type:'driver-location-stop',id:'drive-1'});
+ assert.equal(readShellMessage('{"type":"driver-location-start","id":"drive-1"}'),null);
+ assert.equal(readShellMessage('{"type":"driver-location-stop","id":"<script>"}'),null);
 });
 test('GPS response is serialized safely and invalid coordinates are removed',()=>{
  let payload;

@@ -133,7 +133,7 @@ jobs:
           (cd release-apk && sha256sum yalla-nrouh-test.apk > yalla-nrouh-test.apk.sha256)
           APP_VERSION=$(node -p "require('./app.json').expo.version")
           APP_CODE=$(node -p "require('./app.json').expo.android.versionCode")
-          MAPS_STATUS="Clean Android 1.0.0 native foreground GPS host, live Google Maps website, and website UI updates without another APK."
+          MAPS_STATUS="Continuous foreground driver GPS, live Google Maps website, and website UI updates without another APK."
           if ! gh release view android-test-unified >/dev/null 2>&1; then
             gh release create android-test-unified --title "Yalla Nrouh Android $APP_VERSION (test)" --notes "Test build only; not a live taxi booking service." --prerelease
           fi

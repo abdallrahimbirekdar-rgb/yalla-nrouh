@@ -78,3 +78,49 @@ export function sharedNavigationDisplay(point:{latitude:number;longitude:number}
  const match=measured&&Math.abs(measured.latitude-point.latitude)<0.000001&&Math.abs(measured.longitude-point.longitude)<0.000001;
  return {point,fix:match?measured:null,accuracy:match?measured.accuracy:null,guidanceReady:match?navigationGuidanceReady(measured):false};
 }
+
+// Live navigation owns its foreground subscription independently of one-shot
+// requests for booking, driver availability and the fare meter.
+export function watchDriverPosition(ask:boolean,onFix:(fix:Fix)=>void,onError:(code:string)=>void):(()=>void)|null{
+ if(typeof window==='undefined')return null;
+ const host=window as Window&{__YALLA_DRIVER_LOCATION_STREAM__?:boolean;ReactNativeWebView?:{postMessage:(message:string)=>void}};
+ let lastTime=0;
+ const deliver=(point:unknown,accuracy:unknown,time:unknown)=>{
+  if(!isCoordinate(point)||typeof accuracy!=='number'||!Number.isFinite(accuracy)||accuracy<0||accuracy>250
+     ||typeof time!=='number'||!Number.isFinite(time)||time<=lastTime||time<Date.now()-5000||time>Date.now()+3000)return;
+  lastTime=time;
+  onFix({...point,accuracy,time});
+ };
+ const bridge=host.ReactNativeWebView;
+ if(bridge){
+  if(!host.__YALLA_DRIVER_LOCATION_STREAM__)return null;
+  const id=Date.now().toString(36)+'-'+Math.random().toString(36).slice(2);
+  const update=(event:Event)=>{
+   const detail=(event as CustomEvent).detail;
+   if(detail?.id!==id)return;
+   if(detail.error){onError(detail.error);return}
+   deliver(detail.point,detail.fix?.accuracy,detail.fix?.time);
+  };
+  host.addEventListener('yalla:native-position',update);
+  try{bridge.postMessage(JSON.stringify({type:'driver-location-start',id,askPermission:ask}))}
+  catch{host.removeEventListener('yalla:native-position',update);return null}
+  return ()=>{
+   host.removeEventListener('yalla:native-position',update);
+   try{bridge.postMessage(JSON.stringify({type:'driver-location-stop',id}))}catch{}
+  };
+ }
+ const gps=navigator.geolocation;
+ if(!gps)return null;
+ let active=true,watch:number|undefined;
+ void (async()=>{
+  if(!ask&&!await webLocationGranted()){if(active)onError('permission');return}
+  if(!active)return;
+  try{
+   watch=gps.watchPosition(({coords,timestamp})=>{
+    if(active)deliver({latitude:coords.latitude,longitude:coords.longitude},coords.accuracy,timestamp);
+   },error=>{if(active)onError(error.code===1?'permission':error.code===3?'timeout':'position')},
+   {enableHighAccuracy:true,maximumAge:0,timeout:15000});
+  }catch{onError('position')}
+ })();
+ return ()=>{active=false;if(watch!==undefined)gps.clearWatch(watch)};
+}

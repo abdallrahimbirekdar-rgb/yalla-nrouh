@@ -72,3 +72,26 @@ test('browser navigation keeps watching after a coarse fix and clears the watch 
   assert.equal(cleared,12);
  }finally{Object.defineProperty(globalThis,'navigator',original)}
 }));
+
+test('driver stream follows fresh Android positions and ignores stale or late events after stop',()=>host(async window=>{
+ const {watchDriverPosition}=await import('../src/navigation-position.ts');
+ const messages=[],fixes=[];
+ window.ReactNativeWebView={postMessage:raw=>messages.push(JSON.parse(raw))};
+ assert.equal(watchDriverPosition(false,()=>{},()=>{}),null);
+ window.__YALLA_DRIVER_LOCATION_STREAM__=true;
+ const stop=watchDriverPosition(false,fix=>fixes.push(fix),()=>assert.fail('unexpected GPS error'));
+ const {id}=messages[0];
+ const now=Date.now();
+ const emit=(requestId,time,latitude)=>window.dispatchEvent(new CustomEvent('yalla:native-position',{
+  detail:{id:requestId,point:{...point,latitude},fix:{time,accuracy:4}},
+ }));
+ emit(id,now-60000,51.48);
+ emit('another-request',now-200,51.49);
+ emit(id,now-100,51.5);
+ emit(id,now,51.51);
+ emit(id,now-100,51.5);
+ stop();
+ emit(id,now+1,51.52);
+ assert.deepEqual(fixes.map(fix=>fix.latitude),[51.5,51.51]);
+ assert.deepEqual(messages,[{type:'driver-location-start',id,askPermission:false},{type:'driver-location-stop',id}]);
+}));

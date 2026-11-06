@@ -3,7 +3,7 @@ import {ActivityIndicator,Linking,Modal,Platform,View} from 'react-native';
 import {useApp} from './context';
 import {cloudCurrentToken} from './cloud-api';
 import {isNativeWebView,nativeAction} from './site-bridge';
-import {navigationPosition,navigationGuidanceReady,sharedNavigationDisplay} from './navigation-position';
+import {navigationPosition,navigationGuidanceReady,sharedNavigationDisplay,watchDriverPosition} from './navigation-position';
 import {router} from 'expo-router';
 import {positionDeadline} from './position-deadline';
 import {createRoutingClient,type RoutePlan} from './routing';
@@ -30,7 +30,10 @@ export default function DriverNavigation({to,title,targetLabel,action,initialPla
   if(target.current!==key){target.current=key;latest.current=null;lastPrecise.current=null;setPlan(null)}
   if(!enabled){setBusy(false);setGpsLost(true);return}
   setError('');setRouteError('');
-  let alive=true,nativeVisible:boolean|null=null,visible=Platform.OS!=='web'||document.visibilityState!=='hidden';
+  let alive=true,nativeVisible=Platform.OS==='web'?(window as Window&{__YALLA_NATIVE_ACTIVE__?:boolean}).__YALLA_NATIVE_ACTIVE__:undefined;
+  const isVisible=()=>Platform.OS!=='web'||(nativeVisible!==false&&document.visibilityState!=='hidden');
+  let visible=isVisible(),stopWatch:(()=>void)|null=null;
+  let firstFixTimer:ReturnType<typeof setTimeout>|undefined;
   let timer:ReturnType<typeof setTimeout>|undefined,gpsRequest:AbortController|null=null,routeRequest:AbortController|null=null;
   let nextRouteAt=0,offRouteCount=0,reroutes=0,forceRoute=attempt>0;
   let hasPosition=!!known,lastPosition=start?undefined:known;
@@ -70,7 +73,7 @@ export default function DriverNavigation({to,title,targetLabel,action,initialPla
     }
    }finally{
     if(routeRequest===controller)routeRequest=null;
-    if(alive)setBusy(false);
+    if(alive&&!routeRequest)setBusy(false);
    }
   }
   async function tick(ask=false){
@@ -93,27 +96,55 @@ export default function DriverNavigation({to,title,targetLabel,action,initialPla
      if(lastPosition||start)void updateRoute(lastPosition??start!);
     }
    }finally{
-    if(gpsRequest===controller)gpsRequest=null;
-    if(alive){
-     if(!routeRequest)setBusy(false);
-     if(visible)timer=setTimeout(()=>void tick(),delay);
+    if(gpsRequest===controller){
+     gpsRequest=null;
+     if(alive){
+      if(!routeRequest)setBusy(false);
+      if(visible)timer=setTimeout(()=>void tick(),delay);
+     }
     }
    }
   }
-  const pause=()=>{clearTimeout(timer);gpsRequest?.abort();routeRequest?.abort()};
+  const startLocation=(ask=false)=>{
+   if(!visible||stopWatch||gpsRequest)return;
+   stopWatch=watchDriverPosition(ask,fix=>{
+    if(!alive||!visible)return;
+    clearTimeout(firstFixTimer);
+    showFix(fix);setError('');
+    void updateRoute(fix,navigationGuidanceReady(fix));
+   },code=>{
+    if(!alive||!visible)return;
+    clearTimeout(firstFixTimer);
+    setError(code);
+   });
+   if(stopWatch)firstFixTimer=setTimeout(()=>setError('timeout'),15000);
+   else void tick(ask);
+  };
+  const pause=()=>{
+   clearTimeout(timer);clearTimeout(firstFixTimer);
+   stopWatch?.();stopWatch=null;
+   gpsRequest?.abort();gpsRequest=null;
+   routeRequest?.abort();routeRequest=null;
+  };
   const resume=()=>{
-   visible=nativeVisible??(Platform.OS!=='web'||document.visibilityState!=='hidden');
+   visible=isVisible();
    if(!visible){pause();return}
    if(!latest.current){nextRouteAt=0;if(lastPosition||start)void updateRoute(lastPosition??start!)}
-   void tick();
+   startLocation();
+  };
+  const bootstrap=()=>{
+   if(!visible||stopWatch||!(window as Window&{__YALLA_DRIVER_LOCATION_STREAM__?:boolean}).__YALLA_DRIVER_LOCATION_STREAM__)return;
+   clearTimeout(timer);gpsRequest?.abort();gpsRequest=null;
+   if(!routeRequest)setBusy(false);
+   startLocation();
   };
   const native=(event:Event)=>{const active=(event as CustomEvent).detail?.active;if(typeof active==='boolean'){nativeVisible=active;resume()}};
-  if(Platform.OS==='web'){document.addEventListener('visibilitychange',resume);window.addEventListener('yalla:native-visibility',native);window.addEventListener('online',resume)}
+  if(Platform.OS==='web'){document.addEventListener('visibilitychange',resume);window.addEventListener('yalla:native-visibility',native);window.addEventListener('yalla:native-bootstrap',bootstrap);window.addEventListener('online',resume)}
   if(known){const display=sharedNavigationDisplay(known);if(display.fix)showFix(display.fix)}
   const first=lastPosition??start;
   if(first)void updateRoute(first);
-  void tick(attempt>0);
-  return()=>{alive=false;pause();if(Platform.OS==='web'){document.removeEventListener('visibilitychange',resume);window.removeEventListener('yalla:native-visibility',native);window.removeEventListener('online',resume)}};
+  startLocation(attempt>0);
+  return()=>{alive=false;pause();if(Platform.OS==='web'){document.removeEventListener('visibilitychange',resume);window.removeEventListener('yalla:native-visibility',native);window.removeEventListener('yalla:native-bootstrap',bootstrap);window.removeEventListener('online',resume)}};
  },[lat,lng,originLat,originLng,state.language,enabled,attempt,initialPlan]);
  useEffect(()=>{
   if(gpsLost||lastFixAt===null)return;
@@ -124,19 +155,21 @@ export default function DriverNavigation({to,title,targetLabel,action,initialPla
  useEffect(()=>{if(!expanded||Platform.OS!=='web')return;const back=(event:Event)=>{event.preventDefault();setExpanded(false)};window.addEventListener('yalla:native-back',back);return()=>window.removeEventListener('yalla:native-back',back)},[expanded]);
  const progress=plan&&position?navigationProgress(plan,position):null;
  const offRoute=progress&&progress.offRouteMeters>100;
- const gpsMessage=error==='permission'?t('اسمح بالموقع أثناء استخدام التطبيق.','Allow location while using the app.'):error==='services'?t('فعّل خدمة الموقع في الهاتف.','Turn on phone location.'):error==='accuracy'||error==='timeout'||error==='position'?t('نعيد المحاولة تلقائيًا. إذا بقي الموقع تقريبيًا، تأكد من تفعيل الموقع الدقيق في أذونات الهاتف.','We retry automatically. If location remains approximate, check that precise location is enabled in your phone permissions.'):'';
+ const arrived=!gpsLost&&!!position&&distanceMeters(position,to)<=35;
+ const stale=lastFixAt!==null&&Date.now()-lastFixAt>15000;
+ const gpsMessage=error==='permission'?t('اسمح بالموقع أثناء استخدام التطبيق.','Allow location while using the app.'):error==='services'?t('فعّل خدمة الموقع في الهاتف.','Turn on phone location.'):error==='accuracy'||error==='timeout'||error==='position'?t('لم يصل تحديث جديد للموقع. يمكنك فتح خرائط Google أو تحديث الموقع من هنا.','No new location update arrived. You can open Google Maps or retry here.'):'';
  const routeMessage=routeError==='no_route'?t('لم تعثر Google على طريق قيادة إلى الوجهة.','Google found no driving route.'):routeError==='busy'?t('خدمة الطرق مشغولة. سنعيد المحاولة.','The route service is busy. We will retry.'):routeError==='login_required'||routeError==='unauthorized'?t('تعذر التحقق من حساب السائق لحساب الطريق.','Could not verify the driver account for routing.'):routeError==='navigation'?t('تعذر فتح خرائط Google.','Could not open Google Maps.'):routeError?t('تعذر تحميل مسار القيادة من Google.','Could not load the driving route from Google.'):'';
  const openGoogle=()=>{void Linking.openURL(googleDirections(to,undefined,true)).catch(()=>setRouteError('navigation'))};
  const googleButton=<Button secondary icon="navigate-outline" title={t('فتح الملاحة في خرائط Google','Open navigation in Google Maps')} onPress={openGoogle}/>;
  const map=(height:number)=><View style={{height,borderRadius:16,overflow:'hidden'}}><MapCanvas compact readOnly minMapHeight={height} point={plan?.from??routeOrigin??to} route={plan?.points} cameraTarget={position?{point:position,revision,isLocation:true,zoom:17,overview:!follow}:undefined} onChange={()=>{}}/></View>;
- const instruction=<View style={{padding:14,borderRadius:14,backgroundColor:colors.selected,gap:6}}><Label display>{gpsLost?(!enabled?t('المتابعة متوقفة مؤقتًا','Navigation is paused'):position?t('بانتظار موقع أدق','Waiting for better GPS'):t('جارٍ قراءة موقع الهاتف','Reading phone location')):routeError&&!plan?t('تعذر حساب الطريق','Could not find the route'):progress?.arrived?t('اقتربت من نقطة الوصول','You are near the destination'):offRoute?t('أنت خارج المسار المعروض','You are off the shown route'):progress?.instruction||t('نجهّز الطريق إلى وجهتك…','Finding the route to your destination…')}</Label>{progress?.nextInstruction&&!gpsLost&&!offRoute&&!progress.arrived&&<Label>{t('بعد ','In ')}{formatDistance(progress.nextTurnMeters,ar)}: {progress.nextInstruction}</Label>}{progress&&!gpsLost&&!offRoute&&<Label large>{formatDistance(progress.remainingMeters,ar)} · {Math.max(1,Math.ceil(progress.remainingSeconds/60))} {t('دقيقة تقريبًا','min, estimated')}</Label>}</View>;
+ const instruction=<View style={{padding:14,borderRadius:14,backgroundColor:colors.selected,gap:6}}><Label display>{gpsLost?(!enabled?t('المتابعة متوقفة مؤقتًا','Navigation is paused'):stale?t('توقّف تحديث موقع السيارة','Car location has stopped updating'):position?t('بانتظار موقع أدق','Waiting for better GPS'):t('جارٍ قراءة موقع الهاتف','Reading phone location')):arrived?t('اقتربت من نقطة الوصول','You are near the destination'):routeError&&!plan?t('تعذر حساب الطريق','Could not find the route'):offRoute?t('أنت خارج المسار المعروض','You are off the shown route'):progress?.instruction||t('نجهّز الطريق إلى وجهتك…','Finding the route to your destination…')}</Label>{progress?.nextInstruction&&!gpsLost&&!offRoute&&!arrived&&<Label>{t('بعد ','In ')}{formatDistance(progress.nextTurnMeters,ar)}: {progress.nextInstruction}</Label>}{progress&&!gpsLost&&!offRoute&&!arrived&&<Label large>{formatDistance(progress.remainingMeters,ar)} · {Math.max(1,Math.ceil(progress.remainingSeconds/60))} {t('دقيقة تقريبًا','min, estimated')}</Label>}</View>;
  return <Panel outlined><Label large>{title}</Label>{instruction}{action}{googleButton}
   {connection==='offline'&&<Label muted>{plan?t('الاتصال منقطع. نعرض آخر مسار متاح.','Offline. Showing the last available route.'):t('الاتصال منقطع. سيُستأنف حساب الطريق عند عودته.','Offline. Route lookup resumes when you reconnect.')}</Label>}
   {lastFixAt!==null&&<Label muted>{t('آخر تحديث للموقع: ','Location last updated: ')}{new Date(lastFixAt).toLocaleTimeString(ar?'ar':'en')}</Label>}
   <Label>{targetLabel}</Label>
   {!expanded&&map(290)}
   {busy&&<View style={{flexDirection:'row',gap:8,alignItems:'center'}}><ActivityIndicator color={colors.purple}/><Label muted>{busyStage==='location'?t('جارٍ قراءة موقع الهاتف…','Reading phone location…'):t('جارٍ حساب الطريق…','Finding the route…')} {elapsed} {t('ث','s')}</Label></View>}
-  {accuracy!==null&&<Label muted>{t('دقة آخر قراءة: نحو ','Last location accuracy: about ')}{Math.ceil(accuracy)} {t('متر','m')}{gpsLost&&position?t(' — نعرض الموقع والطريق، وتبقى تعليمات الانعطاف متوقفة حتى تتحسن الدقة.',' — the map is visible; turn directions wait for better accuracy.'):''}</Label>}
+  {accuracy!==null&&<Label muted>{t('دقة آخر قراءة: نحو ','Last location accuracy: about ')}{Math.ceil(accuracy)} {t('متر','m')}{stale?t(' · قراءة قديمة',' · Previous reading'):''}</Label>}
   {!!gpsMessage&&<Label muted>{gpsMessage}</Label>}
   {!!routeMessage&&<View accessibilityRole="alert"><Label muted>{routeMessage}</Label></View>}
   {['permission','services','accuracy'].includes(error)&&<View style={{gap:8}}>
