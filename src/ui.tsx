@@ -1,8 +1,9 @@
 import {useAuth} from './auth';
 import React,{useEffect,useState} from 'react';
-import {Image,Modal,ActivityIndicator,KeyboardAvoidingView,Platform,Pressable,ScrollView,StyleSheet,Text,TextInput,type TextInputProps,View} from 'react-native';
+import {Modal,ActivityIndicator,KeyboardAvoidingView,Platform,Pressable,ScrollView,StyleSheet,Text,TextInput,type TextInputProps,View} from 'react-native';
 import {SafeAreaView} from 'react-native-safe-area-context';
 import Ionicons from '@expo/vector-icons/Ionicons';
+import {BrandLogo} from './brand-logo';
 import {isLoaded} from 'expo-font';
 import {router,type Href} from 'expo-router';
 import {useApp} from './context';
@@ -40,11 +41,11 @@ export function EmptyIllustration({icon='car-sport-outline'}:{icon?:IconName}){c
 export function DeviceStatus(){const {connection,saveError,retrySave,alertError}=useApp();const t=useText();const migrationPending=getMigrationPending();return <View style={{gap:6}}>{connection==='offline'&&<Label muted>{t('لا يوجد اتصال • العناوين والرحلة متاحة محليًا','No connection • addresses and ride are kept on this phone')}</Label>}{migrationPending&&<View accessibilityRole="alert"><Label>{t('تأخر نقل بيانات النسخة السابقة. بياناتك القديمة محفوظة؛ أعد فتح الصفحة لإكمال النقل قبل إجراء تغييرات.','Old data transfer is delayed. Your old data is safe. Reopen the page before making changes.')}</Label><Button secondary title={t('إعادة فتح الصفحة','Reopen page')} onPress={()=>{if(Platform.OS==='web')window.location.reload()}}/></View>}{saveError&&!migrationPending&&<View accessibilityRole="alert"><Label>{t('لم يُحفظ آخر تغيير. تحقق من مساحة الهاتف وأعد المحاولة.','The last change was not saved. Check phone space and try again.')}</Label><Button secondary title={t('إعادة الحفظ','Save again')} onPress={retrySave}/></View>}{alertError&&<Label muted>{t('تعذر إظهار الإشعار المحلي؛ راجع إذن الإشعارات.','Could not show a local alert. Check notification permission.')}</Label>}</View>}
 export function AccountButton(){const auth=useAuth();const t=useText();const {colors}=useTheme();return <Pressable accessibilityRole="button" accessibilityLabel={auth.session?t('حسابي','My account'):t('تسجيل الدخول','Sign in')} onPress={()=>router.push('/account')} style={{minHeight:44,paddingHorizontal:12,borderRadius:22,backgroundColor:colors.selected,flexDirection:'row',alignItems:'center',justifyContent:'center',gap:6}}><Icon name={auth.session?'person-circle-outline':'log-in-outline'} size={20}/><Label muted>{auth.session?t('حسابي','My account'):t('تسجيل الدخول','Sign in')}</Label></Pressable>}
 export function AppMenu({onSettings}:{onSettings?:()=>void}={}){
- const auth=useAuth();const [open,setOpen]=useState(false);const {state,dispatch}=useApp();const {colors,dark}=useTheme();const t=useText();
+ const auth=useAuth();const [open,setOpen]=useState(false);const {state,dispatch}=useApp();const {colors}=useTheme();const t=useText();
  const shell=Platform.OS==='web'&&typeof window!=='undefined'?(window as Window&{ReactNativeWebView?:{postMessage:(value:string)=>void}}).ReactNativeWebView:undefined;
  useEffect(()=>{if(Platform.OS!=='web'||!open)return;const back=(event:Event)=>{event.preventDefault();setOpen(false)};window.addEventListener('yalla:native-back',back);return()=>window.removeEventListener('yalla:native-back',back)},[open]);
  const go=(path:'/'|'/account'|'/cloud'|'/admin'|'/settings')=>{setOpen(false);if(path==='/settings'&&onSettings)onSettings();else router.push(path)};
- return <><Pressable accessibilityRole="button" accessibilityLabel={t('فتح القائمة','Open menu')} onPress={()=>setOpen(true)} style={themedStyles(colors).circle}><Icon name="menu" size={25}/></Pressable><Modal visible={open} transparent animationType="none" onRequestClose={()=>setOpen(false)}><View style={styles.overlay}><Pressable style={StyleSheet.absoluteFill} accessibilityLabel={t('إغلاق القائمة','Close menu')} onPress={()=>setOpen(false)}/><View style={[themedStyles(colors).menu,{maxHeight:'90%'}]}><View style={{flexDirection:'row',justifyContent:'space-between',alignItems:'center'}}><Image source={dark?require('../assets/logo-header-dark.png'):require('../assets/logo-approved.png')} resizeMode="contain" accessibilityLabel="يلا نروح" style={{width:108,height:60}}/><Pressable accessibilityRole="button" accessibilityLabel={t('إغلاق','Close')} onPress={()=>setOpen(false)} style={themedStyles(colors).circle}><Icon name="close"/></Pressable></View><ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{gap:10}}>
+ return <><Pressable accessibilityRole="button" accessibilityLabel={t('فتح القائمة','Open menu')} onPress={()=>setOpen(true)} style={themedStyles(colors).circle}><Icon name="menu" size={25}/></Pressable><Modal visible={open} transparent animationType="none" onRequestClose={()=>setOpen(false)}><View style={styles.overlay}><Pressable style={StyleSheet.absoluteFill} accessibilityLabel={t('إغلاق القائمة','Close menu')} onPress={()=>setOpen(false)}/><View style={[themedStyles(colors).menu,{maxHeight:'90%'}]}><View style={{flexDirection:'row-reverse',justifyContent:'space-between',alignItems:'center'}}><BrandLogo menu/><Pressable accessibilityRole="button" accessibilityLabel={t('إغلاق','Close')} onPress={()=>setOpen(false)} style={themedStyles(colors).circle}><Icon name="close"/></Pressable></View><ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{gap:10}}>
  <Label muted>{auth.session?.user.email??t('أهلًا بك في يلا نروح','Welcome to Yalla Nrouh')}</Label>
  {!auth.driver&&<Button icon="car-outline" title={t('حجز رحلة','Book a ride')} onPress={()=>go('/')}/>}
  <Button secondary icon="person-circle-outline" title={auth.session?(auth.driver?t('حسابي','My account'):t('حسابي وأماكني','My account and places')):t('تسجيل الدخول / حساب جديد','Sign in / New account')} onPress={()=>go('/account')}/>
@@ -57,7 +58,7 @@ export function AppMenu({onSettings}:{onSettings?:()=>void}={}){
  <Label muted>{t('نسخة اختبار • الدفع نقدًا','Test version • Pay in cash')}</Label>
  </ScrollView></View></View></Modal></>;
 }
-export function Page({title,children,hero,footer,compact=false,simpleHeader=false,viewportHeight,backTo='/'}:{title:string;children:React.ReactNode;hero?:React.ReactNode;footer?:React.ReactNode;compact?:boolean;simpleHeader?:boolean;viewportHeight?:number;backTo?:Href}){
+export function Page({title,children,hero,footer,compact=false,simpleHeader=false,showBrand=false,viewportHeight,backTo='/'}:{title:string;children:React.ReactNode;hero?:React.ReactNode;footer?:React.ReactNode;compact?:boolean;simpleHeader?:boolean;showBrand?:boolean;viewportHeight?:number;backTo?:Href}){
  const auth=useAuth();const {ready,loadError,retry,state}=useApp();const {colors}=useTheme();const t=useText();const themed=themedStyles(colors);
  const arabic=state.language==='ar';
  const driverHeader=compact&&auth.driver&&!simpleHeader;
@@ -65,8 +66,8 @@ export function Page({title,children,hero,footer,compact=false,simpleHeader=fals
  return <SafeAreaView style={[styles.safe,{backgroundColor:compact?colors.soft:colors.background,maxHeight:viewportHeight}]}>
   <KeyboardAvoidingView style={{flex:1}} behavior={Platform.OS==='ios'?'padding':undefined}>
    <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={[styles.page,compact&&styles.compactPage]}>
-    <View style={{flexDirection:arabic?'row-reverse':'row',alignItems:'center',justifyContent:'space-between',gap:8}}>
-     {driverHeader?<View style={{flexShrink:1}}><Label large>{title}</Label></View>:back}
+    <View style={{flexDirection:driverHeader||showBrand?'row-reverse':arabic?'row-reverse':'row',alignItems:'center',justifyContent:'space-between',gap:8}}>
+     {driverHeader||showBrand?<BrandLogo/>:back}
      {simpleHeader?<View style={{flex:1}}><Label large>{title}</Label></View>:<View style={{flexDirection:'row',gap:8,alignItems:'center'}}><AccountButton/><AppMenu/></View>}
     </View>
     {hero??(!simpleHeader&&!driverHeader?<Label large>{title}</Label>:null)}
