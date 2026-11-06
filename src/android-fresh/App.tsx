@@ -7,7 +7,7 @@ import Constants from 'expo-constants';
 import {requireOptionalNativeModule} from 'expo-modules-core';
 import {enableLocalAlerts,notifyLocal} from '../alerts';
 import {acceptableFix,awaitFreshFix,deadlineOr,GpsTaskPool} from './gps';
-import {SITE,bootstrapScript,diagnosticScript,eventScript,autoFixScript,externalTarget,positionScript,readWebMessage,trustedSite,
+import {SITE,bootstrapScript,diagnosticScript,eventScript,autoFixScript,externalTarget,positionScript,readWebMessage,trustedSite,trustedWebMessage,
  type WebMessage,type PositionResponse} from './bridge';
 
 // Fresh native app: it owns ONLY Android foreground location and the live website.
@@ -79,6 +79,7 @@ const btn={paddingVertical:13,paddingHorizontal:18,backgroundColor:'#d67749',bor
 const websiteVersion=(v:unknown):string|null=>typeof v==='string'&&/^[a-f0-9]{40}$/i.test(v)?v:null;
 export default function FreshAndroid(){
  const web=useRef<WebView>(null);
+ const documentUrl=useRef('');
  const engine=useRef(new ForegroundLocation()).current;
  const active=useRef(true),runs=useRef(new Map<string,Run>()),canGoBack=useRef(false);
  const gpsPool=useRef(new GpsTaskPool<Location.LocationObject>()).current;
@@ -232,7 +233,7 @@ export default function FreshAndroid(){
    }
   },[engine,inject,setScreenAwake,stopDriverStream]);
   const handleMessage=useCallback((event:WebViewMessageEvent)=>{
-  if(!trustedSite(event.nativeEvent.url))return;
+  if(!trustedWebMessage(event.nativeEvent.url,documentUrl.current))return;
   const message=readWebMessage(event.nativeEvent.data);
   if(!message)return;
   if(message.type==='status'){
@@ -305,7 +306,7 @@ export default function FreshAndroid(){
    onOpenWindow={event=>openExternal(event.nativeEvent.targetUrl)}
    onMessage={handleMessage}
    onNavigationStateChange={nav=>{canGoBack.current=nav.canGoBack;if(!nav.loading)setLoading(false)}}
-   onLoadStart={()=>{stopDriverSpeech();stopDriverStream();autoStarted.current=false;locationRequestedByPage.current=false;for(const task of runs.current.values())task.controller.abort();setLoading(true);setFailed(false)}}
+   onLoadStart={event=>{documentUrl.current=event.nativeEvent.url;stopDriverSpeech();stopDriverStream();autoStarted.current=false;locationRequestedByPage.current=false;for(const task of runs.current.values())task.controller.abort();setLoading(true);setFailed(false)}}
    onLoadEnd={()=>{
     setLoading(false);void syncPermission('page-loaded');
     // If the website cannot post its location request to Android,

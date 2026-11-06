@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {acceptableFix,awaitFreshFix,deadlineOr} from '../src/android-fresh/gps.ts';
-import {readWebMessage,trustedSite,positionScript,bootstrapScript,autoFixScript} from '../src/android-fresh/bridge.ts';
+import {readWebMessage,trustedSite,trustedWebMessage,positionScript,bootstrapScript,autoFixScript} from '../src/android-fresh/bridge.ts';
 test('trusted website only; no JavaScript URL injection',()=>{
  assert.equal(trustedSite('https://abdallrahimbirekdar-rgb.github.io/yalla-nrouh/'),true);
  assert.equal(trustedSite('https://evil.example/yalla-nrouh/'),false);
@@ -20,6 +20,17 @@ test('trusted website only; no JavaScript URL injection',()=>{
  assert.equal(readWebMessage(JSON.stringify({type:'driver-speak',id:'turn-1',text:'a'.repeat(241),language:'en'})),null);
  assert.deepEqual(readWebMessage('{"type":"driver-speech-stop"}'),{type:'driver-speech-stop'});
  assert.deepEqual(readWebMessage('{"type":"driver-voice-setup"}'),{type:'driver-voice-setup'});
+});
+test('Android messages accept a sender origin only on a trusted top-level document',()=>{
+ const origin='https://abdallrahimbirekdar-rgb.github.io';
+ const page=origin+'/yalla-nrouh/cloud?mode=driver';
+ assert.equal(trustedWebMessage(origin,page),true);
+ assert.equal(trustedWebMessage(page,page),true);
+ assert.equal(trustedWebMessage(origin,''),false);
+ assert.equal(trustedWebMessage(origin,origin+'/other-app/'),false);
+ assert.equal(trustedWebMessage(origin+'/other-app/',page),false);
+ assert.equal(trustedWebMessage('https://foreign.example',page),false);
+ assert.equal(trustedWebMessage(page,'https://foreign.example'),false);
 });
 test('native bootstrap and position events serialize as data',()=>{
  const result=positionScript({id:'x',point:{latitude:50,longitude:7}});

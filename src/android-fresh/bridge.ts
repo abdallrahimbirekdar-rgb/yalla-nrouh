@@ -1,6 +1,7 @@
 // Standalone, typed bridge for the rebuilt Android host.
 // Never execute strings received from the website; only parse a small JSON protocol.
-export const SITE='https://abdallrahimbirekdar-rgb.github.io/yalla-nrouh/';
+const SITE_ORIGIN='https://abdallrahimbirekdar-rgb.github.io';
+export const SITE=SITE_ORIGIN+'/yalla-nrouh/';
 export type WebMessage=
  |{type:'bootstrap';id:string;version:string|null}
  |{type:'location';id:string;askPermission:boolean;track:boolean}
@@ -18,9 +19,14 @@ export type WebMessage=
  |{type:'back-default'};
 const idOK=(v:unknown):v is string=>typeof v==='string'&&/^[a-z0-9-]{1,80}$/i.test(v);
 export function trustedSite(value:string):boolean{
- try{const u=new URL(value);return u.origin==='https://abdallrahimbirekdar-rgb.github.io'
+ try{const u=new URL(value);return u.origin===SITE_ORIGIN
  &&!u.username&&!u.password&&(u.pathname==='/yalla-nrouh'||u.pathname.startsWith('/yalla-nrouh/'))}
  catch{return false}
+}
+export function trustedWebMessage(source:string,documentUrl:string):boolean{
+ // Android's WebMessageListener exposes only the sender origin. The legacy bridge
+ // exposes the full URL. In both cases a trusted top-level document must be loaded.
+ return trustedSite(documentUrl)&&(source===SITE_ORIGIN||trustedSite(source));
 }
 export function externalTarget(value:string):boolean{
  try{return ['https:','http:','tel:','mailto:','sms:','geo:','whatsapp:'].includes(new URL(value).protocol)}

@@ -12,10 +12,9 @@ test('driver speech gives advance notice for the next turn in the selected langu
  assert.equal(directionPrompt({...turn,nextInstruction:''},'ar'),null);
 });
 
-test('speech waits for the matching Android playback result and reports missing voices',async()=>{
+test('speech reaches Android even without bootstrap and waits for the matching playback result',async()=>{
  const web=new EventTarget();
  const messages=[];
- web.__YALLA_DRIVER_SPEECH__=true;
  web.ReactNativeWebView={postMessage:message=>messages.push(JSON.parse(message))};
  globalThis.window=web;
  try{

@@ -2,8 +2,8 @@ import {useCallback,useEffect,useRef,useState} from 'react';
 import type {DriverRoutePlan} from './valhalla-route';
 
 type Language='ar'|'en';
-type SpeechWindow=Window&{__YALLA_DRIVER_SPEECH__?:boolean;__YALLA_DRIVER_VOICE_SETUP__?:boolean;__YALLA_NATIVE_ACTIVE__?:boolean;ReactNativeWebView?:{postMessage:(message:string)=>void}};
-type VoiceResult='started'|'voice-unavailable'|'playback'|'unsupported';
+type SpeechWindow=Window&{__YALLA_DRIVER_VOICE_SETUP__?:boolean;__YALLA_NATIVE_ACTIVE__?:boolean;ReactNativeWebView?:{postMessage:(message:string)=>void}};
+type VoiceResult='started'|'voice-unavailable'|'playback'|'native-timeout'|'unsupported';
 type Turn={nextInstruction:string;nextTurnMeters:number;nextStepIndex:number};
 const preference='yalla:driver-voice';
 let cancelPending:(()=>void)|null=null;
@@ -21,14 +21,14 @@ export function directionPrompt(turn:Turn,language:Language){
 
 function speechAvailable(){
  const web=host();
- return Boolean(web&&(web.ReactNativeWebView?web.__YALLA_DRIVER_SPEECH__:web.speechSynthesis&&typeof SpeechSynthesisUtterance==='function'));
+ return Boolean(web&&(web.ReactNativeWebView||(web.speechSynthesis&&typeof SpeechSynthesisUtterance==='function')));
 }
 
 function stopSpeech(){
  cancelPending?.();
  const web=host();if(!web)return;
  try{
-  if(web.ReactNativeWebView&&web.__YALLA_DRIVER_SPEECH__)web.ReactNativeWebView.postMessage(JSON.stringify({type:'driver-speech-stop'}));
+  if(web.ReactNativeWebView)web.ReactNativeWebView.postMessage(JSON.stringify({type:'driver-speech-stop'}));
   else if(!web.ReactNativeWebView)web.speechSynthesis?.cancel();
  }catch{}
 }
@@ -53,7 +53,10 @@ export function requestDriverSpeech(text:string,language:Language):Promise<Voice
    finish(value.ok?'started':value.reason==='voice-unavailable'?'voice-unavailable':'playback');
   };
   const cancel=()=>finish('playback');
-  const timer=setTimeout(stopSpeech,8000);
+  const timer=setTimeout(()=>{
+   finish(bridge?'native-timeout':'playback');
+   stopSpeech();
+  },8000);
   cancelPending=cancel;
   try{
    if(bridge){

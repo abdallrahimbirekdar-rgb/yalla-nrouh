@@ -202,7 +202,9 @@ export default function DriverNavigation({to,title,targetLabel,action,initialPla
   onPress={()=>void speech.toggle()}/>;
  const voiceNotice=speech.problem&&<View accessibilityRole="alert" style={{gap:6}}>
   <Label muted>{speech.problem==='unsupported'
-   ?t('التوجيه الصوتي يحتاج نسخة أندرويد حديثة أو متصفحًا يدعم النطق.','Voice directions require a recent Android app or a browser that supports speech.')
+   ?t('المتصفح الحالي لا يدعم تشغيل الاتجاهات الصوتية.','This browser does not support voice directions.')
+   :speech.problem==='native-timeout'
+    ?t('لم تصل استجابة من تطبيق أندرويد. حدّث تطبيق يلا نروح وأعد فتحه ثم جرّب مرة ثانية.','The Android app did not respond. Update and reopen Yalla Nrouh, then try again.')
    :speech.problem==='voice-unavailable'
     ?t('صوت لغة التطبيق غير متاح. ثبّت صوت النطق من إعدادات الهاتف ثم جرّب مجددًا.','The app language has no available voice. Install one in phone settings and try again.')
     :t('تعذّر بدء تشغيل الصوت. جرّب مجددًا أو راجع إعدادات تحويل النص إلى كلام.','Voice could not start. Try again or check text-to-speech settings.')}</Label>
