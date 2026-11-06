@@ -22,3 +22,20 @@ test('a suggestion with missing coordinates cannot set the destination',async()=
  const client=createPlaceAutocomplete(async()=>({AutocompleteSessionToken:class {},AutocompleteSuggestion:{fetchAutocompleteSuggestions:async()=>({suggestions:[{placePrediction:{placeId:'bad',text:{toString:()=> 'No point'},toPlace:()=>({fetchFields:async()=>{}})}}]})}}));
  const items=await client.search('place','en');await assert.rejects(items[0].select(),/place_location_unavailable/);
 });
+test('clearing the field while Places loads drops the pending search',async()=>{
+ const {promise,resolve}=Promise.withResolvers();
+ const inputs=[];
+ const client=createPlaceAutocomplete(()=>promise);
+ const abandoned=client.search('previous place','en');
+ client.reset();
+ const current=client.search('new place','en');
+ resolve({
+  AutocompleteSessionToken:class {},
+  AutocompleteSuggestion:{fetchAutocompleteSuggestions:async request=>{
+   inputs.push(request.input);
+   return {suggestions:[]};
+  }},
+ });
+ await Promise.all([abandoned,current]);
+ assert.deepEqual(inputs,['new place']);
+});

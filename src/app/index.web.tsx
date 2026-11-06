@@ -11,7 +11,7 @@ import MapCanvas from '../map/MapCanvas';
 import {AccountButton,AppMenu,Button,DeviceStatus,Icon,Label,useText,useTheme} from '../ui';
 
 export default function Booking(){
- const {state,draft,setDraft,ready}=useApp();
+ const {state,draft,ready}=useApp();
  const auth=useAuth();
  const rideState=useRideState();
  const userId=auth.session?.user.id;
