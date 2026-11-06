@@ -4,6 +4,7 @@ import {SafeAreaView} from 'react-native-safe-area-context';
 import {WebView,type WebViewMessageEvent} from 'react-native-webview';
 import * as Location from 'expo-location';
 import Constants from 'expo-constants';
+import {requireOptionalNativeModule} from 'expo-modules-core';
 import {enableLocalAlerts,notifyLocal} from '../alerts';
 import {acceptableFix,awaitFreshFix,deadlineOr,GpsTaskPool} from './gps';
 import {SITE,bootstrapScript,diagnosticScript,eventScript,autoFixScript,externalTarget,positionScript,readWebMessage,trustedSite,
@@ -66,6 +67,8 @@ class ForegroundLocation {
  }
 }
 type Run={controller:AbortController;id:string};
+type DriverStream={id:string;active:boolean;subscription:Location.LocationSubscription|null};
+const screenModule=requireOptionalNativeModule<{setScreenAwake:(active:boolean)=>Promise<void>}>('YallaDriverNavigation');
 const btn={paddingVertical:13,paddingHorizontal:18,backgroundColor:'#d67749',borderRadius:12} as const;
 const websiteVersion=(v:unknown):string|null=>typeof v==='string'&&/^[a-f0-9]{40}$/i.test(v)?v:null;
 export default function FreshAndroid(){
@@ -73,6 +76,7 @@ export default function FreshAndroid(){
  const engine=useRef(new ForegroundLocation()).current;
  const active=useRef(true),runs=useRef(new Map<string,Run>()),canGoBack=useRef(false);
  const gpsPool=useRef(new GpsTaskPool<Location.LocationObject>()).current;
+  const driverStream=useRef<DriverStream|null>(null),screenAwake=useRef(false);
  const autoStarted=useRef(false),locationRequestedByPage=useRef(false);
  const safeToReload=useRef(false),websiteRevision=useRef<string|null>(null);
  const [uri,setUri]=useState(()=>SITE+'?app=android&launch='+Date.now());
@@ -99,9 +103,23 @@ export default function FreshAndroid(){
    inject(eventScript('yalla:native-location-permission',{granted:permission.granted}));
   }catch{/* The website still offers manual pickup. */}
  },[engine,inject]);
- useEffect(()=>{const requests=runs.current;active.current=true;void boot();return()=>{
-  active.current=false;for(const task of requests.values())task.controller.abort();requests.clear();
- }},[boot]);
+ const setScreenAwake=useCallback((awake:boolean)=>{
+   if(screenAwake.current===awake)return;
+   screenAwake.current=awake;
+   // The local native module adds FLAG_KEEP_SCREEN_ON only during navigation.
+   void Promise.resolve().then(()=>screenModule?.setScreenAwake(awake)).catch(()=>{});
+  },[]);
+  const stopDriverStream=useCallback((id?:string)=>{
+   const stream=driverStream.current;
+   if(!stream||(id&&stream.id!==id))return;
+   stream.active=false;
+   stream.subscription?.remove();
+   driverStream.current=null;
+   setScreenAwake(false);
+  },[setScreenAwake]);
+  useEffect(()=>{const requests=runs.current;active.current=true;void boot();return()=>{
+  active.current=false;stopDriverStream();for(const task of requests.values())task.controller.abort();requests.clear();
+ }},[boot,stopDriverStream]);
  const refresh=useCallback(()=>{
   if(!safeToReload.current){
    setNotice(text('أكمل تعديلك أو رحلتك أولًا ثم حدّث من الصفحة الرئيسية.','Finish your edit or ride, then refresh at home.'));
@@ -130,7 +148,7 @@ export default function FreshAndroid(){
   const state=AppState.addEventListener('change',value=>{
    // Android permission sheets can briefly mark the activity inactive.
    // Cancel only on actual backgrounding so the first GPS request survives consent.
-   if(value==='background'){autoStarted.current=false;locationRequestedByPage.current=false;for(const task of runs.current.values()){inject(positionScript({id:task.id,point:null,error:'timeout'}));task.controller.abort()}inject(eventScript('yalla:native-visibility',{active:false}));return}
+   if(value==='background'){stopDriverStream();autoStarted.current=false;locationRequestedByPage.current=false;for(const task of runs.current.values()){inject(positionScript({id:task.id,point:null,error:'timeout'}));task.controller.abort()}inject(eventScript('yalla:native-visibility',{active:false}));return}
    if(value==='active'){
     inject(eventScript('yalla:native-visibility',{active:true}));
     void syncPermission('resumed');
@@ -138,7 +156,7 @@ export default function FreshAndroid(){
    }
   });
   return()=>{handle.remove();state.remove()};
- },[failed,inject,syncPermission,checkWebUpdate]);
+ },[failed,inject,syncPermission,checkWebUpdate,stopDriverStream]);
  const respond=useCallback((reply:PositionResponse)=>{
   inject(positionScript(reply));
  },[inject]);
@@ -174,7 +192,40 @@ export default function FreshAndroid(){
    }
   }finally{if(runs.current.get(message.id)===task)runs.current.delete(message.id)}
  },[engine,gpsPool,inject,respond,syncPermission]);
- const handleMessage=useCallback((event:WebViewMessageEvent)=>{
+ const startDriverStream=useCallback(async(message:Extract<WebMessage,{type:'driver-location-start'}>)=>{
+   stopDriverStream();
+   const stream:DriverStream={id:message.id,active:true,subscription:null};
+   driverStream.current=stream;
+   try{
+    const permission=await engine.permission(message.askPermission);
+    if(!permission.granted)throw new Error('permission');
+    if(permission.android?.accuracy==='coarse')throw new Error('accuracy');
+    if(!await Location.hasServicesEnabledAsync())throw new Error('services');
+    if(!stream.active||AppState.currentState==='background')return;
+    const sub=await Location.watchPositionAsync({
+     accuracy:Location.Accuracy.BestForNavigation,
+     timeInterval:1000,distanceInterval:0,mayShowUserSettingsDialog:false,
+    },fix=>{
+     if(!stream.active||driverStream.current!==stream||AppState.currentState==='background')return;
+     if(!acceptableFix(fix,250,5000))return;
+     inject(positionScript({
+      id:stream.id,
+      point:{latitude:fix.coords.latitude,longitude:fix.coords.longitude},
+      fix:{accuracy:fix.coords.accuracy!,time:fix.timestamp},
+     }));
+    },()=>{if(stream.active)inject(positionScript({id:stream.id,point:null,error:'position'}));});
+    stream.subscription=sub;
+    if(!stream.active||driverStream.current!==stream){sub.remove();return}
+    setScreenAwake(true);
+   }catch(error){
+    if(!stream.active||driverStream.current!==stream)return;
+    const reason=error instanceof Error?error.message:'position';
+    const code=reason==='permission'||reason==='accuracy'||reason==='services'?reason:'position';
+    inject(positionScript({id:stream.id,point:null,error:code}));
+    stopDriverStream(stream.id);
+   }
+  },[engine,inject,setScreenAwake,stopDriverStream]);
+  const handleMessage=useCallback((event:WebViewMessageEvent)=>{
   if(!trustedSite(event.nativeEvent.url))return;
   const message=readWebMessage(event.nativeEvent.data);
   if(!message)return;
@@ -193,7 +244,11 @@ export default function FreshAndroid(){
   }else if(message.type==='location'){
    locationRequestedByPage.current=true;
    void locate(message);
-  }else if(message.type==='location-cancel'){
+  }else if(message.type==='driver-location-start'){
+    void startDriverStream(message);
+   }else if(message.type==='driver-location-stop'){
+    stopDriverStream(message.id);
+   }else if(message.type==='location-cancel'){
    runs.current.get(message.id)?.controller.abort();
   }else if(message.type==='location-settings'){
    // Opening system settings must never wait for a GPS fix.
@@ -209,7 +264,7 @@ export default function FreshAndroid(){
   else if(message.type==='back-default'){
    if(canGoBack.current)web.current?.goBack();else BackHandler.exitApp();
   }
- },[engine,inject,locate,refresh,syncPermission]);
+ },[engine,inject,locate,refresh,syncPermission,startDriverStream,stopDriverStream]);
  const openExternal=(url:string)=>{
   if(externalTarget(url))void Linking.openURL(url).catch(()=>setNotice(text('تعذر فتح الرابط.','Could not open the link.')));
  };
@@ -234,7 +289,7 @@ export default function FreshAndroid(){
    onOpenWindow={event=>openExternal(event.nativeEvent.targetUrl)}
    onMessage={handleMessage}
    onNavigationStateChange={nav=>{canGoBack.current=nav.canGoBack;if(!nav.loading)setLoading(false)}}
-   onLoadStart={()=>{autoStarted.current=false;locationRequestedByPage.current=false;for(const task of runs.current.values())task.controller.abort();setLoading(true);setFailed(false)}}
+   onLoadStart={()=>{stopDriverStream();autoStarted.current=false;locationRequestedByPage.current=false;for(const task of runs.current.values())task.controller.abort();setLoading(true);setFailed(false)}}
    onLoadEnd={()=>{
     setLoading(false);void syncPermission('page-loaded');
     // If the website cannot post its location request to Android,
