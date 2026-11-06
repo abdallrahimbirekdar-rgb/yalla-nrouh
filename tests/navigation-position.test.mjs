@@ -73,6 +73,28 @@ test('browser navigation keeps watching after a coarse fix and clears the watch 
  }finally{Object.defineProperty(globalThis,'navigator',original)}
 }));
 
+test('existing Android APK can use WebView GPS watcher when native streaming is not supported',()=>host(async window=>{
+ const {watchDriverPosition}=await import('../src/navigation-position.ts');
+ const prior=Object.getOwnPropertyDescriptor(globalThis,'navigator');
+ let receive,cleared=null;
+ Object.defineProperty(globalThis,'navigator',{configurable:true,value:{
+  permissions:{query:async()=>({state:'granted'})},
+  geolocation:{watchPosition(success){receive=success;return 42},clearWatch(id){cleared=id}},
+ }});
+ try{
+  window.ReactNativeWebView={postMessage:()=>assert.fail('old APK has no streaming GPS protocol')};
+  const fixes=[];const stop=watchDriverPosition(false,fix=>fixes.push(fix),()=>assert.fail('unexpected location error'));
+  assert.equal(typeof stop,'function');
+  await Promise.resolve();await Promise.resolve();
+  assert.equal(typeof receive,'function');
+  receive({coords:{...point,accuracy:18},timestamp:Date.now()});
+  assert.equal(fixes.length,1);
+  assert.equal(fixes[0].latitude,point.latitude);
+  stop();
+  assert.equal(cleared,42);
+ }finally{Object.defineProperty(globalThis,'navigator',prior)}
+}));
+
 test('driver stream follows fresh Android positions and ignores stale or late events after stop',()=>host(async window=>{
  const {watchDriverPosition}=await import('../src/navigation-position.ts');
  const messages=[],fixes=[];
