@@ -67,7 +67,7 @@ export default function Admin(){
    <Panel><Label large>{t('إضافة حساب سائق للتجربة','Add a test driver account')}</Label>
     <Label muted>{t('أنشئ الحساب من صفحة التسجيل أولًا ثم أكّد بريده الإلكتروني. لا نطلب كلمة المرور في لوحة الإدارة.','Create the account on the sign-up page and verify the email first. Admin never asks for the password.')}</Label>
     <Field label={t('البريد الإلكتروني للسائق','Driver email')} value={newDriverEmail} onChangeText={setNewDriverEmail} keyboardType="email-address" autoCapitalize="none" autoCorrect={false} maxLength={200}/>
-    <Label muted>{t('إعداد التجربة: دمشق · كلاسيك. اختر المنطقة والفئة نفسيهما عند طلب السيارة.','Test setup: Damascus · Classic. Choose the same region and car type when booking.')}</Label>
+    <Label muted>{t('إعداد التجربة: دمشق · كلاسيك. للتجربة اختر انطلاقًا في دمشق وفئة كلاسيك.','Test setup: Damascus · Classic. For a test ride, choose a pickup in Damascus and the Classic category.')}</Label>
     <Button title={t('إضافة الحساب إلى السائقين','Add existing account as driver')} disabled={busy||!newDriverEmail.includes('@')} onPress={()=>void addDriverByEmail()}/>
    </Panel>
    <Panel><Label large>{t('طلبات السائقين','Driver accounts')}</Label><Label muted>{t('تحقق من هوية السائق وأوراق السيارة قبل اعتماده.','Check the driver and vehicle papers before approval.')}</Label>

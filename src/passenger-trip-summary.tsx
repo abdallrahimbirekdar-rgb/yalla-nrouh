@@ -1,7 +1,7 @@
 import React from 'react';
 import {View} from 'react-native';
 import {useApp} from './context';
-import {categories,regions} from './domain';
+import {categories} from './domain';
 import {Icon,Label,useText,useTheme} from './ui';
 
 export function PassengerFare({fare}:{fare:number}){
@@ -13,7 +13,7 @@ export function PassengerFare({fare}:{fare:number}){
  </View>;
 }
 
-export function PassengerStops({pickup,destination,category,region}:{pickup:string;destination:string;category:string;region:number}){
+export function PassengerStops({pickup,destination,category}:{pickup:string;destination:string;category:string}){
  const {state}=useApp();
  const {colors}=useTheme();
  const t=useText();
@@ -27,6 +27,6 @@ export function PassengerStops({pickup,destination,category,region}:{pickup:stri
    <Icon name="location-outline" size={18} color={colors.purple}/>
    <View style={{flex:1}}><Label muted>{t('الوجهة','Destination')}</Label><Label>{destination}</Label></View>
   </View>
-  <Label muted>{categories.find(car=>car.id===category)?.[state.language]} · {regions[region]?.[state.language==='ar'?0:1]} · {t('الدفع نقدًا','Pay in cash')}</Label>
+  <Label muted>{categories.find(car=>car.id===category)?.[state.language]} · {t('الدفع نقدًا','Pay in cash')}</Label>
  </View>;
 }

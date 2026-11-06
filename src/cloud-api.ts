@@ -2,6 +2,7 @@ import {readRideState,receiveRideState} from './cloud-ride-state.ts';
 import type {TripDraft} from './domain.ts';
 import {validTariff,type Tariff} from './meter.ts';
 import {isCoordinate} from './geo.ts';
+import {pickupRegion} from './map/pickup-region.ts';
 
 const API_ROOT='https://gokosprcqpdvqgahvquk.supabase.co';
 let volatileToken:string|null=null;
@@ -121,7 +122,7 @@ export async function cloudRequestRide(token:string,draft:TripDraft,requestId:st
     p_pickup:draft.pickup.trim(),p_destination:draft.destination.trim(),
     p_pickup_lat:draft.pickupPoint.latitude,p_pickup_lng:draft.pickupPoint.longitude,
     p_destination_lat:draft.destinationPoint.latitude,p_destination_lng:draft.destinationPoint.longitude,
-    p_region:draft.region,p_category:draft.category
+    p_region:pickupRegion(draft.pickupPoint),p_category:draft.category
   });
   if(typeof id!=='string'||!id)throw new CloudError(500,'bad_response');
   return id;
