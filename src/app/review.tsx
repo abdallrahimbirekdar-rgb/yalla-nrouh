@@ -1,5 +1,4 @@
 import React,{useEffect,useState} from 'react';
-import {View} from 'react-native';
 import {router} from 'expo-router';
 import {useApp} from '../context';
 import {useAuth} from '../auth';
@@ -12,13 +11,13 @@ import {pickupPosition,pickupPositionMessage} from '../pickup-position';
 import {PositionError} from '../current-position';
 import {pickupQuoteMatches} from '../pickup-policy';
 import {validateDraft} from '../domain';
-import {PassengerStops} from '../passenger-trip-summary';
+import {PassengerStops,RideFooter} from '../passenger-trip-summary';
 import type {FareQuote} from '../routing';
 import RoutePanel from '../route-panel';
 import RideOptions from '../ride-options';
-import {Button,Label,Page,Panel,useText,useTheme} from '../ui';
+import {Button,Label,Page,Panel,useText} from '../ui';
 export default function Review(){
- const {draft,state,setDraft,foreground}=useApp();const auth=useAuth();const owner=auth.session?.user.id;const t=useText();const {colors}=useTheme();const [quoteAttempt,setQuoteAttempt]=useState(0);const [busy,setBusy]=useState(false),[error,setError]=useState(''),[quoted,setQuoted]=useState<{key:string;quote:FareQuote}|null>(null),[pickupReady,setPickupReady]=useState(false),[locationAttempt,setLocationAttempt]=useState(0);const quoteKey=[draft.pickupPoint?.latitude,draft.pickupPoint?.longitude,draft.destinationPoint?.latitude,draft.destinationPoint?.longitude].join('|');const manualPickup=draft.pickupMode==='manual';const invalid=validateDraft(draft)||!draft.pickupPoint||!draft.destinationPoint;
+ const {draft,state,setDraft,foreground}=useApp();const auth=useAuth();const owner=auth.session?.user.id;const t=useText();const [quoteAttempt,setQuoteAttempt]=useState(0);const [busy,setBusy]=useState(false),[error,setError]=useState(''),[quoted,setQuoted]=useState<{key:string;quote:FareQuote}|null>(null),[pickupReady,setPickupReady]=useState(false),[locationAttempt,setLocationAttempt]=useState(0);const quoteKey=[draft.pickupPoint?.latitude,draft.pickupPoint?.longitude,draft.destinationPoint?.latitude,draft.destinationPoint?.longitude,owner,quoteAttempt].join('|');const manualPickup=draft.pickupMode==='manual';const invalid=validateDraft(draft)||!draft.pickupPoint||!draft.destinationPoint;
  useEffect(()=>{
   setPickupReady(false);setQuoted(null);setError('');
   if(manualPickup)return;
@@ -69,31 +68,39 @@ export default function Review(){
   }finally{setBusy(false)}
  }
  const readyToReview=!!(manualPickup||pickupReady)&&!invalid;
- const footer=readyToReview&&auth.session?<View style={{backgroundColor:colors.background,borderTopWidth:1,borderColor:colors.line,paddingHorizontal:14,paddingVertical:8}}>
-  <View style={{width:'100%',maxWidth:616,alignSelf:'center'}}>
-   <Button icon="checkmark-circle-outline" title={busy?t('جارٍ إرسال الطلب…','Sending request…'):recovery.id?t('إعادة إرسال نفس الطلب','Retry the same request'):t('تأكيد طلب الرحلة','Confirm ride request')} onPress={()=>void confirm()} disabled={busy||recovery.checking||quoted?.key!==quoteKey}/>
-  </View>
- </View>:undefined;
- return <Page compact footer={footer} title={t('راجع رحلتك','Review your ride')} backTo={!recovery.id&&draft.destinationPoint?{pathname:'/location',params:{target:'pickup'}}:'/'}>
+ const canEdit=!busy&&!recovery.id;
+ function editStop(target:'pickup'|'destination'){
+  router.replace({pathname:'/location',params:{target,focus:'1',fromReview:'1'}});
+ }
+ const stops=<PassengerStops pickup={draft.pickup||t('حدد نقطة الانطلاق','Choose pickup')} destination={draft.destination||t('حدد الوجهة','Choose destination')}
+  onEditPickup={canEdit&&draft.destinationPoint?()=>editStop('pickup'):undefined}
+  onEditDestination={canEdit?()=>editStop('destination'):undefined}/>;
+ const footer=readyToReview&&auth.session?<RideFooter>
+  <Button icon="car-outline" title={busy?t('جارٍ إرسال الطلب…','Sending request…'):recovery.id?t('إعادة إرسال نفس الطلب','Retry the same request'):t('اطلب تاكسي','Request a taxi')} onPress={()=>void confirm()} disabled={busy||recovery.checking||quoted?.key!==quoteKey}/>
+ </RideFooter>:undefined;
+ return <Page compact simpleHeader footer={footer} title={t('راجع رحلتك','Review your ride')} backTo={!recovery.id&&draft.destinationPoint?{pathname:'/location',params:{target:'pickup',fromReview:'1'}}:'/'}>
   {recovery.id&&<Panel>
    <Label>{busy||recovery.checking?t('جارٍ التحقق من وصول الطلب…','Checking whether your request arrived…'):t('لم يتأكد وصول الطلب بعد. يمكنك إعادة إرساله بنفس رقم الطلب.','Your request is still unconfirmed. You can retry with the same request ID.')}</Label>
   </Panel>}
-  {!manualPickup&&!pickupReady?<Panel><Label>{error||t('جارٍ قراءة موقع الانطلاق من الهاتف…','Reading pickup from your phone…')}</Label><Button secondary title={t('تحديث موقعي الحالي','Update my current location')} onPress={()=>setLocationAttempt(value=>value+1)}/></Panel>:invalid?<Panel><Label>{t('حدد نقطتي الانطلاق والوصول أولًا.','Choose pickup and destination first.')}</Label><Button title={t('اختيار النقاط','Choose points')} onPress={()=>router.replace(draft.destinationPoint?{pathname:'/location',params:{target:'pickup'}}:{pathname:'/'})}/></Panel>:<>
-   {auth.session?<RoutePanel key={quoteAttempt} from={draft.pickupPoint} to={draft.destinationPoint} estimate autoEstimate
+  {!manualPickup&&!pickupReady?<Panel outlined>
+   <Label>{error||t('جارٍ قراءة موقع الانطلاق من الهاتف…','Reading pickup from your phone…')}</Label>
+   {!!error&&<Button secondary title={t('تحديث موقعي الحالي','Update my current location')} onPress={()=>setLocationAttempt(value=>value+1)}/>}
+   {stops}
+  </Panel>:invalid?<Panel outlined>
+   <Label>{t('تحقق من نقطتي الانطلاق والوصول.','Check the pickup and destination.')}</Label>
+   {stops}
+  </Panel>:<>
+   {auth.session?<RoutePanel key={quoteKey} from={draft.pickupPoint} to={draft.destinationPoint} estimate autoEstimate
     title={t('الأجرة التقديرية','Estimated fare')} onQuote={quote=>setQuoted(quote?{key:quoteKey,quote}:null)}>
-    <PassengerStops {...draft}/>
+    <Panel outlined>{stops}</Panel>
    </RoutePanel>:<Panel outlined>
-    <PassengerStops {...draft}/>
+    {stops}
     <Label muted>{t('سجّل الدخول لعرض الأجرة وتأكيد الطلب.','Sign in to see the fare and confirm.')}</Label>
     <Button icon="log-in-outline" title={t('تسجيل الدخول والمتابعة','Sign in and continue')} onPress={()=>router.push({pathname:'/account',params:{next:'review'}})}/>
    </Panel>}
    <RideOptions/>
    <Label muted>{t('الأجرة تقديرية. يتأكد توفر السيارة بعد قبول سائق للطلب.','The fare is an estimate. A car is confirmed when a driver accepts.')}</Label>
   </>}
-  {!!error&&<Panel><Label>{error}</Label><Button secondary title={t('فتح رحلاتي','Open My rides')} onPress={()=>router.push('/cloud')}/></Panel>}
-  {!recovery.id&&<>
-   {draft.destinationPoint&&<Button secondary icon="location-outline" title={t('تعديل نقطة الانطلاق','Change pickup point')} onPress={()=>router.replace({pathname:'/location',params:{target:'pickup'}})}/>}
-   <Button secondary title={t('تعديل الوجهة','Change destination')} onPress={()=>router.replace({pathname:'/location',params:{target:'destination'}})}/>
-  </>}
+  {!!error&&(manualPickup||pickupReady)&&<Panel><Label>{error}</Label><Button secondary title={t('فتح رحلاتي','Open My rides')} onPress={()=>router.push('/cloud')}/></Panel>}
  </Page>;
 }

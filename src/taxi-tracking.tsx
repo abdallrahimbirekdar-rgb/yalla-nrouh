@@ -51,14 +51,17 @@ export function RideSearchTimer({startedAt,onExpired}:{startedAt:string;onExpire
   return()=>clearInterval(timer);
  },[]);
  const start=Date.parse(startedAt);
- const elapsed=Number.isFinite(start)?now-start:0;
- const expired=elapsed>=rideSearchLimitMs;
+ const seconds=Number.isFinite(start)?Math.ceil(Math.max(0,rideSearchLimitMs-Math.max(0,now-start))/1000):null;
+ const expired=seconds===0;
  const checkExpiry=React.useRef(onExpired);checkExpiry.current=onExpired;
- useEffect(()=>{if(expired)checkExpiry.current()},[expired]);
- const seconds=Number.isFinite(start)?Math.max(0,Math.floor((now-start)/1000)):0;
- return <View style={{flexDirection:'row',alignItems:'center',gap:10}}>
-  <ActivityIndicator color={colors.purple}/>
-  <Label large>{expired?t('جارٍ التحقق من نتيجة البحث…','Checking the search result…'):t('جارٍ البحث عن تاكسي…','Looking for a taxi…')+' '+seconds+' '+t('ثانية','s')}</Label>
+ useEffect(()=>{if(expired)checkExpiry.current()},[expired,startedAt]);
+ const countdown=seconds===null?null:Math.floor(seconds/60)+':'+String(seconds%60).padStart(2,'0');
+ return <View style={{alignItems:'center',gap:2}}>
+  <View style={{flexDirection:'row',alignItems:'center',gap:8}}>
+   <ActivityIndicator color={colors.purple}/>
+   <Label>{expired?t('جارٍ التحقق من نتيجة البحث…','Checking the search result…'):t('جارٍ البحث عن سائق…','Looking for a driver…')}</Label>
+  </View>
+  {!expired&&countdown&&<Label muted>{t('الوقت المتبقي','Time remaining')} · {countdown}</Label>}
  </View>;
 }
 

@@ -18,11 +18,11 @@ import {cloudSavedPlaces,cloudSavePlaces,type SavedPlace} from '../cloud-api';
 import {Button,Field,Icon,Label,Page,Panel,useText,useTheme} from '../ui';
 import {addressSlots,addressSlotLabel,isAddressSlot} from '../saved-address-labels';
 export default function LocationRoute(){
- const {target,focus,view,edit}=useLocalSearchParams<{target?:string;focus?:string;view?:string;edit?:string}>();
+ const {target,focus,view,edit,fromReview}=useLocalSearchParams<{target?:string;focus?:string;view?:string;edit?:string;fromReview?:string}>();
  const account=useAuth().session?.user.id;
- return <LocationPicker key={JSON.stringify([target,view,edit,account])} pickup={target==='pickup'} focus={focus==='1'} savedView={view==='saved'} edit={edit}/>;
+ return <LocationPicker key={JSON.stringify([target,view,edit,fromReview,account])} pickup={target==='pickup'} focus={focus==='1'} savedView={view==='saved'} edit={edit} fromReview={fromReview==='1'}/>;
 }
-function LocationPicker({pickup,focus,savedView,edit}:{pickup:boolean;focus:boolean;savedView:boolean;edit?:string}){
+function LocationPicker({pickup,focus,savedView,edit,fromReview}:{pickup:boolean;focus:boolean;savedView:boolean;edit?:string;fromReview:boolean}){
  const {draft,setDraft,state,ready}=useApp();const auth=useAuth();const t=useText();const {colors}=useTheme();
  const rideState=useRideState();
  const editing=savedView&&!!edit, managing=savedView&&!edit;
@@ -89,7 +89,7 @@ function LocationPicker({pickup,focus,savedView,edit}:{pickup:boolean;focus:bool
   if(!pickup||pickupMode!=='current'||!gps.camera?.point||selectionCamera)return;
   setPoint(gps.camera.point);setLabel(state.language==='ar'?'موقعي الحالي':'My current location');
  },[pickup,pickupMode,gps.camera,selectionCamera,state.language]);
- const backTo=pickup?{pathname:'/location' as const,params:{target:'destination'}}:editing?{pathname:'/location' as const,params:{view:'saved'}}:'/' as const;
+ const backTo=fromReview?'/review' as const:pickup?{pathname:'/location' as const,params:{target:'destination'}}:editing?{pathname:'/location' as const,params:{view:'saved'}}:'/' as const;
  function navigateToEditor(id:string){
   if(!confirming&&!saving)router.push({pathname:'/location',params:{view:'saved',edit:id}});
  }
@@ -156,6 +156,10 @@ function LocationPicker({pickup,focus,savedView,edit}:{pickup:boolean;focus:bool
     setMessage(t('اختر نقطة انطلاق مختلفة عن الوجهة.','Choose a pickup point different from the destination.'));
     return;
    }
+   if(!pickup&&fromReview&&draft.pickupPoint&&sameCoordinate(selected,draft.pickupPoint)){
+    setMessage(t('اختر وجهة مختلفة عن نقطة الانطلاق.','Choose a destination different from the pickup.'));
+    return;
+   }
    Keyboard.dismiss();
    const name=label.trim()||formatCoordinate(selected);
    if(pickup){
@@ -163,7 +167,8 @@ function LocationPicker({pickup,focus,savedView,edit}:{pickup:boolean;focus:bool
     router.replace('/review');
    }else{
     setDraft(previous=>({...previous,destination:name,destinationPoint:selected}));
-    router.replace({pathname:'/location',params:{target:'pickup'}});
+    if(fromReview&&draft.pickupPoint)router.replace('/review');
+    else router.replace({pathname:'/location',params:{target:'pickup',...(fromReview?{fromReview:'1'}:{})}});
    }
   }catch(error){
    if(!alive.current)return;
@@ -272,7 +277,7 @@ function LocationPicker({pickup,focus,savedView,edit}:{pickup:boolean;focus:bool
     <Label>{pickup&&pickupMode==='current'?t('موقعي الحالي','My current location'):label}</Label>
    </>}
    <Button icon="checkmark-circle-outline"
-    title={editing?t('حفظ العنوان','Save address'):pickup?t('تأكيد الانطلاق وعرض الأجرة','Confirm pickup and view fare'):t('تأكيد الوجهة واختيار الانطلاق','Confirm destination and choose pickup')}
+    title={editing?t('حفظ العنوان','Save address'):pickup?t('تأكيد الانطلاق وعرض الأجرة','Confirm pickup and view fare'):fromReview&&draft.pickupPoint?t('تأكيد الوجهة وعرض الأجرة','Confirm destination and view fare'):t('تأكيد الوجهة واختيار الانطلاق','Confirm destination and choose pickup')}
     onPress={()=>void (editing?savePlace():confirm())}
     disabled={confirming||busy||saving||locating||!point||(editing&&!loaded)}/>
    {confirming&&<ActivityIndicator accessibilityLabel={t('جارٍ تأكيد نقطة الانطلاق…','Confirming pickup…')}/>}

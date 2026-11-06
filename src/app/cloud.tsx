@@ -7,7 +7,7 @@ import {authErrorMessage} from '../auth-errors';
 import {cloudCurrentToken,cloudMutationUncertain,cloudMyRides,cloudDriverInbox,cloudOpenRides,cloudDeclineDriverOffer,cloudAcceptRide,cloudAdvanceRide,cloudReleaseRide,cloudCancelRide,cloudConfirmPickup,cloudRegisterDriver,cloudSetDriverOnline,type CloudRide,type CloudDriver,type DriverHistoryKind,type RidePreview} from '../cloud-api';
 import RideOptions from '../ride-options';
 import {isCoordinate} from '../geo';
-import {PassengerFare,PassengerStops} from '../passenger-trip-summary';
+import {PassengerFare,PassengerStops,RideFooter} from '../passenger-trip-summary';
 import DriverOffer from '../driver-offer';
 import type {RoutePlan} from '../routing';
 import DriverNavigation from '../driver-navigation';
@@ -144,6 +144,10 @@ export default function Rides(){
  const mine=rides.filter(r=>r.passenger_id===userId);
  const currentPassengerRide=mine.find(live);
  const passengerRides=mine.filter(ride=>historyMode?!live(ride):ride.id===(currentPassengerRide?.id??params.ride));
+ const searchingRide=!driverMode&&!historyMode&&currentPassengerRide?.status==='requested'?currentPassengerRide:undefined;
+ function cancelRequest(ride:CloudRide){
+  void run(async token=>{if(!await cloudCancelRide(token,ride.id))throw Error('not_allowed')},t('تم إلغاء الطلب.','Request cancelled.'));
+ }
  function reuseDestination(ride:CloudRide){
   if(currentPassengerRide){router.replace('/cloud');return}
   const destinationPoint={latitude:ride.destination_lat,longitude:ride.destination_lng};
@@ -180,10 +184,9 @@ export default function Rides(){
   }finally{setWorkTarget(null)}
  }
  const renderRide=(ride:CloudRide)=><Panel key={ride.id}>
-   <View style={{alignSelf:'flex-start',borderRadius:20,paddingHorizontal:12,paddingVertical:4,backgroundColor:colors.selected}}><Label muted>{ride.search_expired_at?t('انتهى البحث بدون سائق','Search expired without a driver'):status(ride.status)}</Label></View>
+   {ride.id!==searchingRide?.id&&<View style={{alignSelf:'flex-start',borderRadius:20,paddingHorizontal:12,paddingVertical:4,backgroundColor:colors.selected}}><Label muted>{ride.search_expired_at?t('انتهى البحث بدون سائق','Search expired without a driver'):status(ride.status)}</Label></View>}
    {typeof ride.estimated_fare==='number'&&<PassengerFare fare={ride.estimated_fare}/>}
    <PassengerStops pickup={ride.pickup} destination={ride.destination} category={ride.category}/>
-   {ride.status==='requested'&&<RideSearchTimer startedAt={ride.updated_at??ride.created_at} onExpired={()=>void refresh().catch(()=>{})}/>}
    {ride.status==='accepted'&&<PassengerTaxiMap key={ride.driver_id} rideId={ride.id} pickup={{latitude:ride.pickup_lat,longitude:ride.pickup_lng}}/>}
    {historyMode&&<>
     <Label muted>{new Date(ride.created_at).toLocaleString(state.language==='ar'?'ar':'en')}</Label>
@@ -195,7 +198,7 @@ export default function Rides(){
      <Button title={t('تأكيد ركوب السيارة','Confirm pickup')} disabled={busy} onPress={()=>void run(async token=>{if(!await cloudConfirmPickup(token,ride.id))throw Error('not_allowed')},t('تم تأكيد الركوب. يمكن للسائق بدء الرحلة الآن.','Pickup confirmed. The driver can start the ride.'))}/>
     </>}
     {ride.status==='arrived'&&ride.pickup_confirmed_at&&<Label muted>{t('تم تأكيد الركوب. بانتظار بدء الرحلة من السائق.','Pickup confirmed. Waiting for driver to start the ride.')}</Label>}
-    {ride.status!=='riding'&&<Button secondary title={t('إلغاء الطلب','Cancel request')} disabled={busy} onPress={()=>void run(async token=>{if(!await cloudCancelRide(token,ride.id))throw Error('not_allowed')},t('تم إلغاء الطلب.','Request cancelled.'))}/>}
+    {ride.status!=='riding'&&ride.id!==searchingRide?.id&&<Button secondary title={t('إلغاء الطلب','Cancel request')} disabled={busy} onPress={()=>cancelRequest(ride)}/>}
    </>}
   </Panel>;
  function renderDriverRide(ride:CloudRide){
@@ -221,7 +224,14 @@ export default function Rides(){
  }
  if(!auth.ready||auth.session&&!auth.rolesReady)return <Page title={t('رحلاتي','My rides')}><Label>{t('جارٍ تحميل الحساب…','Loading account…')}</Label>{auth.problem&&<Button title={t('إعادة المحاولة','Try again')} onPress={()=>void auth.retry()}/>}</Page>;
  if(!auth.session)return <Page title={driverMode?t('وضع السائق','Driver mode'):passengerTitle}><Panel><Icon name="person-circle-outline" size={42}/><Label>{t('سجّل الدخول لعرض رحلاتك أو العمل كسائق.','Sign in to view your rides or use driver mode.')}</Label><Button title={t('تسجيل الدخول','Sign in')} onPress={()=>router.push(historyMode?{pathname:'/account',params:{next:'history'}}:'/account')}/></Panel></Page>;
- return <Page title={driverMode?t('وضع السائق','Driver mode'):passengerTitle} compact={driverMode||!historyMode} footer={driverMode&&userId?<DriverHistoryBar onOpen={setHistoryKind}/>:undefined}>
+ const footer=driverMode&&userId?<DriverHistoryBar onOpen={setHistoryKind}/>:searchingRide?<RideFooter>
+  <RideSearchTimer key={searchingRide.id} startedAt={searchingRide.updated_at??searchingRide.created_at} onExpired={()=>void refresh().catch(()=>{})}/>
+  {!!notice&&<View accessibilityRole="alert"><Label>{notice}</Label></View>}
+  <Button secondary title={t('إلغاء الطلب','Cancel request')} disabled={busy} onPress={()=>cancelRequest(searchingRide)}/>
+ </RideFooter>:!driverMode&&!historyMode&&params.ride&&loading?<RideFooter>
+  <Label>{t('جارٍ تحميل حالة الطلب…','Loading request status…')}</Label>
+ </RideFooter>:undefined;
+ return <Page title={driverMode?t('وضع السائق','Driver mode'):passengerTitle} compact={driverMode||!historyMode} footer={footer}>
   {driverMode&&historyKind&&userId&&<DriverHistory key={userId+historyKind} kind={historyKind} owner={userId} onClose={closeHistory}/>}
   {driverMode&&driver?.approved&&!currentDriverRide&&<DriverShift
    online={driver.online} region={driver.region} category={driver.category} target={workTarget}
@@ -232,7 +242,7 @@ export default function Rides(){
    <Label>{busy||recovery.checking?t('جارٍ التحقق من قبول الطلب…','Checking request acceptance…'):t('لم يتأكد قبول الطلب. يمكنك المحاولة مجددًا إذا ظل متاحًا.','Acceptance is unconfirmed. You can retry if the request is still available.')}</Label>
    {!busy&&!recovery.checking&&<Button secondary title={t('العودة للطلبات المتاحة','Back to available requests')} onPress={()=>{recovery.clear();void refresh().catch(()=>{})}}/>}
   </Panel>}
-  {!!notice&&<View accessibilityRole="alert"><Label>{notice}</Label></View>}
+  {!!notice&&!searchingRide&&<View accessibilityRole="alert"><Label>{notice}</Label></View>}
   {driverMode?<>
    {!currentDriverRide&&(driver?.approved
     ? driver.online

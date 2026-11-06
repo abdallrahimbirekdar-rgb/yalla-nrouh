@@ -41,8 +41,8 @@ export default function RoutePanel({from,to,fromAddress,toAddress,currentLocatio
  const price=quotedFare??(plan?priceForRoute(plan.meters,plan.seconds/60,plan.tariff??state.tariff):null);
  const message=error==='unauthorized'?t('سجّل الدخول مجددًا لحساب الأجرة.','Sign in again to check the fare.'):error==='busy'?t('تم بلوغ حد المحاولات أو أُعيد الطلب بسرعة. انتظر قليلًا قبل المحاولة.','Too many requests. Wait before trying again.'):error==='no_route'?t('لم تعثر Google على طريق قيادة بين النقطتين. جرّب تعديل النقاط.','Google found no driving route. Try changing the points.'):error==='not_configured'||error==='not_enabled'?t('خدمة حساب الطريق غير متاحة الآن. أعد المحاولة لاحقًا.','The route service is not available. Try later.'):t('تعذر حساب الطريق. تحقق من الاتصال وأعد المحاولة.','Could not find the route. Check internet and try again.');
  return <Panel outlined>
-  {estimate&&price!==null?<PassengerFare fare={price}/>:<Label>{title}</Label>}
-  {busy&&<View style={{flexDirection:'row',gap:8,alignItems:'center',justifyContent:'center'}}><ActivityIndicator color={colors.purple}/><Label muted>{t('جارٍ حساب الأجرة…','Calculating fare…')}</Label></View>}
+  {estimate?<PassengerFare fare={price} pending={busy||autoEstimate&&!plan&&!error}/>:<Label>{title}</Label>}
+  {!estimate&&busy&&<View style={{flexDirection:'row',gap:8,alignItems:'center',justifyContent:'center'}}><ActivityIndicator color={colors.purple}/><Label muted>{t('جارٍ حساب المسار…','Calculating route…')}</Label></View>}
   {plan&&<View style={{flexDirection:'row',justifyContent:'center',gap:22}}>
    <View style={{flexDirection:'row',alignItems:'center',gap:5}}><Icon name="map-outline" size={17}/><Label>{(plan.meters/1000).toFixed(2)} {t('كم','km')}</Label></View>
    <View style={{flexDirection:'row',alignItems:'center',gap:5}}><Icon name="time-outline" size={17}/><Label>{Math.ceil(plan.seconds/60)} {t('دقيقة','min')}</Label></View>
