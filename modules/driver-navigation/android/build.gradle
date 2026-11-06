@@ -3,15 +3,41 @@ plugins {
   id 'expo-module-gradle-plugin'
 }
 
+group = 'com.yallanrouh.navigation'
+version = '1.0.0'
+
+def navigationArtifact = 'com.google.android.libraries.navigation:navigation:7.6.0'
+def navigationLicenses = configurations.create('navigationLicenses') {
+  transitive = false
+  canBeConsumed = false
+}
+def noticeAssets = layout.buildDirectory.dir('generated/navigation-notices')
+
 android {
+  sourceSets.main.assets.srcDir(noticeAssets)
   namespace 'com.yallanrouh.navigation'
+  defaultConfig {
+    versionCode 1
+    versionName '1.0.0'
+  }
   compileOptions {
     coreLibraryDesugaringEnabled true
   }
 }
 
 dependencies {
-  implementation 'com.google.android.libraries.navigation:navigation:7.6.0'
+  implementation navigationArtifact
+  add('navigationLicenses', navigationArtifact)
   implementation 'androidx.fragment:fragment-ktx:1.8.9'
   coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs_nio:2.0.3'
 }
+
+def copyNavigationLicenses = tasks.register('copyNavigationLicenses', Copy) {
+  from({ zipTree(navigationLicenses.singleFile) }) {
+    include 'LICENSE', 'LICENSES.txt', 'NOTICE.txt'
+    rename '^LICENSE$', 'LICENSES.txt'
+    into 'navigation-licenses'
+  }
+  into noticeAssets
+}
+tasks.named('preBuild').configure { dependsOn(copyNavigationLicenses) }

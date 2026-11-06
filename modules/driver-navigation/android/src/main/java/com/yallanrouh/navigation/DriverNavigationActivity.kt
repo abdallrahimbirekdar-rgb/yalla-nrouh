@@ -1,12 +1,14 @@
 package com.yallanrouh.navigation
 
 import android.Manifest
+import android.app.AlertDialog
 import android.content.pm.PackageManager
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.view.View
 import android.view.WindowManager
+import android.webkit.WebView
 import android.widget.Button
 import android.widget.FrameLayout
 import android.widget.LinearLayout
@@ -21,6 +23,8 @@ import com.google.android.gms.maps.GoogleMap.CameraPerspective
 class DriverNavigationActivity : FragmentActivity() {
   private var navigator: Navigator? = null
   private var unavailable = false
+  private var routeReady = false
+  private var inForeground = false
   private lateinit var status: TextView
   private lateinit var map: FrameLayout
   private val handler = Handler(Looper.getMainLooper())
@@ -47,7 +51,14 @@ class DriverNavigationActivity : FragmentActivity() {
       text = this@DriverNavigationActivity.text("جارٍ تجهيز ملاحة Google…", "Preparing Google navigation…")
     }
     map = FrameLayout(this).apply { id = 0x5a110 }
-    root.addView(back)
+    val legal = Button(this).apply {
+      text = this@DriverNavigationActivity.text("التراخيص", "Licenses")
+      setOnClickListener { showLicenses() }
+    }
+    val bar = LinearLayout(this)
+    bar.addView(back, LinearLayout.LayoutParams(0, -2, 1f))
+    bar.addView(legal)
+    root.addView(bar)
     root.addView(status)
     root.addView(map, LinearLayout.LayoutParams(-1, 0, 1f))
     setContentView(root)
@@ -91,7 +102,8 @@ class DriverNavigationActivity : FragmentActivity() {
             fragment.getMapAsync { googleMap ->
               if (!isFinishing && !isDestroyed) googleMap.followMyLocation(CameraPerspective.TILTED)
             }
-            ready.startGuidance()
+            routeReady = true
+            if (inForeground) ready.startGuidance()
             status.visibility = View.GONE
           }
         } catch (_: Exception) {
@@ -114,6 +126,44 @@ class DriverNavigationActivity : FragmentActivity() {
       "تعذّر تشغيل ملاحة Google داخل التطبيق. ارجع إلى الرحلة لفتح خرائط Google.",
       "Google navigation could not start here. Go back to the ride to open Google Maps."
     )
+  }
+
+  private fun showLicenses() {
+    val files = assets.list("navigation-licenses").orEmpty().sortedArray()
+    val names = files.map {
+      if (it == "NOTICE.txt") text("إشعارات Google", "Google notices")
+      else text("تراخيص الملاحة من Google", "Google navigation licenses")
+    }.toTypedArray()
+    AlertDialog.Builder(this)
+      .setTitle(text("الإشعارات القانونية", "Legal notices"))
+      .setItems(names) { _, index ->
+        val reader = WebView(this).apply {
+          settings.allowFileAccess = false
+          settings.allowContentAccess = false
+          loadUrl("file:///android_asset/navigation-licenses/" + files[index])
+        }
+        val dialog = AlertDialog.Builder(this)
+          .setTitle(names[index])
+          .setView(reader)
+          .setPositiveButton(android.R.string.ok, null)
+          .create()
+        dialog.setOnDismissListener { reader.destroy() }
+        dialog.show()
+      }
+      .setNegativeButton(android.R.string.cancel, null)
+      .show()
+  }
+
+  override fun onStart() {
+    super.onStart()
+    inForeground = true
+    if (routeReady && !isFinishing) navigator?.startGuidance()
+  }
+
+  override fun onStop() {
+    inForeground = false
+    if (routeReady) navigator?.stopGuidance()
+    super.onStop()
   }
 
   override fun onDestroy() {
