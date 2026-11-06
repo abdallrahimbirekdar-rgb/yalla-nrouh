@@ -6,10 +6,13 @@ export type PickupReader=(ask:boolean,signal?:AbortSignal)=>Promise<Coordinate>;
 function ordinaryBrowser(){return typeof window!=='undefined'&&!(window as Window&{ReactNativeWebView?:unknown}).ReactNativeWebView&&typeof navigator!=='undefined'&&!!navigator.geolocation}
 // Confirmation is a deliberate user action: a browser in "prompt" state
 // must be allowed to request location, rather than being treated as denied.
-export function pickupPosition(read:PickupReader):Promise<Coordinate>{
- const controller=new AbortController();
+export function pickupPosition(read:PickupReader,{controller=new AbortController(),reuseNative=false}={}):Promise<Coordinate>{
  return positionDeadline(async signal=>{
-  if(!ordinaryBrowser())return read(true,signal);
+  if(!ordinaryBrowser()){
+   const host=typeof window!=='undefined'?(window as Window&{__YALLA_NATIVE_LOCATION_GRANTED__?:boolean}):undefined;
+   const recent=reuseNative&&host?.__YALLA_NATIVE_LOCATION_GRANTED__===true?recentVerifiedWebPosition():null;
+   return recent??read(true,signal);
+  }
   try{if(navigator.permissions?.query){const permission=await navigator.permissions.query({name:'geolocation'});if(permission.state==='denied')throw new PositionError('permission')}}
   catch(error){if(error instanceof PositionError)throw error}
   const recent=recentVerifiedWebPosition();if(recent)return recent;

@@ -5,7 +5,9 @@ if(result.status!==0)process.exit(result.status??1);
 const revision=process.env.GITHUB_SHA||spawnSync('git',['rev-parse','HEAD'],{encoding:'utf8'}).stdout.trim();
 if(!/^[a-f0-9]{40}$/i.test(revision))throw Error('Cannot identify website version');
 const nativeHead='<meta name="yalla-site-version" content="'+revision+'"><style>html.yn-native-app #android-download{display:none}</style><script>if(window.ReactNativeWebView)document.documentElement.classList.add("yn-native-app");</script>';
-const html=readFileSync('dist-pages/index.html','utf8').replace('</head>',nativeHead+'</head>');
+const html=readFileSync('dist-pages/index.html','utf8')
+ .replace(/(<meta name="viewport" content="[^"]+)"/,'$1, interactive-widget=resizes-content"')
+ .replace('</head>',nativeHead+'</head>');
 writeFileSync('dist-pages/version.json',JSON.stringify({version:revision}));
 const banner=readFileSync('scripts/android-download.html','utf8');
 const recovery=readFileSync('scripts/startup-recovery.html','utf8');

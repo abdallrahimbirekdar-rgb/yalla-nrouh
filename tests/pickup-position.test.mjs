@@ -35,6 +35,18 @@ test('explicit browser denial is not bypassed with an earlier cached location',(
 test('Android confirmation asks its native reader and never uses browser GPS',()=>browser('prompt',{
  getCurrentPosition:()=>{throw Error('native permission only')},
 },async()=>{let asked;assert.deepEqual(await pickupPosition(async ask=>{asked=ask;return phone}),phone);assert.equal(asked,true)},true));
+test('the Android picker and review can share a measured fix while submission still reads natively',()=>browser('prompt',{},async()=>{
+ let reads=0;
+ const read=async()=>{reads++;return phone};
+ announceWebPosition(phone,{accuracy:20,time:Date.now()});
+ await pickupPosition(read,{reuseNative:true});
+ assert.equal(reads,1);
+ window.__YALLA_NATIVE_LOCATION_GRANTED__=true;
+ assert.deepEqual(await pickupPosition(read,{reuseNative:true}),phone);
+ assert.equal(reads,1);
+ await pickupPosition(read);
+ assert.equal(reads,2);
+},true));
 test('a timeout is explained as a timeout rather than a missing location permission',()=>{
  assert.match(pickupPositionMessage(new PositionError('timeout'),false),/took too long/);
  assert.doesNotMatch(pickupPositionMessage(new PositionError('timeout'),false),/permission/);

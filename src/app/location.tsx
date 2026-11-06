@@ -31,18 +31,30 @@ function LocationPicker({pickup,focus,savedView,edit}:{pickup:boolean;focus:bool
  const initialCenter=useRef<Coordinate|undefined>(original??(Platform.OS==='web'?recentWebPosition(60000):null)??draft.pickupPoint??draft.destinationPoint);
  const [point,setPoint]=useState<Coordinate|null>(original??null),[label,setLabel]=useState(savedView?'':pickup?draft.pickup:draft.destination);
  const [pickupMode,setPickupMode]=useState<'current'|'manual'>(draft.pickupMode==='manual'?'manual':'current');
- const currentChosen=useRef(false);
+ const positionRequest=useRef<AbortController|null>(null);
+ const [locating,setLocating]=useState(false);
  const [confirming,setConfirming]=useState(false);
  const [suggestions,setSuggestions]=useState<PlaceSuggestion[]>([]),[suggesting,setSuggesting]=useState(false),[suggestionError,setSuggestionError]=useState('');
  const [autocomplete]=useState(googlePlaceAutocomplete),near=useRef(initialCenter.current);
  near.current=gps.camera?.point??draft.pickupPoint??initialCenter.current;
  const [query,setQuery]=useState(''),[results,setResults]=useState<Place[]>([]),[saved,setSaved]=useState<SavedPlace[]>([]);
+ const [searchFocused,setSearchFocused]=useState(false);
+ const [keyboardHeight,setKeyboardHeight]=useState<number>();
+ const searchActive=searchFocused||!!query.trim();
+ useEffect(()=>{
+  if(Platform.OS!=='web'||!searchActive||!window.visualViewport){setKeyboardHeight(undefined);return}
+  const viewport=window.visualViewport;
+  const resize=()=>setKeyboardHeight(viewport.height<window.innerHeight-80?viewport.height:undefined);
+  resize();
+  viewport.addEventListener('resize',resize);
+  return()=>viewport.removeEventListener('resize',resize);
+ },[searchActive]);
  const [message,setMessage]=useState(''),[busy,setBusy]=useState(false),[saving,setSaving]=useState(false),[loaded,setLoaded]=useState(false);
  const [savedOpen,setSavedOpen]=useState(false);
  const [mapOpen,setMapOpen]=useState(false);
  const [selectionCamera,setSelectionCamera]=useState<CameraTarget>();
  const alive=useRef(true),task=useRef(0);const token=auth.session?.access_token??null;const account=auth.session?.user.id;const accountRef=useRef(account);accountRef.current=account;
- useEffect(()=>{alive.current=true;return()=>{alive.current=false;autocomplete.reset()}},[autocomplete]);
+ useEffect(()=>{alive.current=true;return()=>{alive.current=false;positionRequest.current?.abort();autocomplete.reset()}},[autocomplete]);
  useEffect(()=>{
   const id=++task.current;setSuggestions([]);setSuggestionError('');
   if(query.trim().length<3){autocomplete.reset();return}
@@ -74,9 +86,9 @@ function LocationPicker({pickup,focus,savedView,edit}:{pickup:boolean;focus:bool
  },[token,account,state.language]);
  useEffect(()=>{void loadSaved()},[loadSaved]);
  useEffect(()=>{
-  if(!pickup||pickupMode!=='current'||!gps.camera?.point)return;
+  if(!pickup||pickupMode!=='current'||!gps.camera?.point||selectionCamera)return;
   setPoint(gps.camera.point);setLabel(state.language==='ar'?'موقعي الحالي':'My current location');
- },[pickup,pickupMode,gps.camera,state.language]);
+ },[pickup,pickupMode,gps.camera,selectionCamera,state.language]);
  const backTo=pickup?{pathname:'/location' as const,params:{target:'destination'}}:editing?{pathname:'/location' as const,params:{view:'saved'}}:'/' as const;
  function navigateToEditor(id:string){
   if(!confirming&&!saving)router.push({pathname:'/location',params:{view:'saved',edit:id}});
@@ -88,7 +100,9 @@ function LocationPicker({pickup,focus,savedView,edit}:{pickup:boolean;focus:bool
  }
  function choose(next:Coordinate,nextLabel?:string,moveCamera=false){
   if(confirming||saving)return;
-  currentChosen.current=false;
+  positionRequest.current?.abort();
+  positionRequest.current=null;
+  setLocating(false);
   if(pickup){gps.chooseManually();setPickupMode('manual')}
   setPoint(next);setLabel(nextLabel??(pickup?t('نقطة الالتقاء على الخريطة','Meeting point on the map'):t('نقطة على الخريطة','Point on the map')));
   changeQuery('');
@@ -96,13 +110,23 @@ function LocationPicker({pickup,focus,savedView,edit}:{pickup:boolean;focus:bool
   setMessage('');
  }
  async function selectCurrent(){
+  if(positionRequest.current||confirming)return;
   changeQuery('');Keyboard.dismiss();
-  currentChosen.current=true;
-  setPickupMode('current');setSelectionCamera(undefined);setMessage('');
-  const next=await gps.locate();
-  if(next&&alive.current&&currentChosen.current){
-   setPoint(next);setLabel(t('موقعي الحالي','My current location'));
-   setSelectionCamera({point:next,revision:Date.now()});
+  gps.chooseManually();
+  const controller=new AbortController();
+  positionRequest.current=controller;
+  setLocating(true);
+  try{
+   const next=await pickupPosition(siteCurrentPosition,{controller,reuseNative:true});
+   if(alive.current&&positionRequest.current===controller){
+    setPickupMode('current');
+    setPoint(next);setLabel(t('موقعي الحالي','My current location'));
+    setSelectionCamera({point:next,revision:Date.now()});
+   }
+  }catch(error){
+   if(alive.current&&positionRequest.current===controller)setMessage(pickupPositionMessage(error,state.language==='ar'));
+  }finally{
+   if(positionRequest.current===controller){positionRequest.current=null;if(alive.current)setLocating(false)}
   }
  }
  async function selectSuggestion(suggestion:PlaceSuggestion){
@@ -119,14 +143,14 @@ function LocationPicker({pickup,focus,savedView,edit}:{pickup:boolean;focus:bool
   finally{if(timer)clearTimeout(timer);if(alive.current&&id===task.current)setBusy(false)}
  }
  async function confirm(){
-  if(confirming||busy||query.trim()||(!point&&(!pickup||pickupMode==='manual')))return;
+  if(confirming||busy||locating||query.trim()||!point)return;
   if(pickup&&!draft.destinationPoint){
    router.replace({pathname:'/location',params:{target:'destination'}});
    return;
   }
   setConfirming(true);setMessage('');
   try{
-   const selected=pickup&&pickupMode==='current'?await pickupPosition(siteCurrentPosition):point;
+   const selected=pickup&&pickupMode==='current'?await pickupPosition(siteCurrentPosition,{reuseNative:true}):point;
    if(!alive.current||!selected)return;
    if(pickup&&draft.destinationPoint&&sameCoordinate(selected,draft.destinationPoint)){
     setMessage(t('اختر نقطة انطلاق مختلفة عن الوجهة.','Choose a pickup point different from the destination.'));
@@ -207,12 +231,13 @@ function LocationPicker({pickup,focus,savedView,edit}:{pickup:boolean;focus:bool
  const title=editing?(slot?t('عنوان ','Address: ')+addressSlotLabel(slot,t):t('إضافة عنوان','Add an address')):pickup?t('نقطة الانطلاق','Pickup point'):t('نقطة الوصول','Destination point');
  const typing=!!query.trim();
  const clearSearch=t('مسح البحث','Clear search');
- return <Page compact backTo={backTo} title={title}>
+ return <Page compact simpleHeader viewportHeight={keyboardHeight} backTo={backTo} title={title}>
+  <View nativeID={searchActive?'ride-address-search-active':undefined}>
   <Panel outlined>
    <View style={{flexDirection:state.language==='ar'?'row-reverse':'row',alignItems:'flex-end',gap:8}}>
     <View style={{flex:1}}>
      <Field autoFocus={focus} label={pickup?t('من وين بدك تنطلق؟','Where should we pick you up?'):editing?t('ابحث عن العنوان','Find an address'):t('لوين بدك تروح؟','Where to?')} value={query}
-      editable={!confirming&&!saving} onChangeText={changeQuery} autoCorrect={false} autoComplete="off"
+      editable={!confirming&&!saving} onFocus={()=>setSearchFocused(true)} onBlur={()=>setSearchFocused(false)} onChangeText={changeQuery} autoCorrect={false} autoComplete="off"
       maxLength={200} placeholder={t('اسم المكان أو الشارع أو الحي','Place, street or district')}
       returnKeyType="search" onSubmitEditing={()=>void search()}/>
     </View>
@@ -228,33 +253,38 @@ function LocationPicker({pickup,focus,savedView,edit}:{pickup:boolean;focus:bool
     <View style={{paddingHorizontal:12,paddingVertical:4}}><Label muted>Google Maps</Label></View>
    </View>}
    {!!suggestionError&&<Label muted>{suggestionError}</Label>}
+   {!!suggestionError&&<Button secondary icon="map-outline" title={t('اختيار على الخريطة','Choose on map')} onPress={()=>{changeQuery('');Keyboard.dismiss();setMapOpen(true)}}/>}
    {typing&&!suggesting&&!results.length&&query.trim().length>=3&&<Button secondary icon="search" title={t('عرض نتائج أكثر','Show more results')} onPress={()=>void search()} disabled={confirming||busy}/>}
    {busy&&<ActivityIndicator accessibilityLabel={t('جارٍ تحديد العنوان…','Finding the address…')}/>}
    {typing&&notice}
-  </Panel>
-  {pickup&&!typing&&<Panel>
-   <Label muted>{t('الوجهة','Destination')}</Label><Label>{draft.destination}</Label>
-   <Button secondary icon="locate" title={gps.busy?t('جارٍ تحديد موقعك…','Finding your location…'):t('استخدام موقعي الحالي','Use my current location')} onPress={()=>void selectCurrent()} disabled={confirming||busy||gps.busy}/>
-   {gps.failure&&pickupMode==='current'&&<Label muted>{pickupPositionMessage(new PositionError(gps.failure),state.language==='ar')}</Label>}
-  </Panel>}
+  </Panel></View>
+  {!typing&&<>
+  {pickup&&<Button secondary icon="locate" title={locating?t('جارٍ تحديد موقعك…','Finding your location…'):t('استخدام موقعي الحالي','Use my current location')} onPress={()=>void selectCurrent()} disabled={confirming||busy||locating}/>}
+  {pickup&&!message&&!locating&&!point&&gps.failure&&<Label muted>{pickupPositionMessage(new PositionError(gps.failure),state.language==='ar')}</Label>}
   {oldPlace&&!point&&!typing&&<Label muted>{t('العنوان المحفوظ حاليًا: ','Current saved address: ')}{oldPlace.label}</Label>}
-  {!typing&&<Panel>
-   {point&&(pickup&&pickupMode==='current'?<Label>{t('موقعي الحالي','My current location')}</Label>:<Field label={t('اسم العنوان','Address name')} value={label} onChangeText={setLabel} maxLength={200} editable={!confirming&&!busy&&!saving}/>)}
+  {point?<Panel>
+   {editing?<Field label={t('اسم العنوان','Address name')} value={label} onChangeText={setLabel} maxLength={200} editable={!confirming&&!busy&&!saving}/>:<>
+    <Label muted>{pickup?t('نقطة الانطلاق المختارة','Selected pickup'):t('الوجهة المختارة','Selected destination')}</Label>
+    <Label>{pickup&&pickupMode==='current'?t('موقعي الحالي','My current location'):label}</Label>
+   </>}
    <Button icon="checkmark-circle-outline"
     title={editing?t('حفظ العنوان','Save address'):pickup?t('تأكيد الانطلاق وعرض الأجرة','Confirm pickup and view fare'):t('تأكيد الوجهة واختيار الانطلاق','Confirm destination and choose pickup')}
     onPress={()=>void (editing?savePlace():confirm())}
-    disabled={confirming||busy||saving||(!point&&(!pickup||gps.busy))||(editing&&!loaded)}/>
+    disabled={confirming||busy||saving||locating||!point||(editing&&!loaded)}/>
    {confirming&&<ActivityIndicator accessibilityLabel={t('جارٍ تأكيد نقطة الانطلاق…','Confirming pickup…')}/>}
    {notice}
-  </Panel>}
-  <Button secondary icon="map-outline" title={mapOpen?t('إخفاء الخريطة','Hide map'):t('تحديد نقطة على الخريطة','Choose a point on the map')}
-   onPress={()=>{if(!mapOpen)Keyboard.dismiss();setMapOpen(value=>!value)}}/>
+  </Panel>:notice}
+  <View style={{flexDirection:state.language==='ar'?'row-reverse':'row',gap:8}}>
+   <View style={{flex:1}}><Button secondary icon="map-outline" title={mapOpen?t('إخفاء الخريطة','Hide map'):t('اختيار على الخريطة','Choose on map')}
+    onPress={()=>{Keyboard.dismiss();setMapOpen(value=>!value)}}/></View>
+   {!editing&&<View style={{flex:1}}><Button secondary icon="bookmark-outline" title={savedOpen?t('إخفاء العناوين','Hide saved addresses'):t('العناوين المحفوظة','Saved addresses')} onPress={()=>{Keyboard.dismiss();setSavedOpen(value=>!value)}}/></View>}
+  </View>
   {mapOpen&&<MapCanvas point={point??oldPlace?.coordinate??null} initialCenter={initialCenter.current} cameraTarget={selectionCamera??gps.camera} onChange={next=>{if(!confirming&&!busy&&!saving)choose(next)}}/>}
   {!editing&&<View style={{gap:8}}>
-   <Button secondary icon="folder-outline" title={savedOpen?t('إخفاء العناوين المحفوظة','Hide saved addresses'):t('اختيار عنوان محفوظ','Choose a saved address')} onPress={()=>setSavedOpen(value=>!value)}/>
    {savedOpen&&(token?<Panel>{savedList}{point&&(!pickup||pickupMode==='manual')&&<Button secondary icon="bookmark-outline" title={t('حفظ النقطة المحددة كعنوان','Save selected point as an address')} onPress={()=>void savePlace()} disabled={!loaded||saving||confirming}/>}</Panel>:signIn)}
   </View>}
-  <Button secondary title={t('العودة','Back')} onPress={()=>router.replace(backTo)}/>
+  {pickup&&!!draft.destination&&<Label muted>{t('الوجهة: ','Destination: ')}{draft.destination}</Label>}
+  </>}
  </Page>;
 }
 

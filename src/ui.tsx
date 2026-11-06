@@ -57,6 +57,24 @@ export function AppMenu({onSettings}:{onSettings?:()=>void}={}){
  <Label muted>{t('نسخة اختبار • الدفع نقدًا','Test version • Pay in cash')}</Label>
  </ScrollView></View></View></Modal></>;
 }
-export function Page({title,children,hero,footer,compact=false,backTo='/'}:{title:string;children:React.ReactNode;hero?:React.ReactNode;footer?:React.ReactNode;compact?:boolean;backTo?:Href}){const auth=useAuth();const {ready,loadError,retry,state}=useApp();const {colors}=useTheme();const t=useText();const themed=themedStyles(colors);return <SafeAreaView style={[styles.safe,{backgroundColor:compact?colors.soft:colors.background}]}><KeyboardAvoidingView style={{flex:1}} behavior={Platform.OS==='ios'?'padding':undefined}><ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={[styles.page,compact&&styles.compactPage]}><View style={{flexDirection:state.language==='ar'?'row-reverse':'row',alignItems:'center',justifyContent:'space-between',gap:8}}>{compact&&auth.driver?<View style={{flexShrink:1}}><Label large>{title}</Label></View>:<Pressable accessibilityRole="button" accessibilityLabel={auth.driver?t('لوحة السائق','Driver dashboard'):t('العودة للحجز','Back to booking')} style={themed.circle} onPress={()=>auth.driver?router.replace({pathname:'/cloud',params:{mode:'driver'}}):router.replace(backTo)}><Icon name={state.language==='ar'?'arrow-forward':'arrow-back'}/></Pressable>}<View style={{flexDirection:'row',gap:8,alignItems:'center'}}><AccountButton/><AppMenu/></View></View>{hero??(!compact||!auth.driver?<Label large>{title}</Label>:null)}{!ready?<Panel>{loadError?<><Label>{t('تعذر تحميل البيانات المحفوظة.','Could not load saved data.')}</Label><Button title={t('إعادة المحاولة','Try again')} onPress={retry}/></>:<ActivityIndicator color={colors.purple}/>}</Panel>:<><DeviceStatus/>{children}</>}</ScrollView>{ready&&footer}</KeyboardAvoidingView></SafeAreaView>}
+export function Page({title,children,hero,footer,compact=false,simpleHeader=false,viewportHeight,backTo='/'}:{title:string;children:React.ReactNode;hero?:React.ReactNode;footer?:React.ReactNode;compact?:boolean;simpleHeader?:boolean;viewportHeight?:number;backTo?:Href}){
+ const auth=useAuth();const {ready,loadError,retry,state}=useApp();const {colors}=useTheme();const t=useText();const themed=themedStyles(colors);
+ const arabic=state.language==='ar';
+ const driverHeader=compact&&auth.driver&&!simpleHeader;
+ const back=<Pressable accessibilityRole="button" accessibilityLabel={auth.driver?t('لوحة السائق','Driver dashboard'):simpleHeader?t('رجوع','Back'):t('العودة للحجز','Back to booking')} style={themed.circle} onPress={()=>auth.driver?router.replace({pathname:'/cloud',params:{mode:'driver'}}):router.replace(backTo)}><Icon name={arabic?'arrow-forward':'arrow-back'}/></Pressable>;
+ return <SafeAreaView style={[styles.safe,{backgroundColor:compact?colors.soft:colors.background,maxHeight:viewportHeight}]}>
+  <KeyboardAvoidingView style={{flex:1}} behavior={Platform.OS==='ios'?'padding':undefined}>
+   <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={[styles.page,compact&&styles.compactPage]}>
+    <View style={{flexDirection:arabic?'row-reverse':'row',alignItems:'center',justifyContent:'space-between',gap:8}}>
+     {driverHeader?<View style={{flexShrink:1}}><Label large>{title}</Label></View>:back}
+     {simpleHeader?<View style={{flex:1}}><Label large>{title}</Label></View>:<View style={{flexDirection:'row',gap:8,alignItems:'center'}}><AccountButton/><AppMenu/></View>}
+    </View>
+    {hero??(!simpleHeader&&!driverHeader?<Label large>{title}</Label>:null)}
+    {!ready?<Panel>{loadError?<><Label>{t('تعذر تحميل البيانات المحفوظة.','Could not load saved data.')}</Label><Button title={t('إعادة المحاولة','Try again')} onPress={retry}/></>:<ActivityIndicator color={colors.purple}/>}</Panel>:<><DeviceStatus/>{children}</>}
+   </ScrollView>
+   {ready&&footer}
+  </KeyboardAvoidingView>
+ </SafeAreaView>;
+}
 export function themedStyles(colors:Palette){return {circle:[styles.circle,{backgroundColor:colors.background,borderColor:colors.line}],menu:[styles.menu,{backgroundColor:colors.background}]};}
 export const styles=StyleSheet.create({safe:{flex:1,direction:'ltr'},page:{width:'100%',maxWidth:640,alignSelf:'center',padding:22,gap:22,paddingBottom:32},text:{fontSize:16,lineHeight:28},muted:{fontSize:12,lineHeight:22},large:{fontSize:23,lineHeight:38},display:{fontSize:30,lineHeight:42},compactPage:{padding:12,gap:12,paddingBottom:22},prominentButton:{minHeight:60,paddingHorizontal:8},button:{minHeight:52,borderRadius:13,paddingHorizontal:16,paddingVertical:12,justifyContent:'center'},panel:{padding:18,borderRadius:16,gap:14},input:{borderBottomWidth:1,minHeight:52,paddingHorizontal:0,paddingVertical:8,fontSize:17,lineHeight:28},row:{flexDirection:'row',gap:8,flexWrap:'wrap'},circle:{width:48,height:48,borderRadius:24,borderWidth:1,alignItems:'center',justifyContent:'center'},overlay:{flex:1,backgroundColor:'#00000077',justifyContent:'center',padding:22},menu:{width:'100%',maxWidth:380,alignSelf:'center',borderRadius:22,padding:22,gap:14}});

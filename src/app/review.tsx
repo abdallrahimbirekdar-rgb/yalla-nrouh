@@ -19,7 +19,18 @@ import RideOptions from '../ride-options';
 import {Button,Label,Page,Panel,useText,useTheme} from '../ui';
 export default function Review(){
  const {draft,state,setDraft,foreground}=useApp();const auth=useAuth();const owner=auth.session?.user.id;const t=useText();const {colors}=useTheme();const [quoteAttempt,setQuoteAttempt]=useState(0);const [busy,setBusy]=useState(false),[error,setError]=useState(''),[quoted,setQuoted]=useState<{key:string;quote:FareQuote}|null>(null),[pickupReady,setPickupReady]=useState(false),[locationAttempt,setLocationAttempt]=useState(0);const quoteKey=[draft.pickupPoint?.latitude,draft.pickupPoint?.longitude,draft.destinationPoint?.latitude,draft.destinationPoint?.longitude].join('|');const manualPickup=draft.pickupMode==='manual';const invalid=validateDraft(draft)||!draft.pickupPoint||!draft.destinationPoint;
- useEffect(()=>{let active=true;setPickupReady(false);setQuoted(null);setError('');if(manualPickup)return;void pickupPosition(siteCurrentPosition).then(point=>{if(active){setDraft(previous=>({...previous,pickup:state.language==='ar'?'موقعي الحالي':'My current location',pickupPoint:point}));setPickupReady(true)}}).catch(e=>{if(active)setError(pickupPositionMessage(e,state.language==='ar'))});return()=>{active=false}},[setDraft,state.language,locationAttempt,manualPickup]);
+ useEffect(()=>{
+  setPickupReady(false);setQuoted(null);setError('');
+  if(manualPickup)return;
+  const controller=new AbortController();
+  let active=true;
+  void pickupPosition(siteCurrentPosition,{controller,reuseNative:locationAttempt===0}).then(point=>{
+   if(!active)return;
+   setDraft(previous=>({...previous,pickup:state.language==='ar'?'موقعي الحالي':'My current location',pickupPoint:point}));
+   setPickupReady(true);
+  }).catch(error=>{if(active)setError(pickupPositionMessage(error,state.language==='ar'))});
+  return()=>{active=false;controller.abort()};
+ },[setDraft,state.language,locationAttempt,manualPickup]);
  function openRide(rideId:string){
   setDraft(previous=>({...previous,pickup:'',destination:'',pickupPoint:undefined,pickupMode:undefined,destinationPoint:undefined}));
   router.replace({pathname:'/cloud',params:{ride:rideId}});
