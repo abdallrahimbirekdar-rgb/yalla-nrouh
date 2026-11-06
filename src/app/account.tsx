@@ -8,7 +8,7 @@ import {Button,Field,Icon,Label,Page,Panel,useText,useTheme} from '../ui';
 export default function Account(){
  const auth=useAuth();const {state}=useApp();const t=useText();const {dark}=useTheme();const {next}=useLocalSearchParams<{next?:string}>();
  const [mode,setMode]=useState<'login'|'signup'|'reset'>('login'),[email,setEmail]=useState(''),[password,setPassword]=useState(''),[repeat,setRepeat]=useState(''),[visible,setVisible]=useState(false),[busy,setBusy]=useState(false),[notice,setNotice]=useState('');
- const allowedNext=next==='admin'?'/admin':next==='review'?'/review':next==='destination'?'/location':null;
+ const allowedNext=next==='admin'?'/admin':next==='review'?'/review':next==='destination'||next==='saved'?'/location':null;
  useEffect(()=>{if(auth.recovery)setNotice('')},[auth.recovery]);
  async function submit(){
   if(busy)return;setBusy(true);setNotice('');
@@ -17,7 +17,7 @@ export default function Account(){
    if(mode==='reset'){await auth.reset(email);setNotice(t('إذا كان البريد مسجلًا، ستصلك رسالة لإعادة تعيين كلمة المرور. افحص البريد غير المرغوب أيضًا.','If the email has an account, a reset message will arrive. Check spam too.'));return}
    if(mode==='signup'){if(password!==repeat){setNotice(t('كلمتا المرور غير متطابقتين.','Passwords do not match.'));return}const signed=await auth.signUp(email,password);setPassword('');setRepeat('');setNotice(signed?t('تم إنشاء الحساب وتسجيل الدخول.','Account created. You are signed in.'):t('افتح رسالة التأكيد في بريدك، ثم عد إلى تسجيل الدخول.','Open the email to confirm your account, then sign in.'));return}
    await auth.signIn(email,password);setPassword('');
-   if(allowedNext==='/location')router.replace({pathname:'/location',params:{target:'destination'}});else if(allowedNext)router.replace(allowedNext);else router.replace('/');
+   if(allowedNext==='/location')router.replace({pathname:'/location',params:next==='saved'?{view:'saved'}:{target:'destination'}});else if(allowedNext)router.replace(allowedNext);else router.replace('/');
   }catch(error){setNotice(authErrorMessage(error,state.language==='ar'))}finally{setBusy(false)}
  }
  return <Page title={auth.recovery?t('كلمة مرور جديدة','New password'):auth.session?t('حسابي','My account'):t('تسجيل الدخول','Sign in')}>
@@ -28,7 +28,7 @@ export default function Account(){
    {!auth.driver&&<>
    <Button icon="car-outline" title={t('حجز رحلة','Book a ride')} onPress={()=>router.replace('/')}/>
    <Button secondary icon="time-outline" title={t('رحلاتي','My rides')} onPress={()=>router.push('/cloud')}/>
-   <Button secondary icon="bookmark-outline" title={t('أماكني المحفوظة','My saved places')} onPress={()=>router.push({pathname:'/location',params:{target:'destination',view:'saved'}})}/>
+   <Button secondary icon="bookmark-outline" title={t('أماكني المحفوظة','My saved places')} onPress={()=>router.push({pathname:'/location',params:{view:'saved'}})}/>
    </>}
    <Button secondary icon="car-sport-outline" title={t('وضع السائق','Driver mode')} onPress={()=>router.push({pathname:'/cloud',params:{mode:'driver'}})}/>
    <Button secondary title={t('تسجيل الخروج من هذا الجهاز','Sign out on this device')} disabled={busy} onPress={()=>{setBusy(true);void auth.signOut().catch(error=>setNotice(authErrorMessage(error,state.language==='ar'))).finally(()=>setBusy(false))}}/>

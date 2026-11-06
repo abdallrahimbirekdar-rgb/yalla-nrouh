@@ -17,30 +17,33 @@ import RoutePanel from '../route-panel';
 import RideOptions from '../ride-options';
 import {Button,Label,Page,Panel,useText} from '../ui';
 export default function Review(){
- const {draft,state,setDraft,foreground}=useApp();const auth=useAuth();const owner=auth.session?.user.id;const t=useText();const [busy,setBusy]=useState(false),[error,setError]=useState(''),[quoted,setQuoted]=useState<{key:string;quote:FareQuote}|null>(null),[pickupReady,setPickupReady]=useState(false),[locationAttempt,setLocationAttempt]=useState(0);const quoteKey=[draft.pickupPoint?.latitude,draft.pickupPoint?.longitude,draft.destinationPoint?.latitude,draft.destinationPoint?.longitude].join('|');const invalid=validateDraft(draft)||!draft.pickupPoint||!draft.destinationPoint;
- useEffect(()=>{let active=true;setPickupReady(false);setQuoted(null);setError('');void pickupPosition(siteCurrentPosition).then(point=>{if(active){setDraft(previous=>({...previous,pickup:state.language==='ar'?'موقعي الحالي':'My current location',pickupPoint:point}));setPickupReady(true)}}).catch(e=>{if(active)setError(pickupPositionMessage(e,state.language==='ar'))});return()=>{active=false}},[setDraft,state.language,locationAttempt]);
+ const {draft,state,setDraft,foreground}=useApp();const auth=useAuth();const owner=auth.session?.user.id;const t=useText();const [busy,setBusy]=useState(false),[error,setError]=useState(''),[quoted,setQuoted]=useState<{key:string;quote:FareQuote}|null>(null),[pickupReady,setPickupReady]=useState(false),[locationAttempt,setLocationAttempt]=useState(0);const quoteKey=[draft.pickupPoint?.latitude,draft.pickupPoint?.longitude,draft.destinationPoint?.latitude,draft.destinationPoint?.longitude].join('|');const manualPickup=draft.pickupMode==='manual';const invalid=validateDraft(draft)||!draft.pickupPoint||!draft.destinationPoint;
+ useEffect(()=>{let active=true;setPickupReady(false);setQuoted(null);setError('');if(manualPickup)return;void pickupPosition(siteCurrentPosition).then(point=>{if(active){setDraft(previous=>({...previous,pickup:state.language==='ar'?'موقعي الحالي':'My current location',pickupPoint:point}));setPickupReady(true)}}).catch(e=>{if(active)setError(pickupPositionMessage(e,state.language==='ar'))});return()=>{active=false}},[setDraft,state.language,locationAttempt,manualPickup]);
  function openRide(){
-  setDraft(previous=>({...previous,pickup:'',destination:'',pickupPoint:undefined,destinationPoint:undefined}));
+  setDraft(previous=>({...previous,pickup:'',destination:'',pickupPoint:undefined,pickupMode:undefined,destinationPoint:undefined}));
   router.replace('/cloud');
  }
  const recovery=useRideRecovery('request',owner,foreground,busy,openRide);
  async function confirm(){
-  if(busy||!owner||invalid||!pickupReady||quoted?.key!==quoteKey||recovery.checking)return;
+  if(busy||!owner||invalid||(!manualPickup&&!pickupReady)||quoted?.key!==quoteKey||recovery.checking)return;
   setBusy(true);setError('');
   let submitted=false;
   try{
-   const current=await pickupPosition(siteCurrentPosition);
-   const currentDraft={...draft,pickup:t('موقعي الحالي','My current location'),pickupPoint:current};
-   if(!pickupQuoteMatches(draft.pickupPoint,current)){
-    setQuoted(null);setDraft(currentDraft);
-    setError(t('تغيّر موقعك الحالي. نحدّث نقطة الانطلاق والأجرة؛ راجع السعر ثم أكّد الطلب.','Your location changed. We are updating pickup and fare. Check the price, then confirm.'));
-    return;
+   let requestDraft=draft;
+   if(!manualPickup){
+    const current=await pickupPosition(siteCurrentPosition);
+    requestDraft={...draft,pickup:t('موقعي الحالي','My current location'),pickupPoint:current};
+    if(!pickupQuoteMatches(draft.pickupPoint,current)){
+     setQuoted(null);setDraft(requestDraft);
+     setError(t('تغيّر موقعك الحالي. نحدّث نقطة الانطلاق والأجرة؛ راجع السعر ثم أكّد الطلب.','Your location changed. We are updating pickup and fare. Check the price, then confirm.'));
+     return;
+    }
    }
    const token=await cloudCurrentToken();
    if(readRideState().owner!==owner)return;
    const requestId=recovery.id??newRideRequestId();
    recovery.remember(requestId);submitted=true;
-   await cloudRequestRide(token,currentDraft,requestId,quoted.quote.id);
+   await cloudRequestRide(token,requestDraft,requestId,quoted.quote.id);
    if(readRideState().owner===owner){recovery.clear();openRide()}
   }catch(e){
    if(readRideState().owner!==owner)return;
@@ -53,11 +56,11 @@ export default function Review(){
    setError(kind==='too_many_requests'||kind==='23505'?t('قد يكون لديك طلب نشط. افتح رحلاتي للتحقق.','You may already have an active request. Open My rides to check.'):authErrorMessage(e,state.language==='ar'));
   }finally{setBusy(false)}
  }
- return <Page title={t('راجع رحلتك','Review your ride')}>
+ return <Page title={t('راجع رحلتك','Review your ride')} backTo={!recovery.id&&draft.destinationPoint?{pathname:'/location',params:{target:'pickup'}}:'/'}>
   {recovery.id&&<Panel>
    <Label>{busy||recovery.checking?t('جارٍ التحقق من وصول الطلب…','Checking whether your request arrived…'):t('لم يتأكد وصول الطلب بعد. يمكنك إعادة إرساله بنفس رقم الطلب.','Your request is still unconfirmed. You can retry with the same request ID.')}</Label>
   </Panel>}
-  {!pickupReady?<Panel><Label>{error||t('جارٍ قراءة موقع الانطلاق من الهاتف…','Reading pickup from your phone…')}</Label><Button secondary title={t('تحديث موقعي الحالي','Update my current location')} onPress={()=>setLocationAttempt(value=>value+1)}/></Panel>:invalid?<Panel><Label>{t('حدد نقطتي الانطلاق والوصول أولًا.','Choose pickup and destination first.')}</Label><Button title={t('اختيار النقاط','Choose points')} onPress={()=>router.replace('/')}/></Panel>:<>
+  {!manualPickup&&!pickupReady?<Panel><Label>{error||t('جارٍ قراءة موقع الانطلاق من الهاتف…','Reading pickup from your phone…')}</Label><Button secondary title={t('تحديث موقعي الحالي','Update my current location')} onPress={()=>setLocationAttempt(value=>value+1)}/></Panel>:invalid?<Panel><Label>{t('حدد نقطتي الانطلاق والوصول أولًا.','Choose pickup and destination first.')}</Label><Button title={t('اختيار النقاط','Choose points')} onPress={()=>router.replace(draft.destinationPoint?{pathname:'/location',params:{target:'pickup'}}:{pathname:'/'})}/></Panel>:<>
    <Summary trip={draft}/>
    <RideOptions/>
    {!auth.session?<Panel><Label>{t('سجّل الدخول للمتابعة وحساب الأجرة. ستبقى نقطتا رحلتك محفوظتين.','Sign in to check the fare and continue. Your points will stay saved.')}</Label><Button icon="log-in-outline" title={t('تسجيل الدخول والمتابعة','Sign in and continue')} onPress={()=>router.push({pathname:'/account',params:{next:'review'}})}/></Panel>:<>
@@ -67,6 +70,9 @@ export default function Review(){
    </>}
   </>}
   {!!error&&<Panel><Label>{error}</Label><Button secondary title={t('فتح رحلاتي','Open My rides')} onPress={()=>router.push('/cloud')}/></Panel>}
-  {!recovery.id&&<Button secondary title={t('تعديل الوجهة','Change destination')} onPress={()=>router.replace('/')}/>}
+  {!recovery.id&&<>
+   {draft.destinationPoint&&<Button secondary icon="location-outline" title={t('تعديل نقطة الانطلاق','Change pickup point')} onPress={()=>router.replace({pathname:'/location',params:{target:'pickup'}})}/>}
+   <Button secondary title={t('تعديل الوجهة','Change destination')} onPress={()=>router.replace({pathname:'/location',params:{target:'destination'}})}/>
+  </>}
  </Page>;
 }
