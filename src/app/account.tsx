@@ -17,7 +17,7 @@ export default function Account(){
    if(mode==='reset'){await auth.reset(email);setNotice(t('إذا كان البريد مسجلًا، ستصلك رسالة لإعادة تعيين كلمة المرور. افحص البريد غير المرغوب أيضًا.','If the email has an account, a reset message will arrive. Check spam too.'));return}
    if(mode==='signup'){if(password!==repeat){setNotice(t('كلمتا المرور غير متطابقتين.','Passwords do not match.'));return}const signed=await auth.signUp(email,password);setPassword('');setRepeat('');setNotice(signed?t('تم إنشاء الحساب وتسجيل الدخول.','Account created. You are signed in.'):t('افتح رسالة التأكيد في بريدك، ثم عد إلى تسجيل الدخول.','Open the email to confirm your account, then sign in.'));return}
    await auth.signIn(email,password);setPassword('');
-   if(allowedNext==='/location')router.replace({pathname:'/location',params:next==='saved'?{view:'saved'}:{target:'destination'}});else if(allowedNext)router.replace(allowedNext);else router.replace('/');
+   if(allowedNext==='/location')router.replace({pathname:'/location',params:next==='saved'?{view:'saved'}:{target:'destination'}});else if(next==='history')router.replace({pathname:'/cloud',params:{mode:'history'}});else if(allowedNext)router.replace(allowedNext);else router.replace('/');
   }catch(error){setNotice(authErrorMessage(error,state.language==='ar'))}finally{setBusy(false)}
  }
  return <Page title={auth.recovery?t('كلمة مرور جديدة','New password'):auth.session?t('حسابي','My account'):t('تسجيل الدخول','Sign in')}>

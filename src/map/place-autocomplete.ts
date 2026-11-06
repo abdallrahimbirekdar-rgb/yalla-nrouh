@@ -1,12 +1,13 @@
 import {isCoordinate,type Coordinate} from '../geo.ts';
 import type {Place} from '../api.ts';
 type Detail={location?:{lat:()=>number;lng:()=>number};fetchFields:(request:{fields:string[]})=>Promise<unknown>};
-type Prediction={placeId:string;text:{toString:()=>string};toPlace:()=>Detail};
+type PredictionText={toString:()=>string};
+type Prediction={placeId:string;text:PredictionText;mainText?:PredictionText|null;secondaryText?:PredictionText|null;toPlace:()=>Detail};
 export interface AutocompleteLibrary {
  AutocompleteSessionToken:new()=>object;
  AutocompleteSuggestion:{fetchAutocompleteSuggestions:(request:Record<string,unknown>)=>Promise<{suggestions:{placePrediction?:Prediction|null}[]}>};
 }
-export interface PlaceSuggestion {id:string;label:string;select:()=>Promise<Place>}
+export interface PlaceSuggestion {id:string;label:string;primary:string;secondary?:string;select:()=>Promise<Place>}
 export function createPlaceAutocomplete(load:(language:string)=>Promise<AutocompleteLibrary>){
  let session:object|null=null;
  return {
@@ -18,7 +19,7 @@ export function createPlaceAutocomplete(load:(language:string)=>Promise<Autocomp
    return suggestions.slice(0,5).flatMap(({placePrediction:p})=>{
     if(!p?.placeId||!p.text)return [];
     const label=p.text.toString().slice(0,200);
-    return [{id:p.placeId,label,async select(){
+    return [{id:p.placeId,label,primary:p.mainText?.toString()||label,secondary:p.secondaryText?.toString(),async select(){
      if(session===token)session=null;
      const detail=p.toPlace();await detail.fetchFields({fields:['location']});
      const coordinate={latitude:detail.location?.lat()??NaN,longitude:detail.location?.lng()??NaN};

@@ -6,6 +6,8 @@ import {useAuth} from '../auth';
 import {authErrorMessage} from '../auth-errors';
 import {cloudCurrentToken,cloudMutationUncertain,cloudMyRides,cloudDriverInbox,cloudOpenRides,cloudDeclineDriverOffer,cloudAcceptRide,cloudAdvanceRide,cloudReleaseRide,cloudCancelRide,cloudConfirmPickup,cloudRegisterDriver,cloudSetDriverOnline,type CloudRide,type CloudDriver,type DriverHistoryKind,type RidePreview} from '../cloud-api';
 import {categories,regions} from '../domain';
+import {isCoordinate} from '../geo';
+import {PassengerFare,PassengerStops} from '../passenger-trip-summary';
 import DriverOffer from '../driver-offer';
 import type {RoutePlan} from '../routing';
 import DriverNavigation from '../driver-navigation';
@@ -19,7 +21,8 @@ import {createRefreshQueue} from '../refresh-queue';
 import {Button,Icon,Label,Page,Panel,useText,useTheme} from '../ui';
 const live=(r:CloudRide)=>!['completed','cancelled'].includes(r.status);
 export default function Rides(){
- const auth=useAuth();const userId=auth.session?.user.id;const {state,draft,foreground}=useApp();const t=useText();const {colors}=useTheme();const params=useLocalSearchParams<{mode?:string}>();const driverMode=auth.driver||params.mode==='driver';
+ const auth=useAuth();const userId=auth.session?.user.id;const {state,draft,setDraft,foreground}=useApp();const t=useText();const {colors}=useTheme();const params=useLocalSearchParams<{mode?:string;ride?:string}>();const driverMode=auth.driver||params.mode==='driver';const historyMode=!driverMode&&params.mode==='history';
+ const passengerTitle=historyMode?t('الرحلات السابقة','Past rides'):t('رحلتي الحالية','Current ride');
  const [offerLimit,setOfferLimit]=useState(3);
  const [workTarget,setWorkTarget]=useState<boolean|null>(null);
  const [focusedOffer,setFocusedOffer]=useState<string|null>(null);
@@ -139,6 +142,15 @@ export default function Rides(){
  }
  const status=(value:string)=>({requested:t('بانتظار السائق','Waiting for driver'),accepted:t('السائق في الطريق','Driver is on the way'),arrived:t('وصل السائق','Driver arrived'),riding:t('الرحلة جارية','Ride in progress'),completed:t('مكتملة','Completed'),cancelled:t('ملغاة','Cancelled')} as Record<string,string>)[value]??value;
  const mine=rides.filter(r=>r.passenger_id===userId);
+ const currentPassengerRide=mine.find(live);
+ const passengerRides=mine.filter(ride=>historyMode?!live(ride):ride.id===(currentPassengerRide?.id??params.ride));
+ function reuseDestination(ride:CloudRide){
+  if(currentPassengerRide){router.replace('/cloud');return}
+  const destinationPoint={latitude:ride.destination_lat,longitude:ride.destination_lng};
+  if(!isCoordinate(destinationPoint))return;
+  setDraft(previous=>({...previous,destination:ride.destination,destinationPoint}));
+  router.replace({pathname:'/location',params:{target:'pickup'}});
+ }
  const hiddenOffers=declined?.owner===userId?declined?.ids:undefined;
  const audibleOffers=useMemo(()=>offers.filter(offer=>!hiddenOffers?.includes(offer.ride_id)),[offers,hiddenOffers]);
  const sound=useDriverOfferSound(userId,Boolean(driverMode&&auth.rolesReady&&driver?.approved&&driver.online&&foreground&&!loading&&!busy&&!currentDriverRide&&!recovery.checking),audibleOffers);
@@ -169,9 +181,14 @@ export default function Rides(){
  }
  const renderRide=(ride:CloudRide)=><Panel key={ride.id}>
    <View style={{alignSelf:'flex-start',borderRadius:20,paddingHorizontal:12,paddingVertical:4,backgroundColor:colors.selected}}><Label muted>{ride.search_expired_at?t('انتهى البحث بدون سائق','Search expired without a driver'):status(ride.status)}</Label></View>
+   {typeof ride.estimated_fare==='number'&&<PassengerFare fare={ride.estimated_fare}/>}
+   <PassengerStops pickup={ride.pickup} destination={ride.destination} category={ride.category} region={ride.region}/>
    {ride.status==='requested'&&<RideSearchTimer startedAt={ride.updated_at??ride.created_at} onExpired={()=>void refresh().catch(()=>{})}/>}
    {ride.status==='accepted'&&<PassengerTaxiMap key={ride.driver_id} rideId={ride.id} pickup={{latitude:ride.pickup_lat,longitude:ride.pickup_lng}}/>}
-   <Label>{ride.pickup}</Label><Icon name="arrow-down-outline" size={18}/><Label>{ride.destination}</Label><Label muted>{new Date(ride.created_at).toLocaleString(state.language==='ar'?'ar':'en')}</Label>
+   {historyMode&&<>
+    <Label muted>{new Date(ride.created_at).toLocaleString(state.language==='ar'?'ar':'en')}</Label>
+    <Button secondary icon="repeat-outline" title={t('استخدام الوجهة مرة أخرى','Use this destination again')} onPress={()=>reuseDestination(ride)} disabled={!!currentPassengerRide}/>
+   </>}
    {live(ride)&&<>
     {ride.status==='arrived'&&!ride.pickup_confirmed_at&&<>
      <Label muted>{t('تأكد من السائق والسيارة أولًا، ثم أكّد الركوب من حسابك. لا يلزم إعطاء أي رمز.','Check the driver and car first, then confirm pickup in your account. No code needed.')}</Label>
@@ -203,8 +220,8 @@ export default function Rides(){
   </View>;
  }
  if(!auth.ready||auth.session&&!auth.rolesReady)return <Page title={t('رحلاتي','My rides')}><Label>{t('جارٍ تحميل الحساب…','Loading account…')}</Label>{auth.problem&&<Button title={t('إعادة المحاولة','Try again')} onPress={()=>void auth.retry()}/>}</Page>;
- if(!auth.session)return <Page title={driverMode?t('وضع السائق','Driver mode'):t('رحلاتي','My rides')}><Panel><Icon name="person-circle-outline" size={42}/><Label>{t('سجّل الدخول لعرض رحلاتك أو العمل كسائق.','Sign in to view your rides or use driver mode.')}</Label><Button title={t('تسجيل الدخول','Sign in')} onPress={()=>router.push('/account')}/></Panel></Page>;
- return <Page title={driverMode?t('وضع السائق','Driver mode'):t('رحلاتي','My rides')} compact={driverMode} footer={driverMode&&userId?<DriverHistoryBar onOpen={setHistoryKind}/>:undefined}>
+ if(!auth.session)return <Page title={driverMode?t('وضع السائق','Driver mode'):passengerTitle}><Panel><Icon name="person-circle-outline" size={42}/><Label>{t('سجّل الدخول لعرض رحلاتك أو العمل كسائق.','Sign in to view your rides or use driver mode.')}</Label><Button title={t('تسجيل الدخول','Sign in')} onPress={()=>router.push(historyMode?{pathname:'/account',params:{next:'history'}}:'/account')}/></Panel></Page>;
+ return <Page title={driverMode?t('وضع السائق','Driver mode'):passengerTitle} compact={driverMode||!historyMode} footer={driverMode&&userId?<DriverHistoryBar onOpen={setHistoryKind}/>:undefined}>
   {driverMode&&historyKind&&userId&&<DriverHistory key={userId+historyKind} kind={historyKind} owner={userId} onClose={closeHistory}/>}
   {driverMode&&driver?.approved&&!currentDriverRide&&<DriverShift
    online={driver.online} region={driver.region} category={driver.category} target={workTarget}
@@ -238,10 +255,13 @@ export default function Rides(){
      </Panel>)}
    {(currentDriverRide||!driver?.approved||!driver.online&&!!notice)&&<Button secondary icon="refresh-outline" title={t('تحديث الحالة','Refresh status')} disabled={busy} onPress={()=>void run(async()=>{})}/>}
   </>:<>
-   <Button secondary icon="refresh-outline" title={loading?t('جارٍ تحميل الرحلات…','Loading rides…'):t('تحديث الرحلات','Refresh rides')} disabled={busy} onPress={()=>void run(async()=>{})}/>
-   <Button icon="car-outline" title={t('حجز رحلة جديدة','Book a new ride')} onPress={()=>router.replace('/')}/>
-   {!loading&&mine.length===0&&<Panel><Icon name="time-outline" size={36}/><Label>{t('لا توجد رحلات بعد','No rides yet')}</Label></Panel>}
-   {mine.map(renderRide)}
+   {passengerRides.map(renderRide)}
+   {loading&&<Label muted>{t('جارٍ تحميل الرحلات…','Loading rides…')}</Label>}
+   {!loading&&!passengerRides.length&&<Panel><Icon name="time-outline" size={36}/><Label>{historyMode?t('لا توجد رحلات سابقة بعد','No past rides yet'):t('ما في رحلة حالية','No current ride')}</Label></Panel>}
+   <Button secondary icon="refresh-outline" title={t('تحديث الرحلات','Refresh rides')} disabled={busy||loading} onPress={()=>void run(async()=>{})}/>
+   {!currentPassengerRide&&<Button icon="car-outline" title={t('حجز رحلة جديدة','Book a new ride')} onPress={()=>router.replace('/')}/>}
+   {historyMode&&currentPassengerRide&&<Button title={t('متابعة الرحلة الحالية','Continue current ride')} onPress={()=>router.replace('/cloud')}/>}
+   {!historyMode&&<Button secondary icon="time-outline" title={t('الرحلات السابقة','Past rides')} onPress={()=>router.push({pathname:'/cloud',params:{mode:'history'}})}/>}
   </>}
   {!driverMode&&<Label muted>{t('نسخة اختبار. لا تتوفر خدمة نقل تجارية مضمونة حتى اكتمال التشغيل واعتماد السائقين.','Test version. A transport service is not guaranteed until setup and driver checks are complete.')}</Label>}
  </Page>;
