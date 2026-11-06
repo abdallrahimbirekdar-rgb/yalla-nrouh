@@ -75,6 +75,17 @@ export async function cloudWhoAmI(token:string):Promise<{id:string;email?:string
 }
 const rideColumns='id,passenger_id,driver_id,pickup,destination,pickup_lat,pickup_lng,destination_lat,destination_lng,category,region,estimated_fare,status,created_at,updated_at,pickup_confirmed_at,search_expired_at';
 export const rideSearchLimitMs=180000;
+export const cloudDriverDispatchPing=(token:string,point:{latitude:number;longitude:number;time:number})=>rpc<boolean>('driver_dispatch_ping',token,{
+ p_lat:point.latitude,p_lng:point.longitude,p_measured_at:new Date(point.time).toISOString(),
+});
+export const cloudReportRouteProblem=(token:string,code:string)=>rpc<void>('report_route_problem',token,{p_code:
+ ['network','no_route','not_enabled','not_configured','busy'].includes(code)?code:'other',
+});
+export interface DispatchOverview {
+ route_errors_24h:number;
+ rides:{id:string;status:CloudRide['status'];category:string;created_at:string;search_expired_at:string|null;started_at:string|null;matrix_state:string|null;first_offer_at:string|null;accepted_at:string|null}[];
+}
+export const cloudAdminDispatchOverview=(token:string)=>rpc<DispatchOverview>('admin_dispatch_overview',token);
 export async function cloudMyRides(token:string):Promise<CloudRide[]>{
   requireToken(token);
   const owner=readRideState().owner;

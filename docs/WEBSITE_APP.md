@@ -94,3 +94,23 @@ Regression tests reproduce concurrent upper-map/navigation requests, delivery to
 
 ### Map-first home
 The passenger home now gives its main space to the live current-location map. A compact destination search rectangle floats above the bottom of the map, with a separate recenter control. Tapping search opens destination entry with the keyboard ready. Pickup is not editable. Car category and work region remain available under Ride options on the review page. A saved destination or active ride keeps the matching continue action visible.
+
+## Dispatch and connectivity
+
+- An uncertain passenger submission keeps its original request identifier. The
+  home screen offers to check that same request after reopening. Reconnect
+  triggers a server lookup, and an absent request can be retried explicitly
+  without creating a second request ID. Driver navigation keeps the last
+  in-memory route through connection loss or a failed refresh.
+- Apply `backend/ride-dispatch.sql` and deploy the `ride-dispatch` edge worker.
+  PostgreSQL queues one worker call per search generation. The worker claims a
+  private random generation, asks Google Routes for up to eight pickup ETAs
+  using the existing server-side Routes key, and records the order. Database
+  rules enforce the same eligibility for listing, preview and acceptance.
+  If the matrix cannot finish within eight seconds, geographic proximity is
+  used. The radius grows to 15 km, with a delayed same-region fallback for a
+  driver without a recent GPS fix. Only an available, approved, matching
+  driver can accept an unexpired request.
+- The admin monitor shows the latest search generation for recent rides,
+  time to the first driver inbox response, time to acceptance, expiry, and
+  reported route errors in the last 24 hours.

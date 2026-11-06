@@ -5,6 +5,7 @@ import {useAuth} from '../auth';
 import {useApp} from '../context';
 import {cloudCurrentToken,cloudFareSettings,cloudUpdateFareSettings,cloudStaffDrivers,cloudApproveDriver,cloudAdminAddDriverByEmail,type StaffDriver} from '../cloud-api';
 import AdminRulesGuide from '../admin-rules-guide';
+import AdminDispatch from '../admin-dispatch';
 import {authErrorMessage} from '../auth-errors';
 import {parseAmount,priceForRoute,type Tariff} from '../meter';
 import {regions} from '../domain';
@@ -15,7 +16,8 @@ export default function Admin(){
  const [base,setBase]=useState(''),[perKm,setPerKm]=useState(''),[perMinute,setPerMinute]=useState(''),[peak,setPeak]=useState('');
  const [newDriverEmail,setNewDriverEmail]=useState('');
  const [guide,setGuide]=useState(false);
- useEffect(()=>setGuide(false),[userId]);
+ const [monitor,setMonitor]=useState(false);
+ useEffect(()=>{setGuide(false);setMonitor(false)},[userId]);
  const load=useCallback(async()=>{
   if(!userId||!auth.admin)return;setBusy(true);setNotice('');
   try{const token=await cloudCurrentToken();const [rates,accounts]=await Promise.all([cloudFareSettings(token),cloudStaffDrivers(token)]);setBase(String(rates.base));setPerKm(String(rates.perKm));setPerMinute(String(rates.perMinute));setPeak(String(rates.peakMultiplier??1));setDrivers(accounts);setUpdated(rates.updatedAt);setLoaded(true);dispatch({type:'tariff',tariff:rates})}
@@ -50,9 +52,14 @@ export default function Admin(){
   <Button secondary title={t('الرجوع للوحة الإدارة','Back to administration')} onPress={()=>setGuide(false)}/>
   <AdminRulesGuide key={userId}/>
  </Page>;
+ if(monitor)return <Page title={t('متابعة الرحلات','Dispatch monitor')} backTo="/account">
+  <Button secondary title={t('الرجوع للوحة الإدارة','Back to administration')} onPress={()=>setMonitor(false)}/>
+  <AdminDispatch key={userId}/>
+ </Page>;
  return <Page title={t('لوحة الإدارة','Administration')} backTo="/account">
   <Panel><View style={{flexDirection:'row',alignItems:'center',gap:12}}><Icon name="shield-checkmark-outline" size={36} color={colors.purple}/><View style={{flex:1}}><Label>{t('أهلًا بك في الإدارة','Welcome to administration')}</Label><Label muted>{auth.session.user.email}</Label></View></View><Button secondary icon="refresh-outline" title={t('تحديث بيانات الإدارة','Refresh admin data')} disabled={busy} onPress={()=>void load()}/></Panel>
   <Button icon="book-outline" title={t('كيف يعمل التطبيق · دليل القواعد','How the app works · Rules guide')} onPress={()=>setGuide(true)}/>
+  <Button secondary icon="analytics-outline" title={t('متابعة الرحلات والتوزيع','Ride and dispatch monitor')} onPress={()=>setMonitor(true)}/>
   {!loaded?<Panel><Label>{t('جارٍ تحميل إعدادات المشروع.','Loading project settings.')}</Label>{busy&&<ActivityIndicator/>}</Panel>:<>
    <Panel><Label large>{t('تسعيرة الرحلات','Ride rates')}</Label><Label muted>{t('الأجرة = (فتح العداد + كم × سعر الكيلومتر + دقائق × سعر الدقيقة) × معامل الذروة','Fare = (base + km × km price + minutes × minute price) × peak factor')}</Label>
     <Field label={t('فتح العداد — ل.س','Starting fare — SYP')} value={base} onChangeText={setBase} keyboardType="decimal-pad" editable={!busy}/>

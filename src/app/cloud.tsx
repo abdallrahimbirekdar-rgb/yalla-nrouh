@@ -4,7 +4,8 @@ import {router,useLocalSearchParams} from 'expo-router';
 import {useApp} from '../context';
 import {useAuth} from '../auth';
 import {authErrorMessage} from '../auth-errors';
-import {cloudCurrentToken,cloudMutationUncertain,cloudMyRides,cloudDriverInbox,cloudOpenRides,cloudDeclineDriverOffer,cloudAcceptRide,cloudAdvanceRide,cloudReleaseRide,cloudCancelRide,cloudConfirmPickup,cloudRegisterDriver,cloudSetDriverOnline,type CloudRide,type CloudDriver,type DriverHistoryKind,type RidePreview} from '../cloud-api';
+import {cloudCurrentToken,cloudDriverDispatchPing,cloudMutationUncertain,cloudMyRides,cloudDriverInbox,cloudOpenRides,cloudDeclineDriverOffer,cloudAcceptRide,cloudAdvanceRide,cloudReleaseRide,cloudCancelRide,cloudConfirmPickup,cloudRegisterDriver,cloudSetDriverOnline,type CloudRide,type CloudDriver,type DriverHistoryKind,type RidePreview} from '../cloud-api';
+import {navigationPosition} from '../navigation-position';
 import RideOptions from '../ride-options';
 import {isCoordinate} from '../geo';
 import {PassengerFare,PassengerStops,RideFooter} from '../passenger-trip-summary';
@@ -21,7 +22,7 @@ import {createRefreshQueue} from '../refresh-queue';
 import {Button,Icon,Label,Page,Panel,useText,useTheme} from '../ui';
 const live=(r:CloudRide)=>!['completed','cancelled'].includes(r.status);
 export default function Rides(){
- const auth=useAuth();const userId=auth.session?.user.id;const {state,draft,setDraft,foreground}=useApp();const t=useText();const {colors}=useTheme();const params=useLocalSearchParams<{mode?:string;ride?:string}>();const driverMode=auth.driver||params.mode==='driver';const historyMode=!driverMode&&params.mode==='history';
+ const auth=useAuth();const userId=auth.session?.user.id;const {state,draft,setDraft,foreground,connection}=useApp();const t=useText();const {colors}=useTheme();const params=useLocalSearchParams<{mode?:string;ride?:string}>();const driverMode=auth.driver||params.mode==='driver';const historyMode=!driverMode&&params.mode==='history';
  const passengerTitle=historyMode?t('الرحلات السابقة','Past rides'):t('رحلتي الحالية','Current ride');
  const [offerLimit,setOfferLimit]=useState(3);
  const [workTarget,setWorkTarget]=useState<boolean|null>(null);
@@ -82,6 +83,24 @@ export default function Rides(){
  useEffect(()=>{setRides([]);setOffers([]);setDriver(null);setInboxProblem(false);setLoading(true);if(!userId){setLoading(false);return}let active=true;void refresh().catch(()=>{if(active){setNotice(state.language==='ar'?'تعذر تحميل الرحلات. تحقق من الاتصال وأعد المحاولة.':'Could not load rides. Check internet and retry.');setLoading(false)}});return()=>{active=false}},[refresh,userId,state.language]);
  const currentDriverRide=driverMode?rides.find(r=>r.driver_id===userId&&live(r)):undefined;
  const gps=useCurrentPosition(driverMode&&Boolean(currentDriverRide||driver?.approved&&driver.online)&&state.preferences.permissionsIntroSeen);
+ useEffect(()=>{
+  if(!driverMode||!driver?.approved||!driver.online||currentDriverRide||!foreground||connection==='offline')return;
+  const controller=new AbortController();
+  let running=false;
+  async function update(){
+   if(running||controller.signal.aborted)return;
+   running=true;
+   try{
+    const fix=await navigationPosition(false,controller.signal);
+    const token=await cloudCurrentToken();
+    if(!controller.signal.aborted)await cloudDriverDispatchPing(token,fix);
+   }catch{/* The regional fallback covers a driver without a current fix. */}
+   finally{running=false}
+  }
+  void update();
+  const timer=setInterval(()=>void update(),35000);
+  return()=>{controller.abort();clearInterval(timer)};
+ },[userId,driverMode,driver?.approved,driver?.online,currentDriverRide,foreground,connection]);
  const recovery=useRideRecovery('accept',driverMode?userId:undefined,foreground,busy,ride=>{
   historyRead.current++;
   setRides(previous=>[ride,...previous.filter(item=>item.id!==ride.id)]);
@@ -90,7 +109,7 @@ export default function Rides(){
  });
  const approachingRide=currentDriverRide?.status==='accepted'?currentDriverRide:undefined;
  useShareTaxiPosition(approachingRide?.id,foreground);
- const activeRide=rides.some(live);const shouldPoll=foreground&&(activeRide||driverMode&&(!driver||driver.approved&&driver.online));
+ const activeRide=rides.some(live);const shouldPoll=foreground&&connection!=='offline'&&(activeRide||driverMode&&(!driver||driver.approved&&driver.online));
  useEffect(()=>{
   if(!userId||!shouldPoll)return;
   const tick=()=>{if(AppState.currentState!=='background')void refresh().catch(()=>{if(alive.current)setNotice(state.language==='ar'?'تعذر تحديث الطلبات. تحقق من الاتصال واضغط تحديث الرحلات.':'Could not update requests. Check internet and refresh.')})};
@@ -98,7 +117,7 @@ export default function Rides(){
   const timer=setInterval(tick,interval);return()=>clearInterval(timer);
  },[refresh,shouldPoll,userId,driverMode,state.preferences.dataSaver,state.language]);
  useEffect(()=>{
-  if(!userId||!driverMode||!driver?.approved||!driver.online||!foreground||currentDriverRide?.id)return;
+  if(!userId||!driverMode||!driver?.approved||!driver.online||!foreground||connection==='offline'||currentDriverRide?.id)return;
   let active=true,running=false;const owner=userId;
   const tick=async()=>{
    if(running||document.visibilityState==='hidden'||AppState.currentState==='background')return;
@@ -109,7 +128,7 @@ export default function Rides(){
   };
   const timer=setInterval(()=>void tick(),state.preferences.dataSaver?8000:5000);
   return()=>{active=false;clearInterval(timer)};
- },[userId,driverMode,driver?.approved,driver?.online,foreground,currentDriverRide?.id,state.preferences.dataSaver]);
+ },[userId,driverMode,driver?.approved,driver?.online,foreground,connection,currentDriverRide?.id,state.preferences.dataSaver]);
  useEffect(()=>{if(!userId)return;const resume=()=>{if(document.visibilityState!=='hidden')void refresh().catch(()=>{if(alive.current)setNotice(state.language==='ar'?'تعذر تحديث الطلبات. تحقق من الاتصال واضغط تحديث الرحلات.':'Could not update requests. Check internet and refresh.')})};const native=(event:Event)=>{if((event as CustomEvent).detail?.active===true)resume()};window.addEventListener('online',resume);window.addEventListener('focus',resume);window.addEventListener('pageshow',resume);document.addEventListener('visibilitychange',resume);window.addEventListener('yalla:native-visibility',native);return()=>{window.removeEventListener('online',resume);window.removeEventListener('focus',resume);window.removeEventListener('pageshow',resume);document.removeEventListener('visibilitychange',resume);window.removeEventListener('yalla:native-visibility',native)}},[userId,refresh,state.language]);
  async function run(work:(token:string)=>Promise<void>,success?:string){if(busy)return;setBusy(true);setNotice('');try{await work(await cloudCurrentToken());await refresh();if(success)setNotice(success)}catch(e){const kind=(e as {kind?:string})?.kind??(e as Error)?.message;setNotice(kind==='waiting_passenger_confirmation'?t('بانتظار تأكيد الراكب ركوب السيارة.','Waiting for passenger pickup confirmation.'):kind==='driver_not_approved'?t('حساب السائق بانتظار الاعتماد.','Driver account is waiting for approval.'):authErrorMessage(e,state.language==='ar'))}finally{setBusy(false)}}
  async function accept(offer:RidePreview,routes:{trip:RoutePlan|null;pickup:RoutePlan|null}){

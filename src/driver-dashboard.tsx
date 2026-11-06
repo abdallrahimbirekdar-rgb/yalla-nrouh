@@ -24,6 +24,7 @@ export function DriverShift({online,region,category,target,disabled,onToggle,sou
    title={target===null?(online?t('إيقاف استقبال الطلبات','Stop receiving requests'):t('تفعيل استقبال الطلبات','Start receiving requests'))
     :target?t('جارٍ تفعيل الاستقبال…','Starting requests…'):t('جارٍ إيقاف الاستقبال…','Stopping requests…')}
    disabled={disabled} onPress={onToggle}/>
+  <Label muted>{t('أثناء الاستقبال والتطبيق مفتوح، يُستخدم موقعك لترتيب الطلبات القريبة.','While accepting requests with the app open, your location is used to match nearby pickups.')}</Label>
   {online&&!soundReady&&<Button secondary icon="volume-high-outline" title={t('تفعيل صوت الطلبات','Enable request sound')} onPress={onEnableSound}/>}
   {online&&soundProblem&&<Label muted>{t('تعذّر تشغيل صوت الطلبات. جرّب تفعيله مرة ثانية.','Request sound could not start. Try enabling it again.')}</Label>}
  </View>;
