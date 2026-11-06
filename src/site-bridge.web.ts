@@ -30,7 +30,7 @@ export type NativePositionResult={point:Coordinate|null;error:'permission'|'accu
 export function isNativeWebView():boolean{
  return typeof window!=='undefined'&&Boolean((window as SiteWindow).ReactNativeWebView);
 }
-export function nativeCurrentPosition(askPermission:boolean,signal?:AbortSignal,track=false):Promise<NativePositionResult>{
+export function nativeCurrentPosition(askPermission:boolean,signal?:AbortSignal,track=false,minFixTime?:number):Promise<NativePositionResult>{
  const bridge=typeof window!=='undefined'?(window as SiteWindow).ReactNativeWebView:undefined;
  if(!bridge)return Promise.resolve({point:null,error:'unsupported'});
  listenNativePosition(window as SiteWindow);
@@ -44,6 +44,7 @@ export function nativeCurrentPosition(askPermission:boolean,signal?:AbortSignal,
    const error=point?null:['permission','accuracy','services','position','timeout'].includes(detail.error)?detail.error as NativePositionResult['error']:'position';
    const rawFix=detail.fix;
    const fix=point&&rawFix&&Number.isFinite(rawFix.accuracy)&&rawFix.accuracy>=0&&Number.isFinite(rawFix.time)&&rawFix.time>0?{...point,accuracy:rawFix.accuracy,time:rawFix.time} as Fix:undefined;
+   if(point&&minFixTime!==undefined&&(!fix||fix.time<minFixTime||fix.time>Date.now()+3000||fix.accuracy>50))return;
    if(point){const shared=recentMeasuredWebPosition(20000,250);if(!shared||!fix||shared.time!==fix.time||Math.abs(shared.latitude-point.latitude)>0.000001||Math.abs(shared.longitude-point.longitude)>0.000001)announceWebPosition(point,fix?{accuracy:fix.accuracy,time:fix.time}:undefined)}
    cleanup();
    resolve({point,error,...(fix?{fix}:{})});
@@ -124,9 +125,9 @@ export async function siteCurrentPosition(askPermission:boolean,signal?:AbortSig
 }
 // Driver metering needs the actual native GPS timestamp and accuracy.
 // Invalid/inaccurate fixes are NOT counted as traveled distance.
-export async function siteCurrentFix(askPermission:boolean,signal?:AbortSignal):Promise<Fix>{
+export async function siteCurrentFix(askPermission:boolean,signal?:AbortSignal,minFixTime?:number):Promise<Fix>{
  if(!isNativeWebView())throw new PositionError('position');
- const result=await nativeCurrentPosition(askPermission,signal,true);
+ const result=await nativeCurrentPosition(askPermission,signal,true,minFixTime);
  if(result.fix&&result.fix.accuracy<=50)return result.fix;
  throw new PositionError(
   result.error==='permission'||result.error==='accuracy'||result.error==='services'||result.error==='timeout'

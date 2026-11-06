@@ -34,7 +34,7 @@ test('the upper map position stays visible below even when its precision is unkn
  assert.deepEqual(display.point,point);assert.equal(display.accuracy,null);assert.equal(display.guidanceReady,false);
 }));
 
-test('driver guidance requests precise Android GPS after a 100 m fix and ignores coarse updates',()=>host(async window=>{
+test('driver guidance waits for a fresh Android fix after stale and coarse updates',()=>host(async window=>{
  const messages=[];
  window.ReactNativeWebView={postMessage:raw=>messages.push(JSON.parse(raw))};
  announceWebPosition(point,{accuracy:100,time:Date.now()});
@@ -42,6 +42,7 @@ test('driver guidance requests precise Android GPS after a 100 m fix and ignores
  const request=messages.find(message=>message.type==='location');
  assert.equal(request.track,true);
  let settled=false;void pending.then(()=>{settled=true});
+ window.dispatchEvent(new CustomEvent('yalla:native-position',{detail:{id:request.id,point,fix:{accuracy:50,time:Date.now()-10000}}}));
  announceWebPosition(point,{accuracy:95,time:Date.now()});
  await Promise.resolve();
  assert.equal(settled,false);
@@ -49,4 +50,25 @@ test('driver guidance requests precise Android GPS after a 100 m fix and ignores
  const fix=await pending;
  assert.equal(fix.accuracy,18);
  assert.equal(navigationGuidanceReady(fix),true);
+}));
+
+test('browser navigation keeps watching after a coarse fix and clears the watch after a fresh fix',()=>host(async()=>{
+ const original=Object.getOwnPropertyDescriptor(globalThis,'navigator');
+ let onFix,options,cleared;
+ Object.defineProperty(globalThis,'navigator',{configurable:true,value:{geolocation:{
+  watchPosition(success,_failure,settings){onFix=success;options=settings;return 12},
+  clearWatch(id){cleared=id},
+ }}});
+ try{
+  const pending=navigationPosition(true,undefined,true);
+  await Promise.resolve();
+  assert.equal(options.enableHighAccuracy,true);
+  const reading=accuracy=>({coords:{...point,accuracy},timestamp:Date.now()});
+  onFix(reading(80));
+  assert.equal(cleared,undefined);
+  onFix(reading(17));
+  assert.equal((await pending).accuracy,17);
+  await Promise.resolve();
+  assert.equal(cleared,12);
+ }finally{Object.defineProperty(globalThis,'navigator',original)}
 }));
