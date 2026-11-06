@@ -1,0 +1,4 @@
+{
+  "platforms": ["android"],
+  "android": { "modules": ["com.yallanrouh.navigation.DriverNavigationModule"] }
+}

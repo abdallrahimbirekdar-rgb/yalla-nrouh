@@ -1,0 +1,8 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+  <application>
+    <activity
+      android:name="com.yallanrouh.navigation.DriverNavigationActivity"
+      android:exported="false"
+      android:screenOrientation="portrait" />
+  </application>
+</manifest>

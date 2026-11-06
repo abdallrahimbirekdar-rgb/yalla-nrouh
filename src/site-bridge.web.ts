@@ -160,7 +160,16 @@ export async function loadSiteState(storage:Pick<Storage,'getItem'|'setItem'>,ke
  return saved;
 }
 
+export function openNativeGoogleNavigation(to:Coordinate,label:string,arabic:boolean):Promise<boolean>{
+ return sendNativeAction('google-navigation',{latitude:to.latitude,longitude:to.longitude,label:label.slice(0,160),arabic});
+}
+
 export function nativeAction(type:'alerts-enable'|'notify'|'location-settings',text?:{title:string;body:string}):Promise<boolean>{
+ return sendNativeAction(type,text);
+}
+
+function sendNativeAction(type:string,data?:Record<string,string|number|boolean>):Promise<boolean>{
+ if(typeof window==='undefined')return Promise.resolve(false);
  const host=window as SiteWindow;const bridge=host.ReactNativeWebView;if(!bridge)return Promise.resolve(false);
  const id=Date.now().toString(36)+'-'+Math.random().toString(36).slice(2);
  return new Promise((resolve,reject)=>{
@@ -168,6 +177,6 @@ export function nativeAction(type:'alerts-enable'|'notify'|'location-settings',t
   const timer=setTimeout(()=>{cleanup();reject(Error('Native action timed out'))},30000);
   const cleanup=()=>{clearTimeout(timer);host.removeEventListener('yalla:native-result',finish)};
   host.addEventListener('yalla:native-result',finish);
-  try{bridge.postMessage(JSON.stringify({type,id,...text}))}catch(error){cleanup();reject(error)}
+  try{bridge.postMessage(JSON.stringify({type,id,...data}))}catch(error){cleanup();reject(error)}
  });
 }

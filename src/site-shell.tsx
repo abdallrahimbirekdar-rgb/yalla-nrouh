@@ -1,14 +1,19 @@
 import {foregroundFix} from './foreground-fix';
 import Constants from 'expo-constants';
+import {requireOptionalNativeModule} from 'expo';
 import {createPositionJobs} from './position-jobs';
 import React,{useEffect,useRef,useState} from 'react';
-import {ActivityIndicator,AppState,BackHandler,Linking,View,Text,Pressable} from 'react-native';
+import {ActivityIndicator,AppState,BackHandler,Linking,Platform,View,Text,Pressable} from 'react-native';
 import {SafeAreaView} from 'react-native-safe-area-context';
 import {WebView} from 'react-native-webview';
 import * as Location from 'expo-location';
 import {enableLocalAlerts,notifyLocal} from './alerts';
 
 import {SITE_URL,isSiteUrl,externalLink,buildVersion,readShellMessage,bootstrapScript,resultScript,locationScript} from './site-shell-policy';
+const nativeNavigation=Platform.OS==='android'?requireOptionalNativeModule<{
+ setScreenAwake:(active:boolean)=>Promise<void>;
+ open:(latitude:number,longitude:number,label:string,arabic:boolean)=>Promise<boolean>;
+}>('YallaDriverNavigation'):null;
 export default function SiteShell(){
  const [language,setLanguage]=useState('ar'),[dark,setDark]=useState(false);
  const t=(ar:string,en:string)=>language==='ar'?ar:en;const colors={background:dark?'#171b20':'#ffffff',purple:'#d67749',ink:dark?'#ffffff':'#202529'};
@@ -33,6 +38,12 @@ export default function SiteShell(){
   return permission;
  };
  const gpsJobs=useRef<ReturnType<typeof createPositionJobs<Location.LocationObject>>|null>(null);
+ const awakeRequest=useRef<string|null>(null);
+ const keepNavigationScreenAwake=(id:string|null)=>{
+  if(awakeRequest.current===id)return;
+  awakeRequest.current=id;
+  void nativeNavigation?.setScreenAwake(id!==null).catch(()=>{});
+ };
  const driverWatch=useRef<{id:string;remove?:()=>void}|null>(null);
  const stopDriverWatch=()=>{
   const watch=driverWatch.current;
@@ -73,14 +84,14 @@ export default function SiteShell(){
  const finishLoading=()=>{if(navigationTimer.current)clearTimeout(navigationTimer.current);navigationTimer.current=null;setLoading(false)};
  const gpsStatus=async(stage:string)=>{const [permission,providers]=await Promise.all([Location.getForegroundPermissionsAsync(),Location.getProviderStatusAsync()]);const value=JSON.stringify({version:Constants.expoConfig?.version,stage,permission:permission.granted,precise:permission.android?.accuracy!=='coarse',services:providers.locationServicesEnabled,gps:providers.gpsAvailable,network:providers.networkAvailable});if(alive.current)web.current?.injectJavaScript(`window.__YALLA_GPS_STATUS__=${value};window.dispatchEvent(new CustomEvent('yalla:gps-status',{detail:${value}}));true;`);return {permission,providers}};
  function refresh(){if(!safe.current){setNotice(t('احفظ بياناتك وأكمل الرحلة، ثم حدّث العرض من الصفحة الرئيسية.','Save your work and finish the ride, then refresh from the home page.'));return}setNotice('');setAvailable(false);setFailed(false);setLoading(true);safe.current=false;setUrl(SITE_URL+'?app=android&launch='+Date.now())}
- useEffect(()=>{alive.current=true;void requestLaunchPermission().catch(()=>{});return()=>{alive.current=false;stopDriverWatch();gpsAbort.current.abort();checkAbort.current?.abort();if(navigationTimer.current)clearTimeout(navigationTimer.current)}},[]);
+ useEffect(()=>{alive.current=true;void requestLaunchPermission().catch(()=>{});return()=>{alive.current=false;keepNavigationScreenAwake(null);stopDriverWatch();gpsAbort.current.abort();checkAbort.current?.abort();if(navigationTimer.current)clearTimeout(navigationTimer.current)}},[]);
  useEffect(()=>{
   const listener=BackHandler.addEventListener('hardwareBackPress',()=>{if(failed||loading)return false;web.current?.injectJavaScript("if(window.dispatchEvent(new CustomEvent('yalla:native-back',{cancelable:true}))&&window.dispatchEvent(new CustomEvent('yalla:native-back-default',{cancelable:true}))){window.ReactNativeWebView.postMessage(JSON.stringify({type:'back-default'}));}true;");return true});
   return()=>listener.remove();
  },[failed,loading]);
  useEffect(()=>{
   const listener=AppState.addEventListener('change',async value=>{
-   if(value!=='active')stopDriverWatch();
+   if(value!=='active'){keepNavigationScreenAwake(null);stopDriverWatch()}
    if(value==='background')gpsAbort.current.abort();else if(value==='active'&&gpsAbort.current.signal.aborted)gpsAbort.current=new AbortController();
    web.current?.injectJavaScript(`window.__YALLA_NATIVE_ACTIVE__=${value==='active'};window.dispatchEvent(new CustomEvent('yalla:native-visibility',{detail:{active:window.__YALLA_NATIVE_ACTIVE__}}));true;`);
    if(value!=='active'||checking.current||!loadedVersion.current)return;
@@ -97,7 +108,7 @@ export default function SiteShell(){
    onShouldStartLoadWithRequest={request=>{if(request.isTopFrame===false)return true;if(isSiteUrl(request.url))return true;if(externalLink(request.url))void Linking.openURL(request.url).catch(()=>setNotice(t('تعذر فتح الرابط الخارجي.','Could not open the link.')));return false}}
    onOpenWindow={event=>{const target=event.nativeEvent.targetUrl;if(externalLink(target))void Linking.openURL(target).catch(()=>setNotice(t('تعذر فتح الرابط.','Could not open the link.')))}}
    onNavigationStateChange={navigation=>{canGoBack.current=navigation.canGoBack;if(!navigation.loading)finishLoading()}}
-   onLoadStart={()=>{stopDriverWatch();setLoading(true);setFailed(false);if(navigationTimer.current)clearTimeout(navigationTimer.current);navigationTimer.current=setTimeout(()=>{if(alive.current){setLoading(false);setFailed(true)}},30000)}} onLoadEnd={finishLoading}
+   onLoadStart={()=>{keepNavigationScreenAwake(null);stopDriverWatch();setLoading(true);setFailed(false);if(navigationTimer.current)clearTimeout(navigationTimer.current);navigationTimer.current=setTimeout(()=>{if(alive.current){setLoading(false);setFailed(true)}},30000)}} onLoadEnd={finishLoading}
    onError={()=>{setLoading(false);setFailed(true)}} onRenderProcessGone={()=>{setLoading(false);setFailed(true)}} onHttpError={event=>{if(event.nativeEvent.url===url&&event.nativeEvent.statusCode>=400){setLoading(false);setFailed(true)}}}
    onMessage={event=>{
     if(!isSiteUrl(event.nativeEvent.url))return;const message=readShellMessage(event.nativeEvent.data);if(!message)return;
@@ -105,8 +116,17 @@ export default function SiteShell(){
     if(message.type==='refresh'){refresh();return}
     if(message.type==='back-default'){if(canGoBack.current)web.current?.goBack();else BackHandler.exitApp();return}
     if(message.type==='location-settings'){void Linking.openSettings().then(()=>web.current?.injectJavaScript(resultScript(message.id,true))).catch(()=>web.current?.injectJavaScript(resultScript(message.id,false)));return}
-    if(message.type==='driver-location-start'){void startDriverWatch(message.id,message.askPermission);return}
-    if(message.type==='driver-location-stop'){if(driverWatch.current?.id===message.id)stopDriverWatch();return}
+    if(message.type==='google-navigation'){
+     const reply=(ok:boolean)=>{if(alive.current)web.current?.injectJavaScript(resultScript(message.id,ok))};
+     if(!nativeNavigation||AppState.currentState!=='active'){reply(false);return}
+     void nativeNavigation.open(message.latitude,message.longitude,message.label,message.arabic).then(reply,()=>reply(false));
+     return;
+    }
+    if(message.type==='driver-location-start'){
+     if(AppState.currentState==='active')keepNavigationScreenAwake(message.id);
+     void startDriverWatch(message.id,message.askPermission);return;
+    }
+    if(message.type==='driver-location-stop'){if(driverWatch.current?.id===message.id)stopDriverWatch();if(awakeRequest.current===message.id)keepNavigationScreenAwake(null);return}
     if(message.type==='location'){
      // Only requests from our approved HTTPS site can reach this native foreground GPS bridge.
      void (async()=>{
@@ -160,7 +180,7 @@ export default function SiteShell(){
     if(message.type==='alerts-enable'||message.type==='notify'){const task=message.type==='alerts-enable'?enableLocalAlerts():notifyLocal(message.title,message.body).then(()=>true);void task.then(ok=>{if(alive.current)web.current?.injectJavaScript(resultScript(message.id,ok))}).catch(()=>{if(alive.current)web.current?.injectJavaScript(resultScript(message.id,false))});return}
     loadedVersion.current=message.version;
     void gpsStatus('ready').catch(()=>{});
-    void Location.getForegroundPermissionsAsync().then(permission=>{if(alive.current)web.current?.injectJavaScript(bootstrapScript(message.id,null,permission.granted,true))}).catch(()=>{if(alive.current)web.current?.injectJavaScript(bootstrapScript(message.id,null,false,true))});
+    void Location.getForegroundPermissionsAsync().then(permission=>{if(alive.current)web.current?.injectJavaScript(bootstrapScript(message.id,null,permission.granted,true,!!nativeNavigation))}).catch(()=>{if(alive.current)web.current?.injectJavaScript(bootstrapScript(message.id,null,false,true,!!nativeNavigation))});
    }}/>
   {loading&&!failed&&<View pointerEvents="none" style={{position:'absolute',left:0,right:0,top:0,bottom:0,backgroundColor:colors.background,justifyContent:'center',alignItems:'center',gap:12}}><ActivityIndicator color={colors.purple}/><Label>{t('جارٍ فتح يلا نروح…','Opening Yalla Nrouh…')}</Label></View>}
   {failed&&<View style={{position:'absolute',left:0,right:0,top:0,bottom:0,padding:24,backgroundColor:colors.background,justifyContent:'center',gap:16}}><Label>{t('تعذر فتح الموقع. تحقق من الإنترنت ثم أعد المحاولة.','Could not open the website. Check your internet and try again.')}</Label><Label muted>{t('بياناتك المحفوظة تبقى على الجهاز.','Your saved data stays on this device.')}</Label><Button title={t('إعادة المحاولة','Try again')} onPress={()=>{setFailed(false);setLoading(true);web.current?.reload()}}/></View>}
