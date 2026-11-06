@@ -126,7 +126,8 @@ export default function Rides(){
    catch{if(active&&identity.current===owner&&ticket===offerRead.current)setInboxProblem(true)}
    finally{running=false}
   };
-  const timer=setInterval(()=>void tick(),state.preferences.dataSaver?8000:5000);
+  void tick();
+  const timer=setInterval(()=>void tick(),state.preferences.dataSaver?4000:3000);
   return()=>{active=false;clearInterval(timer)};
  },[userId,driverMode,driver?.approved,driver?.online,foreground,connection,currentDriverRide?.id,state.preferences.dataSaver]);
  useEffect(()=>{if(!userId)return;const resume=()=>{if(document.visibilityState!=='hidden')void refresh().catch(()=>{if(alive.current)setNotice(state.language==='ar'?'تعذر تحديث الطلبات. تحقق من الاتصال واضغط تحديث الرحلات.':'Could not update requests. Check internet and refresh.')})};const native=(event:Event)=>{if((event as CustomEvent).detail?.active===true)resume()};window.addEventListener('online',resume);window.addEventListener('focus',resume);window.addEventListener('pageshow',resume);document.addEventListener('visibilitychange',resume);window.addEventListener('yalla:native-visibility',native);return()=>{window.removeEventListener('online',resume);window.removeEventListener('focus',resume);window.removeEventListener('pageshow',resume);document.removeEventListener('visibilitychange',resume);window.removeEventListener('yalla:native-visibility',native)}},[userId,refresh,state.language]);

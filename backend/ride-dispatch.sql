@@ -132,8 +132,8 @@ returns boolean language sql stable set search_path='' as $$
  and not exists(select 1 from ride_request_private.declined_offers x where x.driver_id=d.user_id and x.ride_id=r.id)
  and coalesce((
   select case
-   when p.measured_at is null then d.region=r.region and age.seconds>=15
-   when age.seconds<8 then false
+   when p.measured_at is null then d.region=r.region and age.seconds>=8
+   when age.seconds<8 and j.matrix_state in ('queued','running') then false
    when age.seconds<25 then case when j.matrix_state='ranked' then coalesce(rank.place<=3,false) else km.distance<=3 end
    when age.seconds<50 then case when j.matrix_state='ranked' then coalesce(rank.place<=8,false) else km.distance<=8 end
    else km.distance<=15
@@ -290,7 +290,7 @@ begin
  current_doc:=jsonb_set(current_doc,'{03_offers,body}',to_jsonb(replace(
   current_doc #>> '{03_offers,body}',
   'يرى الطلبَ السائقُ المعتمد الذي فعّل الاستقبال ويطابق منطقة الطلب وفئة السيارة. الطلبات بانتظار سائق تظهر بالأقدم أولًا، من دون ترتيب حسب الأقرب.',
-  'يرى الطلب السائق المعتمد والمتاح من فئة السيارة المطلوبة. تُرتب حتى ثمانية مواقع حديثة قريبة بحسب زمن القيادة عندما تتوفر النتيجة بسرعة، ويبدأ العرض بأقرب ثلاثة. يتوسع العرض تدريجيًا حتى ١٥ كم ويمكنه عبور حدود المحافظة. عند تعذر حساب زمن الطريق يُستخدم القرب الجغرافي لتوسيع البحث. للسائق الذي لا يملك قراءة موقع حديثة، تبقى المطابقة بحسب منطقة العمل بعد مهلة قصيرة.'
+  'يرى الطلب السائق المعتمد والمتاح من فئة السيارة المطلوبة. تُرتب حتى ثمانية مواقع حديثة قريبة بحسب زمن القيادة عندما تتوفر النتيجة بسرعة، ويبدأ العرض بأقرب ثلاثة. يتوسع العرض تدريجيًا حتى ١٥ كم ويمكنه عبور حدود المحافظة. عند تعذر حساب زمن الطريق يُستخدم القرب الجغرافي لتوسيع البحث. للسائق الذي لا يملك قراءة موقع حديثة، تبقى المطابقة بحسب منطقة العمل بعد ٨ ثوانٍ. للسائق القريب الذي لديه موقع حديث، يبدأ العرض فور جاهزية الترتيب أو تعذّره، وبعد ٨ ثوانٍ كحد أقصى من انتظار الترتيب.'
  )));
  current_doc:=jsonb_set(current_doc,'{07_connection,body}',to_jsonb(
   (current_doc #>> '{07_connection,body}') || E'\nتظهر متابعة الطلب المعلق من الصفحة الرئيسية عند إعادة فتح التطبيق. تبقى آخر خريطة مسار محمّلة أثناء انقطاع الاتصال في شاشة الملاحة، ويظهر وقت آخر قراءة للموقع.'
