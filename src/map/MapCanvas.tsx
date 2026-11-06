@@ -8,7 +8,7 @@ import {mapPolicy} from './network-policy';
 import {isNativeWebView} from '../site-bridge';
 import MapContent from './MapContent';
 import type {CameraTarget} from '../use-current-position';
-export default function MapCanvas(props:{point:Coordinate|null;taxiPoint?:Coordinate;onChange:(point:Coordinate)=>void;compact?:boolean;route?:Coordinate[];readOnly?:boolean;cameraTarget?:CameraTarget;initialCenter?:Coordinate;minMapHeight?:number}){
+export default function MapCanvas(props:{point:Coordinate|null;taxiPoint?:Coordinate;passengerPoint?:Coordinate;onChange:(point:Coordinate)=>void;compact?:boolean;route?:Coordinate[];readOnly?:boolean;cameraTarget?:CameraTarget;initialCenter?:Coordinate;minMapHeight?:number}){
  const {state,ready}=useApp();const {colors}=useTheme();const t=useText();const network=useMapNetwork();const policy=mapPolicy(network,state.preferences.dataSaver);
  const [mounted,setMounted]=useState(false);
  useEffect(()=>{

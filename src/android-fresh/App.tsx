@@ -67,11 +67,18 @@ class ForegroundLocation {
  }
 }
 type Run={controller:AbortController;id:string};
+type ShareEvent={rideId:string;active:boolean;latitude?:number;longitude?:number;accuracy?:number;time?:number};
 type DriverStream={id:string;active:boolean;subscription:Location.LocationSubscription|null};
 const screenModule=requireOptionalNativeModule<{setScreenAwake:(active:boolean)=>Promise<void>;
  speakDirection:(text:string,language:'ar'|'en')=>Promise<'started'|'voice-unavailable'|'playback'>;
  openVoiceSetup:()=>Promise<boolean>;
+ startRideSharing:(ride:string,secret:string,arabic:boolean)=>Promise<boolean>;
+ stopRideSharing:(ride:string)=>Promise<void>;
+ rideSharingStatus:()=>Promise<string|null>;
+ openRideMaps:(latitude:number,longitude:number,adjacent:boolean)=>Promise<boolean>;
+ addListener:(event:'rideSharing',callback:(event:ShareEvent)=>void)=>{remove:()=>void};
  stopDirection:()=>Promise<void>}>('YallaDriverNavigation');
+const supportsSharing=typeof screenModule?.startRideSharing==='function';
 const nativeDriverSpeech=typeof screenModule?.speakDirection==='function';
 const nativeVoiceSetup=typeof screenModule?.openVoiceSetup==='function';
 const stopDriverSpeech=()=>{if(nativeDriverSpeech)void screenModule?.stopDirection().catch(()=>{});};
@@ -79,6 +86,7 @@ const btn={paddingVertical:13,paddingHorizontal:18,backgroundColor:'#d67749',bor
 const websiteVersion=(v:unknown):string|null=>typeof v==='string'&&/^[a-f0-9]{40}$/i.test(v)?v:null;
 export default function FreshAndroid(){
  const web=useRef<WebView>(null);
+ const sharing=useRef<string|null>(null),shareFix=useRef<Location.LocationObject|null>(null);
  const documentUrl=useRef('');
  const engine=useRef(new ForegroundLocation()).current;
  const active=useRef(true),runs=useRef(new Map<string,Run>()),canGoBack=useRef(false);
@@ -186,7 +194,14 @@ export default function FreshAndroid(){
   };
   void syncPermission('locating');
   try{
-   const fix=await gpsPool.request(message.track?'track':'map',controller.signal,send,(signal,preview)=>engine.locate(message.askPermission,message.track,signal,preview));
+   const fix=await gpsPool.request(message.track?'track':'map',controller.signal,send,(signal,preview)=>{
+    if(!sharing.current)return engine.locate(message.askPermission,message.track,signal,preview);
+    const maximum=message.track?50:250;
+    if(acceptableFix(shareFix.current,maximum,5000))return Promise.resolve(shareFix.current!);
+    return awaitFreshFix<Location.LocationObject>(async next=>screenModule!.addListener('rideSharing',()=>{
+     if(shareFix.current)next(shareFix.current);
+    }),value=>acceptableFix(value,maximum,5000),18000,signal);
+   });
    send(fix);void syncPermission('found');
   }catch(error){
    if(!controller.signal.aborted&&!delivered){
@@ -209,6 +224,7 @@ export default function FreshAndroid(){
     if(permission.android?.accuracy==='coarse')throw new Error('accuracy');
     if(!await Location.hasServicesEnabledAsync())throw new Error('services');
     if(!stream.active||AppState.currentState==='background')return;
+    if(sharing.current){setScreenAwake(true);return}
     const sub=await Location.watchPositionAsync({
      accuracy:Location.Accuracy.BestForNavigation,
      timeInterval:1000,distanceInterval:0,mayShowUserSettingsDialog:false,
@@ -222,7 +238,7 @@ export default function FreshAndroid(){
      }));
     },()=>{if(stream.active)inject(positionScript({id:stream.id,point:null,error:'position'}));});
     stream.subscription=sub;
-    if(!stream.active||driverStream.current!==stream){sub.remove();return}
+    if(!stream.active||driverStream.current!==stream||sharing.current){sub.remove();stream.subscription=null;return}
     setScreenAwake(true);
    }catch(error){
     if(!stream.active||driverStream.current!==stream)return;
@@ -232,13 +248,35 @@ export default function FreshAndroid(){
     stopDriverStream(stream.id);
    }
   },[engine,inject,setScreenAwake,stopDriverStream]);
-  const handleMessage=useCallback((event:WebViewMessageEvent)=>{
+  useEffect(()=>{
+  if(!supportsSharing)return;
+  const module=screenModule!;
+  const listener=module.addListener('rideSharing',value=>{
+   if(!value.active){
+    if(sharing.current===value.rideId){sharing.current=null;shareFix.current=null}
+    inject(eventScript('yalla:ride-sharing',{rideId:value.rideId,active:false}));
+    const stream=driverStream.current;
+    if(stream&&AppState.currentState!=='background')void startDriverStream({type:'driver-location-start',id:stream.id,askPermission:false});
+    return;
+   }
+   sharing.current=value.rideId;
+   const {latitude,longitude,accuracy,time}=value;
+   if(latitude===undefined||longitude===undefined||accuracy===undefined||time===undefined)return;
+   shareFix.current={timestamp:time,coords:{latitude,longitude,accuracy,altitude:null,altitudeAccuracy:null,heading:null,speed:null}};
+   const stream=driverStream.current;
+   if(stream&&AppState.currentState!=='background')inject(positionScript({id:stream.id,point:{latitude,longitude},fix:{accuracy,time}}));
+  });
+  void module.rideSharingStatus().then(ride=>{if(ride)sharing.current=ride}).catch(()=>{});
+  return()=>listener.remove();
+ },[inject,startDriverStream]);
+ const handleMessage=useCallback((event:WebViewMessageEvent)=>{
   if(!trustedWebMessage(event.nativeEvent.url,documentUrl.current))return;
   const message=readWebMessage(event.nativeEvent.data);
   if(!message)return;
   if(message.type==='status'){
    safeToReload.current=message.safeToReload;
    canGoBack.current=message.canGoBack;
+   if(message.signedOut&&sharing.current)void screenModule?.stopRideSharing(sharing.current).catch(()=>{});
    if(message.language)setLanguage(message.language);
    if(message.theme)setColorMode(message.theme);
    setLoading(false);setFailed(false);
@@ -257,6 +295,39 @@ export default function FreshAndroid(){
     stopDriverStream(message.id);
    }else if(message.type==='location-cancel'){
    runs.current.get(message.id)?.controller.abort();
+  }else if(message.type==='ride-share-status'){
+   const status=supportsSharing?screenModule!.rideSharingStatus():Promise.resolve(null);
+   void status.then(rideId=>inject(eventScript('yalla:native-result',{id:message.id,ok:supportsSharing,rideId})))
+    .catch(()=>inject(eventScript('yalla:native-result',{id:message.id,ok:false})));
+  }else if(message.type==='ride-share-start'){
+   const start=async()=>{
+    if(!supportsSharing||sharing.current||AppState.currentState==='background')return false;
+    const permission=await engine.permission(true);
+    if(!permission.granted||permission.android?.accuracy==='coarse'||!await Location.hasServicesEnabledAsync()||!await enableLocalAlerts())return false;
+    if(sharing.current||String(AppState.currentState)==='background')return false;
+    sharing.current=message.rideId;
+    for(const task of runs.current.values())task.controller.abort();
+    const stream=driverStream.current;
+    stream?.subscription?.remove();
+    if(stream)stream.subscription=null;
+    try{return await screenModule!.startRideSharing(message.rideId,message.secret,language==='ar')}
+    finally{
+     if(!await screenModule!.rideSharingStatus().catch(()=>null)){
+      sharing.current=null;
+      if(stream?.active&&String(AppState.currentState)!=='background')void startDriverStream({type:'driver-location-start',id:stream.id,askPermission:false});
+     }
+    }
+   };
+   void start().then(ok=>inject(eventScript('yalla:native-result',{id:message.id,ok})))
+    .catch(()=>inject(eventScript('yalla:native-result',{id:message.id,ok:false})));
+  }else if(message.type==='ride-share-stop'){
+   const stop=supportsSharing?screenModule!.stopRideSharing(message.rideId):Promise.resolve();
+   void stop.then(()=>inject(eventScript('yalla:native-result',{id:message.id,ok:supportsSharing})))
+    .catch(()=>inject(eventScript('yalla:native-result',{id:message.id,ok:false})));
+  }else if(message.type==='ride-maps'){
+   const open=supportsSharing?screenModule!.openRideMaps(message.latitude,message.longitude,message.adjacent):Promise.resolve(false);
+   void open.then(ok=>inject(eventScript('yalla:native-result',{id:message.id,ok})))
+    .catch(()=>inject(eventScript('yalla:native-result',{id:message.id,ok:false})));
   }else if(message.type==='driver-speak'){
    const operation=nativeDriverSpeech&&AppState.currentState!=='background'
     ?screenModule!.speakDirection(message.text,message.language):Promise.resolve('playback');
@@ -281,7 +352,7 @@ export default function FreshAndroid(){
   else if(message.type==='back-default'){
    if(canGoBack.current)web.current?.goBack();else BackHandler.exitApp();
   }
- },[engine,inject,locate,refresh,syncPermission,startDriverStream,stopDriverStream,text]);
+ },[engine,inject,language,locate,refresh,syncPermission,startDriverStream,stopDriverStream,text]);
  const openExternal=(url:string)=>{
   if(externalTarget(url))void Linking.openURL(url).catch(()=>setNotice(text('تعذر فتح الرابط.','Could not open the link.')));
  };

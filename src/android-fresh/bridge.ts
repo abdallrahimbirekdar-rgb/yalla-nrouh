@@ -11,13 +11,18 @@ export type WebMessage=
  |{type:'driver-speak';id:string;text:string;language:'ar'|'en'}
  |{type:'driver-speech-stop'}
  |{type:'driver-voice-setup'}
+ |{type:'ride-share-start';id:string;rideId:string;secret:string}
+ |{type:'ride-share-stop';id:string;rideId:string}
+ |{type:'ride-share-status';id:string}
+ |{type:'ride-maps';id:string;latitude:number;longitude:number;adjacent:boolean}
  |{type:'location-settings';id:string}
  |{type:'alerts-enable';id:string}
  |{type:'notify';id:string;title:string;body:string}
- |{type:'status';safeToReload:boolean;canGoBack:boolean;language?:'ar'|'en';theme?:'system'|'light'|'dark'}
+ |{type:'status';safeToReload:boolean;canGoBack:boolean;language?:'ar'|'en';theme?:'system'|'light'|'dark';signedOut?:true}
  |{type:'refresh'}
  |{type:'back-default'};
 const idOK=(v:unknown):v is string=>typeof v==='string'&&/^[a-z0-9-]{1,80}$/i.test(v);
+const uuid=(v:unknown):v is string=>typeof v==='string'&&/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(v);
 export function trustedSite(value:string):boolean{
  try{const u=new URL(value);return u.origin===SITE_ORIGIN
  &&!u.username&&!u.password&&(u.pathname==='/yalla-nrouh'||u.pathname.startsWith('/yalla-nrouh/'))}
@@ -49,6 +54,12 @@ export function readWebMessage(raw:string):WebMessage|null{
    return {type:'driver-speak',id:v.id,text:v.text,language:v.language};
   if(v.type==='driver-speech-stop')return {type:'driver-speech-stop'};
   if(v.type==='driver-voice-setup')return {type:'driver-voice-setup'};
+  if(v.type==='ride-share-start'&&idOK(v.id)&&uuid(v.rideId)&&uuid(v.secret))return {type:v.type,id:v.id,rideId:v.rideId,secret:v.secret};
+  if(v.type==='ride-share-stop'&&idOK(v.id)&&uuid(v.rideId))return {type:v.type,id:v.id,rideId:v.rideId};
+  if(v.type==='ride-share-status'&&idOK(v.id))return {type:v.type,id:v.id};
+  if(v.type==='ride-maps'&&idOK(v.id)&&typeof v.latitude==='number'&&Math.abs(v.latitude)<=90
+   &&typeof v.longitude==='number'&&Math.abs(v.longitude)<=180&&typeof v.adjacent==='boolean')
+   return {type:v.type,id:v.id,latitude:v.latitude,longitude:v.longitude,adjacent:v.adjacent};
   if(v.type==='location-settings'&&idOK(v.id))return {type:'location-settings',id:v.id};
   if(v.type==='alerts-enable'&&idOK(v.id))return {type:'alerts-enable',id:v.id};
   if(v.type==='notify'&&idOK(v.id)&&typeof v.title==='string'&&v.title.length<=200&&typeof v.body==='string'&&v.body.length<=1000)
@@ -56,6 +67,7 @@ export function readWebMessage(raw:string):WebMessage|null{
   if(v.type==='status'&&typeof v.safeToReload==='boolean'&&typeof v.canGoBack==='boolean')
    return {type:'status',safeToReload:v.safeToReload,canGoBack:v.canGoBack,
      ...((v.language==='ar'||v.language==='en')?{language:v.language}:{}),
+     ...(v.signedOut===true?{signedOut:true as const}:{}),
      ...((v.theme==='system'||v.theme==='light'||v.theme==='dark')?{theme:v.theme}:{})};
   if(v.type==='refresh')return {type:'refresh'};
   if(v.type==='back-default')return {type:'back-default'};

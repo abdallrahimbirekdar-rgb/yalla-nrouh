@@ -6,7 +6,7 @@ import {useApp} from '../context';
 import {Button,Label,useText,useTheme} from '../ui';
 import {loadGoogleMaps,onMapsAuthFailure,webMapsKey,type GoogleMap,type GoogleMaps,type GoogleMarker,type GoogleLine,type LatLng} from './google-web';
 const position=(point:Coordinate):LatLng=>({lat:point.latitude,lng:point.longitude});
-export default function MapContent({point,taxiPoint,onChange,compact=false,route,readOnly=false,lean=false,loadTimeoutMs=25000,cameraTarget,initialCenter,minMapHeight=260}:{point:Coordinate|null;taxiPoint?:Coordinate;onChange:(point:Coordinate)=>void;compact?:boolean;route?:Coordinate[];readOnly?:boolean;lean?:boolean;loadTimeoutMs?:number;cameraTarget?:CameraTarget;initialCenter?:Coordinate;minMapHeight?:number}){
+export default function MapContent({point,taxiPoint,passengerPoint,onChange,compact=false,route,readOnly=false,lean=false,loadTimeoutMs=25000,cameraTarget,initialCenter,minMapHeight=260}:{point:Coordinate|null;taxiPoint?:Coordinate;passengerPoint?:Coordinate;onChange:(point:Coordinate)=>void;compact?:boolean;route?:Coordinate[];readOnly?:boolean;lean?:boolean;loadTimeoutMs?:number;cameraTarget?:CameraTarget;initialCenter?:Coordinate;minMapHeight?:number}){
  const {state}=useApp();const t=useText();const {colors,dark}=useTheme();const host=useRef<HTMLDivElement>(null);
  const map=useRef<GoogleMap|null>(null),api=useRef<GoogleMaps|null>(null),marker=useRef<GoogleMarker|null>(null),line=useRef<GoogleLine|null>(null);
  const userMarker=useRef<GoogleMarker|null>(null),endMarker=useRef<GoogleMarker|null>(null),taxiMarker=useRef<GoogleMarker|null>(null);
@@ -61,22 +61,23 @@ export default function MapContent({point,taxiPoint,onChange,compact=false,route
  useEffect(()=>{
   const instance=map.current,maps=api.current;
   if(!ready||!instance||!maps)return;
-  if(!taxiPoint){if(taxiMarker.current)taxiMarker.current.map=null;taxiMarker.current=null;return}
-  const taxi=position(taxiPoint),first=!taxiMarker.current;
+  const tracked=passengerPoint??taxiPoint;
+  if(!tracked){if(taxiMarker.current)taxiMarker.current.map=null;taxiMarker.current=null;return}
+  const taxi=position(tracked),first=!taxiMarker.current;
   if(!taxiMarker.current){
-   const icon=document.createElement('div');icon.textContent='🚕';
-   Object.assign(icon.style,{display:'grid',placeItems:'center',width:'34px',height:'34px',background:'#102a43',border:'2px solid white',borderRadius:'50%',fontSize:'21px'});
-   taxiMarker.current=new maps.marker.AdvancedMarkerElement({map:instance,position:taxi,content:icon,title:state.language==='ar'?'موقع التاكسي':'Taxi location'});
+   const icon=document.createElement('div');icon.textContent=passengerPoint?'●':'🚕';
+   Object.assign(icon.style,{display:'grid',placeItems:'center',width:'34px',height:'34px',background:passengerPoint?'#15803d':'#102a43',color:'white',border:'2px solid white',borderRadius:'50%',fontSize:'21px'});
+   taxiMarker.current=new maps.marker.AdvancedMarkerElement({map:instance,position:taxi,content:icon,title:passengerPoint?(state.language==='ar'?'موقع الزبون':'Customer location'):(state.language==='ar'?'موقع التاكسي':'Taxi location')});
   }else taxiMarker.current.position=taxi;
   const bounds=instance.getBounds();
   if(point&&(first||bounds&&!bounds.contains(taxi))){
-   if(Math.abs(point.latitude-taxiPoint.latitude)<0.0003&&Math.abs(point.longitude-taxiPoint.longitude)<0.0003){
+   if(Math.abs(point.latitude-tracked.latitude)<0.0003&&Math.abs(point.longitude-tracked.longitude)<0.0003){
     instance.setCenter(taxi);instance.setZoom(17);
    }else{
     const overview=new maps.LatLngBounds();overview.extend(position(point));overview.extend(taxi);instance.fitBounds(overview,42);
    }
   }
- },[point,taxiPoint,ready,state.language]);
+ },[point,taxiPoint,passengerPoint,ready,state.language]);
  useEffect(()=>{map.current?.setOptions({tilt:0,heading:0,headingInteractionEnabled:!lean,tiltInteractionEnabled:false})},[lean,ready]);
  return <View style={compact?{flex:1,minHeight:minMapHeight}:{gap:10}}>
   {React.createElement('div',{ref:host,role:'region','aria-label':t('خريطة Google لاختيار الموقع','Google map to choose a location'),style:{height:compact?'100%':340,minHeight:compact?minMapHeight:340,width:'100%',borderRadius:compact?0:16,overflow:'hidden',background:colors.surface}})}

@@ -1,6 +1,8 @@
 package com.yallanrouh.navigation
 
 import android.content.Intent
+import android.net.Uri
+import androidx.core.content.ContextCompat
 import android.media.AudioAttributes
 import android.os.Handler
 import android.os.Looper
@@ -24,6 +26,60 @@ class DriverNavigationModule : Module() {
 
   override fun definition() = ModuleDefinition {
     Name("YallaDriverNavigation")
+
+    Events("rideSharing")
+    OnCreate {
+      RideSharingService.publish = { runCatching { sendEvent("rideSharing", it) } }
+    }
+
+    AsyncFunction("startRideSharing") { ride: String, secret: String, arabic: Boolean, promise: Promise ->
+      val activity = appContext.currentActivity
+      if (activity == null || RideSharingService.currentRide != null || RideSharingService.pending != null) {
+        promise.resolve(false)
+      } else {
+        try {
+          UUID.fromString(ride)
+          UUID.fromString(secret)
+          RideSharingService.pending = RideSharingService.Session(ride, secret, arabic, promise)
+          ContextCompat.startForegroundService(activity, Intent(activity, RideSharingService::class.java))
+        } catch (_: Exception) {
+          RideSharingService.pending = null
+          promise.resolve(false)
+        }
+      }
+    }.runOnQueue(Queues.MAIN)
+
+    AsyncFunction("stopRideSharing") { ride: String ->
+      val pending = RideSharingService.pending
+      if (pending?.ride == ride) {
+        RideSharingService.pending = null
+        pending.started?.resolve(false)
+      }
+      if (RideSharingService.currentRide == ride || pending?.ride == ride) {
+        appContext.reactContext?.stopService(Intent(appContext.reactContext, RideSharingService::class.java))
+      }
+    }.runOnQueue(Queues.MAIN)
+
+    AsyncFunction("rideSharingStatus") { RideSharingService.currentRide }.runOnQueue(Queues.MAIN)
+
+    AsyncFunction("openRideMaps") { latitude: Double, longitude: Double, adjacent: Boolean ->
+      val activity = appContext.currentActivity ?: return@AsyncFunction false
+      if (latitude !in -90.0..90.0 || longitude !in -180.0..180.0) return@AsyncFunction false
+      val point = "$latitude,$longitude"
+      val intent = Intent(Intent.ACTION_VIEW, Uri.parse("google.navigation:q=$point&mode=d")).setPackage("com.google.android.apps.maps")
+      if (adjacent) intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_LAUNCH_ADJACENT)
+      try {
+        activity.startActivity(intent)
+        true
+      } catch (_: Exception) {
+        try {
+          activity.startActivity(Intent(Intent.ACTION_VIEW,
+            Uri.parse("https://www.google.com/maps/dir/?api=1&destination=$point&travelmode=driving&dir_action=navigate")))
+          true
+        } catch (_: Exception) { false }
+      }
+    }.runOnQueue(Queues.MAIN)
+
 
     AsyncFunction("setScreenAwake") { active: Boolean ->
       val window = appContext.currentActivity?.window ?: return@AsyncFunction
@@ -81,6 +137,7 @@ class DriverNavigationModule : Module() {
     }.runOnQueue(Queues.MAIN)
 
     OnDestroy {
+      RideSharingService.publish = null
       main.post {
         stopSpeech()
         speech?.shutdown()

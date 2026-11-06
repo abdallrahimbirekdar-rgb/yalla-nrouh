@@ -7,6 +7,7 @@ import {useAuth} from '../auth';
 import {authErrorMessage} from '../auth-errors';
 import {cloudCurrentToken,cloudDriverDispatchPing,cloudMutationUncertain,cloudMyRides,cloudDriverInbox,cloudOpenRides,cloudDeclineDriverOffer,cloudAcceptRide,cloudAdvanceRide,cloudReleaseRide,cloudCancelRide,cloudConfirmPickup,cloudRegisterDriver,cloudSetDriverOnline,type CloudRide,type CloudDriver,type DriverHistoryKind,type RidePreview} from '../cloud-api';
 import {navigationPosition} from '../navigation-position';
+import MapCanvas from '../map/MapCanvas';
 import RideOptions from '../ride-options';
 import {isCoordinate} from '../geo';
 import {PassengerFare,PassengerStops,RideFooter} from '../passenger-trip-summary';
@@ -18,6 +19,8 @@ import {DriverHistory,DriverHistoryBar} from '../driver-history';
 import {useDriverOfferSound} from '../use-driver-offer-sound';
 import {useCurrentPosition} from '../use-current-position';
 import {PassengerTaxiMap,RideSearchTimer,useShareTaxiPosition} from '../taxi-tracking';
+import {CustomerTracking,openRideMaps,pickupChange,useRideRow,useRideSharing} from '../ride-live-sharing';
+import {authClient} from '../auth-client';
 import {useRideRecovery} from '../use-ride-recovery';
 import {createRefreshQueue} from '../refresh-queue';
 import {Button,Icon,Label,Page,Panel,useText,useTheme} from '../ui';
@@ -119,7 +122,20 @@ export default function Rides(){
   void refresh().catch(()=>{});
  });
  const approachingRide=currentDriverRide?.status==='accepted'?currentDriverRide:undefined;
- useShareTaxiPosition(approachingRide?.id,foreground);
+ const sharing=useRideSharing();
+ const [trackingBackend,setTrackingBackend]=useState(false);
+ const hasLiveRide=rides.some(live);
+ useEffect(()=>{
+  if(!userId||!foreground||!hasLiveRide||connection==='offline')return;
+  const controller=new AbortController();
+  void authClient().from('ride_pickup_changes').select('ride_id',{head:true}).limit(1).abortSignal(controller.signal)
+   .then(({error})=>{if(!controller.signal.aborted&&!error)setTrackingBackend(true)});
+  return()=>controller.abort();
+ },[userId,foreground,hasLiveRide,connection]);
+ useShareTaxiPosition(sharing.capability===false||!trackingBackend?approachingRide?.id:undefined,foreground);
+ const [compactRide,setCompactRide]=useState<string|null>(null);
+ const [proposing,setProposing]=useState(false);
+ const [proposed,setProposed]=useState<string|null>(null);
  const activeRide=rides.some(live);const shouldPoll=foreground&&connection!=='offline'&&(activeRide||driverMode&&(!driver||driver.approved&&driver.online));
  useEffect(()=>{
   if(!userId||!shouldPoll)return;
@@ -174,6 +190,36 @@ export default function Rides(){
  const status=(value:string)=>({requested:t('بانتظار السائق','Waiting for driver'),accepted:t('السائق في الطريق','Driver is on the way'),arrived:t('وصل السائق','Driver arrived'),riding:t('الرحلة جارية','Ride in progress'),completed:t('مكتملة','Completed'),cancelled:t('ملغاة','Cancelled')} as Record<string,string>)[value]??value;
  const mine=rides.filter(r=>r.passenger_id===userId);
  const currentPassengerRide=mine.find(live);
+ const proposalRide=approachingRide?.id??(!driverMode&&currentPassengerRide?.status==='accepted'?currentPassengerRide.id:undefined);
+ const proposal=pickupChange(useRideRow('ride_pickup_changes',proposalRide,foreground));
+ const shareButton=(ride:CloudRide,role:'driver'|'passenger')=>sharing.capability&&trackingBackend&&<View style={{gap:6}}>
+  <Label muted>{role==='driver'
+   ?t('بموافقتك يشارك التطبيق موقعك أثناء الرحلة، حتى عند فتح الخرائط أو قفل الشاشة.','With your consent, location is shared during this ride, including while Maps is open or the screen is locked.')
+   :t('بموافقتك يرى السائق المعيّن موقعك أثناء انتظار السيارة، حتى لو كان التطبيق في الخلفية.','With your consent, the assigned driver can see your location while you wait, including in the background.')}</Label>
+  <Button secondary icon="locate-outline" title={sharing.activeRide===ride.id?t('إيقاف مشاركة موقعي','Stop sharing my location'):t('أوافق على مشاركة موقعي','I agree to share my location')}
+   disabled={sharing.busy} onPress={()=>void sharing.toggle(ride.id,role)}/>
+  {sharing.problem&&<Label muted>{t('تعذّر تغيير المشاركة. تحقق من الاتصال وإذن الموقع الدقيق والإشعارات.','Could not change sharing. Check your connection, precise location and notification permissions.')}</Label>}
+ </View>;
+ async function proposePickup(ride:CloudRide){
+  if(proposing)return;
+  setProposing(true);setNotice('');
+  const controller=new AbortController();
+  const timer=setTimeout(()=>controller.abort(),18000);
+  try{
+   const fix=await navigationPosition(true,controller.signal);
+   const {data,error}=await authClient().rpc('change_pickup',{p_ride:ride.id,p_proposal:null,p_lat:fix.latitude,p_lng:fix.longitude});
+   if(error||!data)throw Error('proposal');
+   setProposed(ride.id);
+  }catch{setNotice(t('تعذّر اقتراح موقعك الحالي. تحقق من GPS والاتصال.','Could not propose your current location. Check GPS and internet.'))}
+  finally{clearTimeout(timer);setProposing(false)}
+ }
+ function showExternal(ride:CloudRide,point:{latitude:number;longitude:number},adjacent:boolean){
+  if(adjacent)setCompactRide(ride.id);
+  void openRideMaps(point,adjacent).then(ok=>{
+   if(!ok)setNotice(t('تعذّر فتح خرائط Google.','Could not open Google Maps.'));
+  });
+ }
+
  const passengerRides=mine.filter(ride=>historyMode?!live(ride):ride.id===(currentPassengerRide?.id??params.ride));
  const searchingRide=!driverMode&&!historyMode&&currentPassengerRide?.status==='requested'?currentPassengerRide:undefined;
  function cancelRequest(ride:CloudRide){
@@ -218,6 +264,12 @@ export default function Rides(){
    {ride.id!==searchingRide?.id&&<View style={{alignSelf:'flex-start',borderRadius:20,paddingHorizontal:12,paddingVertical:4,backgroundColor:colors.selected}}><Label muted>{ride.search_expired_at?t('انتهى البحث بدون سائق','Search expired without a driver'):status(ride.status)}</Label></View>}
    {typeof ride.estimated_fare==='number'&&<PassengerFare fare={ride.estimated_fare}/>}
    <PassengerStops pickup={ride.pickup} destination={ride.destination} category={ride.category}/>
+   {['requested','accepted','arrived'].includes(ride.status)&&!ride.pickup_confirmed_at&&shareButton(ride,'passenger')}
+   {trackingBackend&&ride.status==='accepted'&&<>
+    {proposal?.approved?<Label>{t('وافق السائق على نقطة الالتقاء الجديدة.','The driver approved the new meeting point.')}</Label>
+     :<Button secondary title={t('اقتراح موقعي الحالي كنقطة التقاء','Suggest my current location as the meeting point')} disabled={proposing} onPress={()=>void proposePickup(ride)}/>}
+    {(proposed===ride.id||proposal)&&!proposal?.approved&&<Label muted>{t('الاقتراح بانتظار موافقة السائق.','The proposal is waiting for the driver’s approval.')}</Label>}
+   </>}
    {ride.status==='accepted'&&<PassengerTaxiMap key={ride.driver_id} rideId={ride.id} pickup={{latitude:ride.pickup_lat,longitude:ride.pickup_lng}}/>}
    {historyMode&&<>
     <Label muted>{new Date(ride.created_at).toLocaleString(state.language==='ar'?'ar':'en')}</Label>
@@ -234,6 +286,10 @@ export default function Rides(){
   </Panel>;
  function renderDriverRide(ride:CloudRide){
   const pickingUp=ride.status==='accepted';
+  const pickup={latitude:ride.pickup_lat,longitude:ride.pickup_lng};
+  const meeting=pickingUp&&proposal?.approved?proposal.point:pickup;
+  const destination=pickingUp?meeting:{latitude:ride.destination_lat,longitude:ride.destination_lng};
+  const tracking=pickingUp||ride.status==='arrived'&&!ride.pickup_confirmed_at;
   const atPickup=ride.status==='arrived';
   const action=atPickup
    ? <Button prominent title={ride.pickup_confirmed_at?t('بدء الرحلة','Start ride'):t('بانتظار تأكيد الزبون','Waiting for passenger')} disabled={busy||!ride.pickup_confirmed_at} onPress={()=>void run(async token=>{const result=await cloudAdvanceRide(token,ride.id,'riding');if(result!=='riding')throw Error(result)})}/>
@@ -241,24 +297,45 @@ export default function Rides(){
     ? <Button prominent icon="location-outline" title={t('وصلت إلى الزبون','I arrived at pickup')} disabled={busy} onPress={()=>void run(async token=>{if(await cloudAdvanceRide(token,ride.id,'arrived')!=='arrived')throw Error('not_allowed')})}/>
     : <Button prominent icon="checkmark-circle-outline" title={t('إنهاء الرحلة','Finish ride')} disabled={busy} onPress={()=>void run(async token=>{if(await cloudAdvanceRide(token,ride.id,'completed')!=='completed')throw Error('not_allowed')})}/>;
   return <View key={ride.id} style={{gap:12}}>
+   {shareButton(ride,'driver')}
+   {tracking&&<CustomerTracking key={ride.id+':'+ride.driver_id} rideId={ride.id} pickup={pickup} foreground={foreground}/>}
+   {pickingUp&&<>
+    <Button icon="map-outline" title={t('ملاحة خارجية مع تتبّع الزبون','External navigation with customer tracking')} onPress={()=>showExternal(ride,meeting,true)}/>
+    {proposal&&!proposal.approved&&<Panel>
+     <Label>{t('الزبون اقترح نقطة التقاء جديدة.','The customer suggested a new meeting point.')}</Label>
+     <View style={{height:155,overflow:'hidden',borderRadius:12}}><MapCanvas compact readOnly minMapHeight={155} point={proposal.point} onChange={()=>{}}/></View>
+     <Button secondary title={t('الموافقة على نقطة الالتقاء الجديدة','Approve the new meeting point')} disabled={busy} onPress={()=>void run(async()=>{
+      const {data,error}=await authClient().rpc('change_pickup',{p_ride:ride.id,p_proposal:proposal.id,p_lat:null,p_lng:null});
+      if(error||!data)throw Error('not_allowed');
+     })}/>
+    </Panel>}
+    {proposal?.approved&&<Label>{t('الملاحة إلى نقطة الالتقاء المعتمدة. إذا كانت خرائط Google مفتوحة، افتحها من هنا من جديد لتحديث الوجهة.','Navigation now uses the approved point. Reopen Google Maps from here if it already has a destination.')}</Label>}
+   </>}
+
    {atPickup
     ? <Panel><Label display>{t('عند الزبون','At pickup')}</Label>{action}<Label>{ride.pickup}</Label></Panel>
     : <DriverNavigation key={ride.id+'-'+ride.status}
        title={pickingUp?t('إلى الزبون','To pickup'):t('إلى الوجهة','To destination')}
-       targetLabel={pickingUp?ride.pickup:ride.destination}
+       targetLabel={pickingUp?(proposal?.approved?t('نقطة الالتقاء المعتمدة','Approved meeting point'):ride.pickup):ride.destination}
        action={action}
        pilotAvailable={pilotOwner===userId&&!!driver?.approved}
        pilotActive={pilotOwner===userId&&!!driver?.approved&&pilotRide===ride.id}
        onPilotToggle={()=>setPilotRide(pilotRide===ride.id?null:ride.id)}
        devicePosition={gps.camera?.point}
        routeOrigin={ride.status==='riding'?{latitude:ride.pickup_lat,longitude:ride.pickup_lng}:undefined}
-       initialPlan={acceptedPlans?.rideId===ride.id?(pickingUp?acceptedPlans.pickup:acceptedPlans.trip):null}
-       to={pickingUp?{latitude:ride.pickup_lat,longitude:ride.pickup_lng}:{latitude:ride.destination_lat,longitude:ride.destination_lng}}/>}
+       initialPlan={acceptedPlans?.rideId===ride.id&&!(pickingUp&&proposal?.approved)?(pickingUp?acceptedPlans.pickup:acceptedPlans.trip):null}
+       to={destination}/>}
    {ride.status!=='riding'&&<Button secondary title={t('إعادة الطلب للبحث عن سائق','Release request to other drivers')} disabled={busy} onPress={()=>void run(async token=>{if(!await cloudReleaseRide(token,ride.id))throw Error('not_allowed')})}/>}
   </View>;
  }
  if(!auth.ready||auth.session&&!auth.rolesReady)return <Page title={t('رحلاتي','My rides')}><Label>{t('جارٍ تحميل الحساب…','Loading account…')}</Label>{auth.problem&&<Button title={t('إعادة المحاولة','Try again')} onPress={()=>void auth.retry()}/>}</Page>;
  if(!auth.session)return <Page title={driverMode?t('وضع السائق','Driver mode'):passengerTitle}><Panel><Icon name="person-circle-outline" size={42}/><Label>{t('سجّل الدخول لعرض رحلاتك أو العمل كسائق.','Sign in to view your rides or use driver mode.')}</Label><Button title={t('تسجيل الدخول','Sign in')} onPress={()=>router.push(historyMode?{pathname:'/account',params:{next:'history'}}:'/account')}/></Panel></Page>;
+ if(currentDriverRide?.id===compactRide&&currentDriverRide.status==='accepted'){
+  return <Page compact title={t('تتبّع الزبون','Customer tracking')}>
+   <CustomerTracking compact rideId={currentDriverRide.id} pickup={{latitude:currentDriverRide.pickup_lat,longitude:currentDriverRide.pickup_lng}} foreground={foreground} onBack={()=>setCompactRide(null)}/>
+   {!!notice&&<Label muted>{notice}</Label>}
+  </Page>;
+ }
  const footer=driverMode&&userId?<View style={{backgroundColor:colors.background,borderTopWidth:1,borderColor:colors.line,paddingHorizontal:12,paddingVertical:7}}><DriverHistoryBar onOpen={setHistoryKind}/></View>:searchingRide?<RideFooter>
   <RideSearchTimer key={searchingRide.id} startedAt={searchingRide.updated_at??searchingRide.created_at} onExpired={()=>void refresh().catch(()=>{})}/>
   {!!notice&&<View accessibilityRole="alert"><Label>{notice}</Label></View>}

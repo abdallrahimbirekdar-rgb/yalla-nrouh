@@ -85,9 +85,10 @@ export function PassengerTaxiMap({rideId,pickup}:{rideId:string;pickup:Coordinat
    if(reading||!foregroundTab()||controller.signal.aborted)return;
    reading=true;
    try{
-    const {data}=await client.from('ride_taxi_positions').select('ride_id,latitude,longitude,measured_at')
+    const {data,error}=await client.from('ride_taxi_positions').select('ride_id,latitude,longitude,measured_at')
      .eq('ride_id',rideId).abortSignal(controller.signal).maybeSingle();
-    receive(data);
+    if(!error&&data===null&&!controller.signal.aborted)setFix(null);
+    else receive(data);
    }catch{
     // The live channel or the next fallback read will supply the latest fix.
    }finally{reading=false}
@@ -100,7 +101,8 @@ export function PassengerTaxiMap({rideId,pickup}:{rideId:string;pickup:Coordinat
     subscribed=status==='SUBSCRIBED';
     if(subscribed)void snapshot();
    });
-  const fallback=setInterval(()=>{if(!subscribed)void snapshot()},12000);
+  let ticks=0;
+  const fallback=setInterval(()=>{if(!subscribed||++ticks%2===0)void snapshot()},12000);
   const resume=()=>void snapshot();
   document.addEventListener('visibilitychange',resume);
   void snapshot();
@@ -123,9 +125,9 @@ export function PassengerTaxiMap({rideId,pickup}:{rideId:string;pickup:Coordinat
  return <Panel>
   <Label large>{t('تابع وصول التاكسي','Track your taxi')}</Label>
   <View style={{height:300,borderRadius:14,overflow:'hidden'}}>
-   <MapCanvas compact readOnly minMapHeight={300} point={pickup} taxiPoint={fix?.point} onChange={()=>{}}/>
+   <MapCanvas compact readOnly minMapHeight={300} point={pickup} taxiPoint={age<180?fix?.point:undefined} onChange={()=>{}}/>
   </View>
   <Label muted>{fix?t('آخر تحديث قبل '+number+' ثانية','Last updated '+number+' s ago'):t('بانتظار أول تحديث لموقع التاكسي…','Waiting for the taxi’s first location update…')}</Label>
-  {fix&&stale&&<Label muted>{t('نعرض آخر موقع معروف للتاكسي · بانتظار تحديث الموقع','Showing the last known taxi location · waiting for an update')}</Label>}
+  {fix&&stale&&<Label muted>{age<180?t('نعرض آخر موقع معروف للتاكسي · بانتظار تحديث الموقع','Showing the last known taxi location · waiting for an update'):t('موقع التاكسي غير محدّث','The taxi location is no longer current')}</Label>}
  </Panel>;
 }

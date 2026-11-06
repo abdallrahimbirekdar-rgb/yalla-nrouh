@@ -96,3 +96,15 @@ test('last GPS consumer cancels the provider and later request starts cleanly',a
  const rejected=assert.rejects(first,/GPS_CANCELLED/);await Promise.resolve();a.abort();await rejected;assert.equal(oldSignal.aborted,true);
  assert.equal(await pool.request('map',new AbortController().signal,()=>{},async()=>17),17);
 });
+
+test('ride sharing and external maps are narrow native operations',()=>{
+ const rideId='aaaabbbb-cccc-4ddd-8eee-123456789012';
+ const secret='abcdbbbb-cccc-4ddd-8eee-123456789012';
+ const start={type:'ride-share-start',id:'test-1',rideId,secret};
+ assert.deepEqual(readWebMessage(JSON.stringify(start)),start);
+ assert.equal(readWebMessage(JSON.stringify({...start,secret:'account-token'})),null);
+ const maps={type:'ride-maps',id:'test-2',latitude:51.481,longitude:7.219,adjacent:true};
+ assert.deepEqual(readWebMessage(JSON.stringify(maps)),maps);
+ assert.equal(readWebMessage(JSON.stringify({...maps,latitude:91})),null);
+ assert.equal(readWebMessage(JSON.stringify({...maps,adjacent:'true'})),null);
+});
