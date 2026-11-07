@@ -141,7 +141,10 @@ export default function Rides(){
   try{if(rideId)localStorage.setItem('yn-driver-split-ride',rideId);else localStorage.removeItem('yn-driver-split-ride')}catch{/* The view still switches. */}
  }
  const [navigationProvider,setNavigationProvider]=useState<NavigationProvider>(()=>{
-  try{return localStorage.getItem('yn-driver-navigation')==='yandex'?'yandex':'google'}catch{return 'google'}
+  try{
+   const saved=localStorage.getItem('yn-driver-navigation');
+   return saved==='yandex'||saved==='osmand'?saved:'google';
+  }catch{return 'google'}
  });
  const [proposing,setProposing]=useState(false);
  const [proposed,setProposed]=useState<string|null>(null);
@@ -222,9 +225,9 @@ export default function Rides(){
   }catch{setNotice(t('تعذّر اقتراح موقعك الحالي. تحقق من GPS والاتصال.','Could not propose your current location. Check GPS and internet.'))}
   finally{clearTimeout(timer);setProposing(false)}
  }
- const providers={google:'Google Maps',yandex:'Yandex Navigator'} as const;
+ const providers={google:'Google Maps',yandex:'Yandex Navigator',osmand:'OsmAnd'} as const;
  const navigationOptions=<View style={{flexDirection:'row',flexWrap:'wrap',gap:6}}>
-  {(['google','yandex'] as const).map(provider=><View key={provider} style={{flexGrow:1}}>
+  {(['google','yandex','osmand'] as const).map(provider=><View key={provider} style={{flexGrow:1}}>
    <Button secondary={navigationProvider!==provider} title={providers[provider]} onPress={()=>{
     setNavigationProvider(provider);
     try{localStorage.setItem('yn-driver-navigation',provider)}catch{/* Use the selection for this session. */}
@@ -235,9 +238,10 @@ export default function Rides(){
   setSplitRide(adjacent?ride.id:null);
   setNotice('');
   void openRideMaps(point,adjacent,sharing.capability===true,navigationProvider).then(ok=>{
-   if(!ok&&alive.current&&identity.current===userId)setNotice(navigationProvider==='yandex'
-    ?t('تعذّر فتح Yandex Navigator. تأكد من تثبيت التطبيق واستخدام أحدث نسخة أندرويد من يلّا نروح.','Could not open Yandex Navigator. Install it and use the latest Yalla Nrouh Android app.')
-    :t('تعذّر فتح خرائط Google. يمكنك إعادة المحاولة من شاشة الرحلة.','Could not open Google Maps. You can retry from the ride screen.'));
+   if(!ok&&alive.current&&identity.current===userId)setNotice(navigationProvider==='google'
+    ?t('تعذّر فتح خرائط Google. يمكنك إعادة المحاولة من شاشة الرحلة.','Could not open Google Maps. You can retry from the ride screen.')
+    :t('تعذّر فتح '+providers[navigationProvider]+'. تأكد من تثبيته واستخدام أحدث نسخة أندرويد من يلّا نروح.',
+       'Could not open '+providers[navigationProvider]+'. Install it and use the latest Yalla Nrouh Android app.'));
   });
  }
 

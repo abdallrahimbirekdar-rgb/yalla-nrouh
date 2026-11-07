@@ -1,5 +1,6 @@
 package com.yallanrouh.navigation
 
+import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.net.Uri
 import androidx.core.content.ContextCompat
@@ -70,14 +71,27 @@ class DriverNavigationModule : Module() {
         "google" -> Intent(Intent.ACTION_VIEW, Uri.parse("google.navigation:q=$point&mode=d")).setPackage("com.google.android.apps.maps")
         "yandex" -> Intent(Intent.ACTION_VIEW,
           Uri.parse("yandexnavi://build_route_on_map?lat_to=$latitude&lon_to=$longitude")).setPackage("ru.yandex.yandexnavi")
+        "osmand" -> Intent(Intent.ACTION_VIEW, Uri.parse("osmand.api://navigate").buildUpon()
+          .appendQueryParameter("dest_lat", latitude.toString())
+          .appendQueryParameter("dest_lon", longitude.toString())
+          .appendQueryParameter("profile", "car")
+          .appendQueryParameter("force", "true")
+          .appendQueryParameter("location_permission", "true")
+          .build()).setPackage("net.osmand")
         else -> return@AsyncFunction false
       }
       if (adjacent) intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_LAUNCH_ADJACENT)
       try {
         activity.startActivity(intent)
         true
-      } catch (_: Exception) {
-        if (provider == "yandex") return@AsyncFunction false
+      } catch (error: Exception) {
+        if (provider == "osmand" && error is ActivityNotFoundException) {
+          return@AsyncFunction try {
+            activity.startActivity(intent.setPackage("net.osmand.plus"))
+            true
+          } catch (_: Exception) { false }
+        }
+        if (provider != "google") return@AsyncFunction false
         try {
           activity.startActivity(Intent(Intent.ACTION_VIEW,
             Uri.parse("https://www.google.com/maps/dir/?api=1&destination=$point&travelmode=driving&dir_action=navigate")))

@@ -86,10 +86,11 @@ export function useRideSharing(){
  return {capability,activeRide,busy,problem,toggle};
 }
 
-export type NavigationProvider='google'|'yandex';
+const navigationMessage={google:'ride-maps',yandex:'ride-yandex',osmand:'ride-osmand'} as const;
+export type NavigationProvider=keyof typeof navigationMessage;
 export async function openRideMaps(point:Coordinate,adjacent:boolean,nativeAvailable:boolean,provider:NavigationProvider):Promise<boolean>{
- if(nativeAvailable)return (await nativeRequest(provider==='yandex'?'ride-yandex':'ride-maps',{...point,adjacent})).ok;
- if(provider==='yandex')return false;
+ if(nativeAvailable)return (await nativeRequest(navigationMessage[provider],{...point,adjacent})).ok;
+ if(provider!=='google')return false;
  try{await Linking.openURL(googleDirections(point,undefined,true));return true}catch{return false}
 }
 

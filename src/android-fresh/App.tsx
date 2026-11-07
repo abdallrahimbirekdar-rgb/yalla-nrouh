@@ -72,7 +72,7 @@ const screenModule=requireOptionalNativeModule<{setScreenAwake:(active:boolean)=
  startRideSharing:(ride:string,secret:string,arabic:boolean)=>Promise<boolean>;
  stopRideSharing:(ride:string)=>Promise<void>;
  rideSharingStatus:()=>Promise<string|null>;
- openRideMaps:(latitude:number,longitude:number,adjacent:boolean,provider:'google'|'yandex')=>Promise<boolean>;
+ openRideMaps:(latitude:number,longitude:number,adjacent:boolean,provider:'google'|'yandex'|'osmand')=>Promise<boolean>;
  addListener:(event:'rideSharing',callback:(event:ShareEvent)=>void)=>{remove:()=>void};
  stopDirection:()=>Promise<void>}>('YallaDriverNavigation');
 const supportsSharing=typeof screenModule?.startRideSharing==='function';
@@ -324,8 +324,9 @@ export default function FreshAndroid(){
    const stop=supportsSharing?screenModule!.stopRideSharing(message.rideId):Promise.resolve();
    void stop.then(()=>inject(eventScript('yalla:native-result',{id:message.id,ok:supportsSharing})))
     .catch(()=>inject(eventScript('yalla:native-result',{id:message.id,ok:false})));
-  }else if(message.type==='ride-maps'||message.type==='ride-yandex'){
-   const open=supportsSharing?screenModule!.openRideMaps(message.latitude,message.longitude,message.adjacent,message.type==='ride-yandex'?'yandex':'google'):Promise.resolve(false);
+  }else if(message.type==='ride-maps'||message.type==='ride-yandex'||message.type==='ride-osmand'){
+   const provider={'ride-maps':'google','ride-yandex':'yandex','ride-osmand':'osmand'} as const;
+   const open=supportsSharing?screenModule!.openRideMaps(message.latitude,message.longitude,message.adjacent,provider[message.type]):Promise.resolve(false);
    void open.then(ok=>inject(eventScript('yalla:native-result',{id:message.id,ok})))
     .catch(()=>inject(eventScript('yalla:native-result',{id:message.id,ok:false})));
   }else if(message.type==='driver-speak'){

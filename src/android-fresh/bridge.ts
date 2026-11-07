@@ -14,7 +14,7 @@ export type WebMessage=
  |{type:'ride-share-start';id:string;rideId:string;secret:string}
  |{type:'ride-share-stop';id:string;rideId:string}
  |{type:'ride-share-status';id:string}
- |{type:'ride-maps'|'ride-yandex';id:string;latitude:number;longitude:number;adjacent:boolean}
+ |{type:'ride-maps'|'ride-yandex'|'ride-osmand';id:string;latitude:number;longitude:number;adjacent:boolean}
  |{type:'location-settings';id:string}
  |{type:'alerts-enable';id:string}
  |{type:'notify';id:string;title:string;body:string}
@@ -57,7 +57,7 @@ export function readWebMessage(raw:string):WebMessage|null{
   if(v.type==='ride-share-start'&&idOK(v.id)&&uuid(v.rideId)&&uuid(v.secret))return {type:v.type,id:v.id,rideId:v.rideId,secret:v.secret};
   if(v.type==='ride-share-stop'&&idOK(v.id)&&uuid(v.rideId))return {type:v.type,id:v.id,rideId:v.rideId};
   if(v.type==='ride-share-status'&&idOK(v.id))return {type:v.type,id:v.id};
-  if((v.type==='ride-maps'||v.type==='ride-yandex')&&idOK(v.id)&&typeof v.latitude==='number'&&Math.abs(v.latitude)<=90
+  if((v.type==='ride-maps'||v.type==='ride-yandex'||v.type==='ride-osmand')&&idOK(v.id)&&typeof v.latitude==='number'&&Math.abs(v.latitude)<=90
    &&typeof v.longitude==='number'&&Math.abs(v.longitude)<=180&&typeof v.adjacent==='boolean')
    return {type:v.type,id:v.id,latitude:v.latitude,longitude:v.longitude,adjacent:v.adjacent};
   if(v.type==='location-settings'&&idOK(v.id))return {type:'location-settings',id:v.id};
