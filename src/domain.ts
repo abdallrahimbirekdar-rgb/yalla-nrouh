@@ -1,15 +1,15 @@
 import {newMeter,pauseMeter,recordFix,validMeter,validTariff,suggestedNewSypTariff,type Fix,type Meter,type Tariff} from './meter.ts';
 import {isCoordinate,sameCoordinate,type Coordinate} from './geo.ts';
-export type Language = 'ar' | 'en';
+export type Language = 'ar' | 'de' | 'en';
 export type RideType = 'classic' | 'comfort' | 'yellow' | 'vip' | 'ladies-classic' | 'ladies-comfort';
 export type TripStatus = 'requested' | 'accepted' | 'arrived' | 'riding' | 'completed' | 'cancelled';
-export const categories: {id: RideType; ar: string; en: string; description: [string, string]; verified: boolean}[] = [
-  {id:'classic',ar:'كلاسيك فوري',en:'Classic · Now',description:['خيار اقتصادي للمشاوير اليومية','A low-cost choice for daily rides'],verified:true},
-  {id:'comfort',ar:'كومفورت مكيفة فوري',en:'Comfort AC · Now',description:['سيارات حديثة ومكيفة','Modern cars with air conditioning'],verified:true},
-  {id:'yellow',ar:'تكسي عمومي أصفر',en:'Yellow taxi',description:['تكسي عمومي للتنقل داخل المدينة','Public taxis for city trips'],verified:true},
-  {id:'vip',ar:'قمة الرفاهية',en:'VIP',description:['سيارات فاخرة للأعمال والمناسبات','Luxury cars for work and special events'],verified:true},
-  {id:'ladies-classic',ar:'يالله سيدات كلاسيك',en:'Yalla Ladies Classic',description:['تفاصيل الفئة قيد التحقق','Category details are being checked'],verified:false},
-  {id:'ladies-comfort',ar:'يالله سيدات كومفورت',en:'Yalla Ladies Comfort',description:['تفاصيل الفئة قيد التحقق','Category details are being checked'],verified:false},
+export const categories: {id: RideType; ar: string; en: string; de: string; description: [string, string]; verified: boolean}[] = [
+  {id:'classic',ar:'كلاسيك فوري',en:'Classic · Now',de:'Classic · Sofort',description:['خيار اقتصادي للمشاوير اليومية','A low-cost choice for daily rides'],verified:true},
+  {id:'comfort',ar:'كومفورت مكيفة فوري',en:'Comfort AC · Now',de:'Comfort mit Klimaanlage · Sofort',description:['سيارات حديثة ومكيفة','Modern cars with air conditioning'],verified:true},
+  {id:'yellow',ar:'تكسي عمومي أصفر',en:'Yellow taxi',de:'Gelbes Taxi',description:['تكسي عمومي للتنقل داخل المدينة','Public taxis for city trips'],verified:true},
+  {id:'vip',ar:'قمة الرفاهية',en:'VIP',de:'VIP',description:['سيارات فاخرة للأعمال والمناسبات','Luxury cars for work and special events'],verified:true},
+  {id:'ladies-classic',ar:'يالله سيدات كلاسيك',en:'Yalla Ladies Classic',de:'Yalla Ladies Classic',description:['تفاصيل الفئة قيد التحقق','Category details are being checked'],verified:false},
+  {id:'ladies-comfort',ar:'يالله سيدات كومفورت',en:'Yalla Ladies Comfort',de:'Yalla Ladies Comfort',description:['تفاصيل الفئة قيد التحقق','Category details are being checked'],verified:false},
 ];
 export const regions = [
   ['دمشق','Damascus'],['ريف دمشق','Rif Dimashq'],['حلب','Aleppo'],['حمص','Homs'],['حماة','Hama'],['اللاذقية','Latakia'],['طرطوس','Tartus'],['إدلب','Idlib'],['درعا','Daraa'],['السويداء','As-Suwayda'],['القنيطرة','Quneitra'],['دير الزور','Deir ez-Zor'],['الرقة','Raqqa'],['الحسكة','Al-Hasakah'],
@@ -58,7 +58,7 @@ export function reduce(state:AppState,action:Action):AppState {
 export function restoreState(raw:unknown):AppState|null {
   if(typeof raw!=='object'||raw===null)return null;
   const s=raw as AppState;
-  if(s.version!==1||!['ar','en'].includes(s.language)||!Array.isArray(s.trips)||typeof s.driver?.approved!=='boolean')return null;
+  if(s.version!==1||!['ar','de','en'].includes(s.language)||!Array.isArray(s.trips)||typeof s.driver?.approved!=='boolean')return null;
   const statuses=['requested','accepted','arrived','riding','completed','cancelled'];
   const seen=new Set<string>();
   for(const trip of s.trips){

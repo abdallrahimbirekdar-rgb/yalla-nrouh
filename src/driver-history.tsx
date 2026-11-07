@@ -69,7 +69,7 @@ export function DriverHistory({kind,owner,onSelect,onClose}:{kind:DriverHistoryK
 
 function pickupAddressInfo(item:DriverHistoryEntry){
  const label=item.pickup?.trim();
- if(label&&!['موقعي الحالي','my current location','نقطة الالتقاء على الخريطة','meeting point on the map'].includes(label.toLowerCase()))return {label};
+ if(label&&!['موقعي الحالي','my current location','mein aktueller standort','نقطة الالتقاء على الخريطة','meeting point on the map','treffpunkt auf der karte'].includes(label.toLowerCase()))return {label};
  const point={latitude:item.pickup_lat,longitude:item.pickup_lng};
  return isCoordinate(point)?{point}:null;
 }

@@ -1,3 +1,4 @@
+import {translate} from './locale';
 import React,{createContext,useContext,useEffect,useReducer,useRef,useState} from 'react';
 import {AppState as DeviceState,Platform} from 'react-native';
 import * as Location from 'expo-location';
@@ -72,7 +73,7 @@ export function AppProvider({children}:{children:React.ReactNode}){
  const previousStatuses=useRef<Record<string,string>|null>(null);
  useEffect(()=>{if(!ready)return;const next=Object.fromEntries(state.trips.map(t=>[t.id,t.status]));const previous=previousStatuses.current;previousStatuses.current=next;if(!previous||!state.preferences.notifications)return;
   const messages={accepted:['السائق في طريقه إليك','Driver is on the way'],arrived:['وصلت السيارة','Car has arrived'],completed:['اكتملت الرحلة','Ride completed'],cancelled:['أُلغيت الرحلة','Ride cancelled']} as const;
-  for(const trip of state.trips){if(previous[trip.id]&&previous[trip.id]!==trip.status&&trip.status in messages){const message=messages[trip.status as keyof typeof messages][state.language==='ar'?0:1];void notifyLocal(state.language==='ar'?'يلا نروح — تجربة محلية':'Yalla Nrouh — local demo',message).then(()=>setAlertError(false)).catch(()=>setAlertError(true));}}
+  for(const trip of state.trips){if(previous[trip.id]&&previous[trip.id]!==trip.status&&trip.status in messages){const [ar,en]=messages[trip.status as keyof typeof messages];const message=translate(state.language,ar,en);void notifyLocal(translate(state.language,'يلّا نروح — تجربة محلية','Yalla Nrouh — local demo'),message).then(()=>setAlertError(false)).catch(()=>setAlertError(true));}}
  },[state.trips,state.preferences.notifications,state.language,ready]);
  return <Context.Provider value={{state,dispatch,draft,setDraft,ready,loadError,recoveryNotice,saveError,alertError,retry:()=>setAttempt(a=>a+1),retrySave:()=>{void writer.current?.retry()},connection,trackingId,trackingError,startTracking,stopTracking,foreground}}>{children}</Context.Provider>;
 }

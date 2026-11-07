@@ -71,7 +71,7 @@ export default function AdminRulesGuide(){
   }catch{if(alive.current)setNotice(t('تعذر تحميل بقية السجل.','Could not load more revisions.'))}
   finally{if(alive.current)setBusy(false)}
  }
- const formatDate=(value:string)=>new Date(value).toLocaleString(t('ar','en'));
+ const formatDate=(value:string)=>new Date(value).toLocaleString(t('ar','en','de'));
  return <>
   <Panel>
    <Label large>{t('كيف يعمل التطبيق','How the app works')}</Label>

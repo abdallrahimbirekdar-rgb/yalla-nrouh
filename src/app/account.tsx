@@ -18,7 +18,7 @@ export default function Account(){
    if(mode==='signup'){if(password!==repeat){setNotice(t('كلمتا المرور غير متطابقتين.','Passwords do not match.'));return}const signed=await auth.signUp(email,password);setPassword('');setRepeat('');setNotice(signed?t('تم إنشاء الحساب وتسجيل الدخول.','Account created. You are signed in.'):t('افتح رسالة التأكيد في بريدك، ثم عد إلى تسجيل الدخول.','Open the email to confirm your account, then sign in.'));return}
    await auth.signIn(email,password);setPassword('');
    if(allowedNext==='/location')router.replace({pathname:'/location',params:next==='saved'?{view:'saved'}:{target:'destination'}});else if(next==='history')router.replace({pathname:'/cloud',params:{mode:'history'}});else if(allowedNext)router.replace(allowedNext);else router.replace('/');
-  }catch(error){setNotice(authErrorMessage(error,state.language==='ar'))}finally{setBusy(false)}
+  }catch(error){setNotice(authErrorMessage(error,state.language))}finally{setBusy(false)}
  }
  return <Page title={auth.recovery?t('كلمة مرور جديدة','New password'):auth.session?t('حسابي','My account'):t('تسجيل الدخول','Sign in')}>
   <View style={{alignItems:'center'}}><Label muted>{t('حساب واحد للموقع والتطبيق','One account for the website and app')}</Label></View>
@@ -31,14 +31,14 @@ export default function Account(){
    <Button secondary icon="bookmark-outline" title={t('أماكني المحفوظة','My saved places')} onPress={()=>router.push({pathname:'/location',params:{view:'saved'}})}/>
    </>}
    <Button secondary icon="car-sport-outline" title={t('وضع السائق','Driver mode')} onPress={()=>router.push({pathname:'/cloud',params:{mode:'driver'}})}/>
-   <Button secondary title={t('تسجيل الخروج من هذا الجهاز','Sign out on this device')} disabled={busy} onPress={()=>{setBusy(true);void auth.signOut().catch(error=>setNotice(authErrorMessage(error,state.language==='ar'))).finally(()=>setBusy(false))}}/>
+   <Button secondary title={t('تسجيل الخروج من هذا الجهاز','Sign out on this device')} disabled={busy} onPress={()=>{setBusy(true);void auth.signOut().catch(error=>setNotice(authErrorMessage(error,state.language))).finally(()=>setBusy(false))}}/>
   </>:<Panel>
    {!auth.recovery&&<View style={{flexDirection:state.language==='ar'?'row-reverse':'row',gap:10}}><View style={{flex:1}}><Button secondary={mode!=='login'} title={t('تسجيل الدخول','Sign in')} onPress={()=>{setMode('login');setNotice('')}}/></View><View style={{flex:1}}><Button secondary={mode!=='signup'} title={t('حساب جديد','New account')} onPress={()=>{setMode('signup');setNotice('')}}/></View></View>}
    {mode==='reset'&&!auth.recovery&&<Label>{t('استعادة كلمة المرور','Reset password')}</Label>}
    {!auth.recovery&&<Field label={t('البريد الإلكتروني','Email')} value={email} onChangeText={setEmail} keyboardType="email-address" autoComplete="email" autoCapitalize="none" autoCorrect={false} maxLength={200}/>}
    {(mode!=='reset'||auth.recovery)&&<><Field label={t('كلمة المرور','Password')} value={password} onChangeText={setPassword} secureTextEntry={!visible} autoComplete={mode==='signup'||auth.recovery?'new-password':'current-password'} maxLength={128} onSubmitEditing={()=>void submit()} returnKeyType="go"/><Pressable accessibilityRole="button" onPress={()=>setVisible(!visible)}><Label muted>{visible?t('إخفاء كلمة المرور','Hide password'):t('إظهار كلمة المرور','Show password')}</Label></Pressable></>}
    {(mode==='signup'||auth.recovery)&&<Field label={t('تأكيد كلمة المرور','Repeat password')} value={repeat} onChangeText={setRepeat} secureTextEntry={!visible} autoComplete="new-password" maxLength={128}/>}
-   <Button icon="log-in-outline" title={busy?t('جارٍ المتابعة…','Please wait…'):auth.recovery?t('حفظ كلمة المرور','Save password'):mode==='signup'?t('إنشاء الحساب','Create account'):mode==='reset'?t('إرسال رابط الاستعادة','Send reset link'):t('تسجيل الدخول','Sign in')} disabled={busy||(!auth.recovery&&!email.includes('@'))||((mode!=='reset'||auth.recovery)&&password.length<(mode==='login'&&!auth.recovery?1:8))} onPress={()=>void submit()}/>
+   <Button icon="log-in-outline" title={busy?t('جارٍ المتابعة…','Just a moment…'):auth.recovery?t('حفظ كلمة المرور','Save password'):mode==='signup'?t('إنشاء الحساب','Create account'):mode==='reset'?t('إرسال رابط الاستعادة','Send reset link'):t('تسجيل الدخول','Sign in')} disabled={busy||(!auth.recovery&&!email.includes('@'))||((mode!=='reset'||auth.recovery)&&password.length<(mode==='login'&&!auth.recovery?1:8))} onPress={()=>void submit()}/>
    {mode==='login'&&!auth.recovery&&<Button secondary title={t('نسيت كلمة المرور؟','Forgot password?')} onPress={()=>{setMode('reset');setNotice('')}}/>}
    <Label muted>{t('تبقى الجلسة محفوظة على هذا الجهاز حتى تسجّل الخروج. لا نحفظ كلمة المرور.','You stay signed in on this device until you sign out. Your password is not saved.')}</Label>
   </Panel>}

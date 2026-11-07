@@ -33,11 +33,11 @@ export default function Review(){
   let active=true;
   void pickupPosition(siteCurrentPosition,{controller,reuseNative:locationAttempt===0}).then(point=>{
    if(!active)return;
-   setDraft(previous=>({...previous,pickup:state.language==='ar'?'موقعي الحالي':'My current location',pickupPoint:point}));
+   setDraft(previous=>({...previous,pickup:t('موقعي الحالي','My current location'),pickupPoint:point}));
    setPickupReady(true);
-  }).catch(error=>{if(active)setError(pickupPositionMessage(error,state.language==='ar'))});
+  }).catch(error=>{if(active)setError(pickupPositionMessage(error,state.language))});
   return()=>{active=false;controller.abort()};
- },[setDraft,state.language,locationAttempt,manualPickup]);
+ },[setDraft,state.language,locationAttempt,manualPickup,t]);
  async function openRide(rideId:string){
   let shared=false;
   if(shareOnRequest&&foreground&&sharing.capability){
@@ -79,10 +79,10 @@ export default function Review(){
    if(submitted&&cloudMutationUncertain(e))return;
    // A previous attempt with this same ID can still be awaiting reconciliation.
    if(submitted&&!recovery.id)recovery.clear();
-   if(e instanceof PositionError){setError(pickupPositionMessage(e,state.language==='ar'));return}
+   if(e instanceof PositionError){setError(pickupPositionMessage(e,state.language));return}
    const kind=(e as {kind?:string})?.kind;
    if(kind==='YQ001'){setQuoted(null);setQuoteAttempt(value=>value+1);setError(t('انتهت صلاحية التقدير. نحدّث الأجرة؛ راجعها ثم أكّد الطلب.','The estimate expired. We are updating the fare. Check it, then confirm again.'));return}
-   setError(kind==='too_many_requests'||kind==='23505'?t('قد يكون لديك طلب نشط. افتح رحلاتي للتحقق.','You may already have an active request. Open My rides to check.'):authErrorMessage(e,state.language==='ar'));
+   setError(kind==='too_many_requests'||kind==='23505'?t('قد يكون لديك طلب نشط. افتح رحلاتي للتحقق.','You may already have an active request. Open My rides to check.'):authErrorMessage(e,state.language));
   }finally{setBusy(false)}
  }
  const readyToReview=!!(manualPickup||pickupReady)&&!invalid;

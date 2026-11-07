@@ -37,14 +37,14 @@ export default function MapContent({point,destinationPoint,taxiPoint,passengerPo
    const start=current.current??entry.current.initialCenter??{latitude:33.5138,longitude:36.2765};
    const instance=new maps.Map(host.current,{center:position(start),zoom:profile.current.lean?13:14,mapId:process.env.EXPO_PUBLIC_GOOGLE_MAPS_WEB_MAP_ID||'DEMO_MAP_ID',renderingType:'RASTER',mapTypeId:'roadmap',disableDefaultUI:true,zoomControl:true,gestureHandling:readOnly||entry.current.compact?'cooperative':'greedy',clickableIcons:false,tilt:0,heading:0,colorScheme:profile.current.dark?'DARK':'LIGHT'});
    map.current=instance;
-   const pin=new maps.marker.AdvancedMarkerElement({map:instance,gmpDraggable:!readOnly,title:state.language==='ar'?'أ: الانطلاق':'A: pickup'});marker.current=pin;
+   const pin=new maps.marker.AdvancedMarkerElement({map:instance,gmpDraggable:!readOnly,title:t('أ: الانطلاق','A: pickup')});marker.current=pin;
    const select=(event:{latLng?:{lat:()=>number;lng:()=>number}|null})=>{if(!event.latLng||readOnly)return;const next={latitude:event.latLng.lat(),longitude:event.latLng.lng()};if(isCoordinate(next))choose.current(next)};
    if(!readOnly){instance.addListener('click',select);pin.addListener('dragend',select)}
    line.current=new maps.Polyline({map:instance,strokeColor:'#2688e8',strokeWeight:5,clickable:false});
    clearTimeout(pending);failed.current=false;setError(false);setReady(true);
   }).catch(()=>{if(!disposed){clearTimeout(pending);failed.current=true;setError(true)}});
   return()=>{disposed=true;clearTimeout(pending);removeAuthListener();window.removeEventListener('online',online);if(marker.current){api.current?.event.clearInstanceListeners(marker.current);marker.current.map=null}if(endMarker.current)endMarker.current.map=null;endMarker.current=null;if(userMarker.current)userMarker.current.map=null;userMarker.current=null;if(taxiMarker.current)taxiMarker.current.map=null;taxiMarker.current=null;line.current?.setMap(null);if(map.current)api.current?.event.clearInstanceListeners(map.current);map.current=null;marker.current=null;line.current=null;container.replaceChildren()};
- },[key,state.language,readOnly,attempt,loadTimeoutMs]);
+ },[key,state.language,readOnly,attempt,loadTimeoutMs,t]);
  useEffect(()=>{
   const instance=map.current,pin=marker.current;if(!ready||!instance||!pin)return;
   pin.position=point?position(point):undefined;
@@ -59,7 +59,7 @@ export default function MapContent({point,destinationPoint,taxiPoint,passengerPo
   if(destination){
    if(marker.current)marker.current.content=endpointBadge(hasDestination||state.language!=='ar'?'A':'أ','#102a43');
    if(!endMarker.current)endMarker.current=new api.current.marker.AdvancedMarkerElement({
-    map:map.current,content:endpointBadge(hasDestination||state.language!=='ar'?'B':'ب','#006da5'),title:state.language==='ar'?'B: الوجهة':'B: destination',
+    map:map.current,content:endpointBadge(hasDestination||state.language!=='ar'?'B':'ب','#006da5'),title:t('B: الوجهة','B: destination'),
    });
    endMarker.current.position=destination;
   }else if(endMarker.current){endMarker.current.map=null;endMarker.current=null}
@@ -72,7 +72,7 @@ export default function MapContent({point,destinationPoint,taxiPoint,passengerPo
    if(taxiMarker.current?.position)bounds.extend(taxiMarker.current.position);
    map.current.fitBounds(bounds,38);
   }
- },[route,ready,state.language,destinationLat,destinationLng,pickupLat,pickupLng,hasCameraTarget]);
+ },[route,ready,state.language,destinationLat,destinationLng,pickupLat,pickupLng,hasCameraTarget,t]);
  useEffect(()=>{
   if(!ready||!map.current||!api.current||!cameraTarget)return;
   const center=position(cameraTarget.point);
@@ -80,9 +80,9 @@ export default function MapContent({point,destinationPoint,taxiPoint,passengerPo
   if(cameraTarget.isLocation===false)return;
   if(!userMarker.current){
    const dot=document.createElement('div');Object.assign(dot.style,{width:'18px',height:'18px',background:'#2688e8',border:'3px solid white',borderRadius:'50%',boxShadow:'0 0 0 8px #2688e822'});
-   userMarker.current=new api.current.marker.AdvancedMarkerElement({map:map.current,position:center,content:dot,title:state.language==='ar'?'موقعي الحالي':'My current location'});
+   userMarker.current=new api.current.marker.AdvancedMarkerElement({map:map.current,position:center,content:dot,title:t('موقعي الحالي','My current location')});
   }else userMarker.current.position=center;
- },[cameraTarget,ready,state.language,route]);
+ },[cameraTarget,ready,state.language,route,t]);
  useEffect(()=>{
   const instance=map.current,maps=api.current;
   if(!ready||!instance||!maps)return;
@@ -92,7 +92,7 @@ export default function MapContent({point,destinationPoint,taxiPoint,passengerPo
   if(!taxiMarker.current){
    const icon=document.createElement('div');icon.textContent=passengerPoint?'●':'🚕';
    Object.assign(icon.style,{display:'grid',placeItems:'center',width:'34px',height:'34px',background:passengerPoint?'#15803d':'#102a43',color:'white',border:'2px solid white',borderRadius:'50%',fontSize:'21px'});
-   taxiMarker.current=new maps.marker.AdvancedMarkerElement({map:instance,position:taxi,content:icon,title:passengerPoint?(state.language==='ar'?'موقع الزبون':'Customer location'):(state.language==='ar'?'موقع التاكسي':'Taxi location')});
+   taxiMarker.current=new maps.marker.AdvancedMarkerElement({map:instance,position:taxi,content:icon,title:passengerPoint?(t('موقع الزبون','Customer location')):(t('موقع التاكسي','Taxi location'))});
   }else taxiMarker.current.position=taxi;
   if(hasCameraTarget)return;
   if(passengerPoint){
@@ -111,7 +111,7 @@ export default function MapContent({point,destinationPoint,taxiPoint,passengerPo
     instance.fitBounds(overview,42);
    }
   }
- },[point,taxiPoint,passengerPoint,hasCameraTarget,ready,state.language,destinationLat,destinationLng,route]);
+ },[point,taxiPoint,passengerPoint,hasCameraTarget,ready,state.language,destinationLat,destinationLng,route,t]);
  useEffect(()=>{map.current?.setOptions({tilt:0,heading:0,headingInteractionEnabled:!lean,tiltInteractionEnabled:false})},[lean,ready]);
  return <View style={compact?{flex:1,minHeight:minMapHeight}:{gap:10}}>
   {React.createElement('div',{ref:host,role:'region','aria-label':readOnly&&destinationPoint?t('خريطة الرحلة','Ride map'):t('خريطة Google لاختيار الموقع','Google map to choose a location'),style:{height:compact?'100%':340,minHeight:compact?minMapHeight:340,width:'100%',borderRadius:compact?0:16,overflow:'hidden',background:colors.surface}})}

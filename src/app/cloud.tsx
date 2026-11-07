@@ -80,7 +80,7 @@ export default function Rides(){
    if(history.status==='rejected')throw history.reason;
   });
  },[userId,driverMode,queue]);
- useEffect(()=>{setRides([]);setOffers([]);setDriver(null);setInboxProblem(false);setLoading(true);if(!userId){setLoading(false);return}let active=true;void refresh().catch(()=>{if(active){setNotice(state.language==='ar'?'تعذر تحميل الرحلات. تحقق من الاتصال وأعد المحاولة.':'Could not load rides. Check internet and retry.');setLoading(false)}});return()=>{active=false}},[refresh,userId,state.language]);
+ useEffect(()=>{setRides([]);setOffers([]);setDriver(null);setInboxProblem(false);setLoading(true);if(!userId){setLoading(false);return}let active=true;void refresh().catch(()=>{if(active){setNotice(t('تعذر تحميل الرحلات. تحقق من الاتصال وأعد المحاولة.','Could not load rides. Check internet and retry.'));setLoading(false)}});return()=>{active=false}},[refresh,userId,state.language,t]);
  const currentDriverRide=driverMode?rides.find(r=>r.driver_id===userId&&live(r)):undefined;
  const gps=useCurrentPosition(driverMode&&Boolean(currentDriverRide||driver?.approved&&driver.online)&&state.preferences.permissionsIntroSeen);
  useEffect(()=>{
@@ -162,10 +162,10 @@ export default function Rides(){
  const activeRide=rides.some(live);const shouldPoll=foreground&&connection!=='offline'&&(activeRide||driverMode&&(!driver||driver.approved&&driver.online));
  useEffect(()=>{
   if(!userId||!shouldPoll)return;
-  const tick=()=>{if(AppState.currentState!=='background')void refresh().catch(()=>{if(alive.current)setNotice(state.language==='ar'?'تعذر تحديث الطلبات. تحقق من الاتصال واضغط تحديث الرحلات.':'Could not update requests. Check internet and refresh.')})};
+  const tick=()=>{if(AppState.currentState!=='background')void refresh().catch(()=>{if(alive.current)setNotice(t('تعذر تحديث الطلبات. تحقق من الاتصال واضغط تحديث الرحلات.','Could not update requests. Check internet and refresh.'))})};
   const interval=driverMode?(state.preferences.dataSaver?30000:15000):(state.preferences.dataSaver?6000:4000);
   const timer=setInterval(tick,interval);return()=>clearInterval(timer);
- },[refresh,shouldPoll,userId,driverMode,state.preferences.dataSaver,state.language]);
+ },[refresh,shouldPoll,userId,driverMode,state.preferences.dataSaver,state.language,t]);
  useEffect(()=>{
   if(!userId||!driverMode||!driver?.approved||!driver.online||!foreground||connection==='offline'||currentDriverRide?.id)return;
   let active=true,running=false;const owner=userId;
@@ -180,8 +180,8 @@ export default function Rides(){
   const timer=setInterval(()=>void tick(),state.preferences.dataSaver?4000:3000);
   return()=>{active=false;clearInterval(timer)};
  },[userId,driverMode,driver?.approved,driver?.online,foreground,connection,currentDriverRide?.id,state.preferences.dataSaver]);
- useEffect(()=>{if(!userId)return;const resume=()=>{if(document.visibilityState!=='hidden')void refresh().catch(()=>{if(alive.current)setNotice(state.language==='ar'?'تعذر تحديث الطلبات. تحقق من الاتصال واضغط تحديث الرحلات.':'Could not update requests. Check internet and refresh.')})};const native=(event:Event)=>{if((event as CustomEvent).detail?.active===true)resume()};window.addEventListener('online',resume);window.addEventListener('focus',resume);window.addEventListener('pageshow',resume);document.addEventListener('visibilitychange',resume);window.addEventListener('yalla:native-visibility',native);return()=>{window.removeEventListener('online',resume);window.removeEventListener('focus',resume);window.removeEventListener('pageshow',resume);document.removeEventListener('visibilitychange',resume);window.removeEventListener('yalla:native-visibility',native)}},[userId,refresh,state.language]);
- async function run(work:(token:string)=>Promise<void>,success?:string){if(busy)return;setBusy(true);setNotice('');try{await work(await cloudCurrentToken());await refresh();if(success)setNotice(success)}catch(e){const kind=(e as {kind?:string})?.kind??(e as Error)?.message;setNotice(kind==='driver_not_approved'?t('حساب السائق بانتظار الاعتماد.','Driver account is waiting for approval.'):authErrorMessage(e,state.language==='ar'))}finally{setBusy(false)}}
+ useEffect(()=>{if(!userId)return;const resume=()=>{if(document.visibilityState!=='hidden')void refresh().catch(()=>{if(alive.current)setNotice(t('تعذر تحديث الطلبات. تحقق من الاتصال واضغط تحديث الرحلات.','Could not update requests. Check internet and refresh.'))})};const native=(event:Event)=>{if((event as CustomEvent).detail?.active===true)resume()};window.addEventListener('online',resume);window.addEventListener('focus',resume);window.addEventListener('pageshow',resume);document.addEventListener('visibilitychange',resume);window.addEventListener('yalla:native-visibility',native);return()=>{window.removeEventListener('online',resume);window.removeEventListener('focus',resume);window.removeEventListener('pageshow',resume);document.removeEventListener('visibilitychange',resume);window.removeEventListener('yalla:native-visibility',native)}},[userId,refresh,state.language,t]);
+ async function run(work:(token:string)=>Promise<void>,success?:string){if(busy)return;setBusy(true);setNotice('');try{await work(await cloudCurrentToken());await refresh();if(success)setNotice(success)}catch(e){const kind=(e as {kind?:string})?.kind??(e as Error)?.message;setNotice(kind==='driver_not_approved'?t('حساب السائق بانتظار الاعتماد.','Driver account is waiting for approval.'):authErrorMessage(e,state.language))}finally{setBusy(false)}}
  async function accept(offer:RidePreview){
   if(busy||!userId||currentDriverRide||recovery.checking||recovery.id&&recovery.id!==offer.ride_id)return;
   if((offer.expiresOnDevice??0)<=performance.now()){
@@ -206,7 +206,7 @@ export default function Rides(){
    if(identity.current!==userId||!mode.current)return;
    if(submitted&&cloudMutationUncertain(error))return;
    if(submitted&&!recovery.id)recovery.clear();
-   setNotice(authErrorMessage(error,state.language==='ar'));
+   setNotice(authErrorMessage(error,state.language));
   }finally{setBusy(false)}
  }
  const status=(value:string)=>({requested:t('بانتظار السائق','Waiting for driver'),accepted:t('السائق في الطريق','Driver is on the way'),arrived:t('وصل السائق','Driver arrived'),riding:t('الرحلة جارية','Ride in progress'),completed:t('مكتملة','Completed'),cancelled:t('ملغاة','Cancelled')} as Record<string,string>)[value]??value;
@@ -352,7 +352,7 @@ export default function Rides(){
    </>}
 
    {historyMode&&<>
-    <Label muted>{new Date(ride.created_at).toLocaleString(state.language==='ar'?'ar':'en')}</Label>
+    <Label muted>{new Date(ride.created_at).toLocaleString(state.language)}</Label>
     <Button secondary icon="repeat-outline" title={t('استخدام الوجهة مرة أخرى','Use this destination again')} onPress={()=>reuseDestination(ride)} disabled={!!currentPassengerRide}/>
    </>}
    {live(ride)&&<>
@@ -468,7 +468,7 @@ export default function Rides(){
   </>:<>
    {passengerRides.map(renderRide)}
    {loading&&<Label muted>{t('جارٍ تحميل الرحلات…','Loading rides…')}</Label>}
-   {!loading&&!passengerRides.length&&<Panel><Icon name="time-outline" size={36}/><Label>{historyMode?t('لا توجد رحلات سابقة بعد','No past rides yet'):t('ما في رحلة حالية','No current ride')}</Label></Panel>}
+   {!loading&&!passengerRides.length&&<Panel><Icon name="time-outline" size={36}/><Label>{historyMode?t('لا توجد رحلات سابقة بعد','You haven’t taken any rides yet'):t('ما في رحلة حالية','No current ride')}</Label></Panel>}
    <Button secondary icon="refresh-outline" title={t('تحديث الرحلات','Refresh rides')} disabled={busy||loading} onPress={()=>void run(async()=>{})}/>
    {!currentPassengerRide&&<Button icon="car-outline" title={t('حجز رحلة جديدة','Book a new ride')} onPress={()=>router.replace('/')}/>}
    {historyMode&&currentPassengerRide&&<Button title={t('متابعة الرحلة الحالية','Continue current ride')} onPress={()=>router.replace('/cloud')}/>}

@@ -37,7 +37,7 @@ export function loadGoogleMaps(key:string|null,language:string):Promise<GoogleMa
   const timer=setTimeout(fail,20000);
   target.__yallaGoogleMapsReady=()=>{if(!target.google?.maps?.marker){fail();return}settled=true;clearTimeout(timer);delete target.__yallaGoogleMapsReady;resolve(target.google.maps)};
   target.gm_authFailure=()=>{for(const listener of authListeners)listener();fail()};
-  const params=new URLSearchParams({key,callback:'__yallaGoogleMapsReady',loading:'async',libraries:'marker',v:'quarterly',language:language==='ar'?'ar':'en'});
+  const params=new URLSearchParams({key,callback:'__yallaGoogleMapsReady',loading:'async',libraries:'marker',v:'quarterly',language:['ar','de','en'].includes(language)?language:'en'});
   script.src='https://maps.googleapis.com/maps/api/js?'+params;script.async=true;script.onerror=fail;document.head.appendChild(script);
  });
  return loading;

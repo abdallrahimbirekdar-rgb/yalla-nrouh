@@ -211,7 +211,7 @@ export function CustomerTracking({rideId,pickup,proposedPickup,foreground,compac
   ?age<30?t('موقع الزبون الآن','Customer location now'):t('آخر موقع للزبون','Last customer location')
   :proposedPickup?t('نقطة الالتقاء الجديدة','New meeting point'):t('نقطة الالتقاء الأصلية','Original meeting point');
  const status=passenger
-  ?age<30?t(`تحديث قبل ${age} ث`,`Updated ${age}s ago`):t('موقع الزبون قديم','Customer location is stale')
+  ?age<30?t(`تحديث قبل ${age} ث`,`Updated ${age}s ago`,`Vor ${age} Sek. aktualisiert`):t('موقع الزبون قديم','Customer location is stale')
   :t('موقع الزبون غير متاح الآن','Customer location unavailable');
  if(duringTrip&&!passenger)return null;
  const switchTitle=showPickup?t('عرض الزبون','Show customer'):t('عرض نقطة الالتقاء','Show meeting point');
@@ -221,7 +221,7 @@ export function CustomerTracking({rideId,pickup,proposedPickup,foreground,compac
    <MapCanvas compact readOnly minMapHeight={mapHeight} point={duringTrip?null:meetingPoint} passengerPoint={passenger} cameraTarget={cameraTarget} onChange={()=>{}}/>
   </View>
   <View style={{paddingHorizontal:10,paddingVertical:5}}>
-   <Label muted>{status}{distance!==null&&t(` · ${distance} م عن نقطة الالتقاء الأصلية`,` · ${distance} m from original meeting point`)}</Label>
+   <Label muted>{status}{distance!==null&&t(` · ${distance} م عن نقطة الالتقاء الأصلية`,` · ${distance} m vom ursprünglichen Treffpunkt`)}</Label>
    {!duringTrip&&passenger&&age<30&&away&&<Label>{t('الزبون ابتعد عن نقطة الالتقاء.','The customer moved away from the meeting point.')}</Label>}
    <View style={{flexDirection:'row',flexWrap:'wrap',justifyContent:'space-between',columnGap:8}}>
     <Pressable accessibilityRole="button" onPress={()=>setCameraRevision(value=>value+1)} style={{minHeight:44,flexDirection:'row',alignItems:'center',gap:5}}>

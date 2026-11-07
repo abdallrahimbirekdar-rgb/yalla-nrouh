@@ -66,13 +66,13 @@ function LocationPicker({pickup,focus,savedView,edit,fromReview}:{pickup:boolean
     autocomplete.search(query,state.language,near.current),
     new Promise<never>((_,reject)=>{deadline=setTimeout(()=>reject(Error('timeout')),10000)})
    ]).then(items=>{
-    if(active&&id===task.current){setSuggestions(items);if(!items.length)setSuggestionError(state.language==='ar'?'لا توجد اقتراحات. جرّب إضافة اسم الحي أو المدينة.':'No suggestions. Try adding a district or city.')}
+    if(active&&id===task.current){setSuggestions(items);if(!items.length)setSuggestionError(t('لا توجد اقتراحات. جرّب إضافة اسم الحي أو المدينة.','No suggestions. Try adding a district or city.'))}
    }).catch(()=>{
-    if(active&&id===task.current)setSuggestionError(state.language==='ar'?'تعذر تحميل الاقتراحات. جرّب زر البحث أو اختر على الخريطة.':'Suggestions could not load. Try Search or choose on the map.')
+    if(active&&id===task.current)setSuggestionError(t('تعذر تحميل الاقتراحات. جرّب زر البحث أو اختر على الخريطة.','Suggestions could not load. Try Search or choose on the map.'))
    }).finally(()=>{clearTimeout(deadline);if(active&&id===task.current)setSuggesting(false)})
   },250);
   return()=>{active=false;clearTimeout(timer);clearTimeout(deadline)}
- },[query,state.language,autocomplete]);
+ },[query,state.language,autocomplete,t]);
  const loadSaved=useCallback(async()=>{
   if(!token)return;
   setLoaded(false);
@@ -81,14 +81,14 @@ function LocationPicker({pickup,focus,savedView,edit,fromReview}:{pickup:boolean
    if(!alive.current||accountRef.current!==account)return;
    setSaved(list);setLoaded(true);
   }catch{
-   if(alive.current&&accountRef.current===account)setMessage(state.language==='ar'?'تعذر تحميل العناوين المحفوظة. أعد المحاولة.':'Could not load saved addresses. Try again.');
+   if(alive.current&&accountRef.current===account)setMessage(t('تعذر تحميل العناوين المحفوظة. أعد المحاولة.','Could not load saved addresses. Try again.'));
   }
- },[token,account,state.language]);
+ },[token,account,t]);
  useEffect(()=>{void loadSaved()},[loadSaved]);
  useEffect(()=>{
   if(!pickup||pickupMode!=='current'||!gps.camera?.point||selectionCamera)return;
-  setPoint(gps.camera.point);setLabel(state.language==='ar'?'موقعي الحالي':'My current location');
- },[pickup,pickupMode,gps.camera,selectionCamera,state.language]);
+  setPoint(gps.camera.point);setLabel(t('موقعي الحالي','My current location'));
+ },[pickup,pickupMode,gps.camera,selectionCamera,state.language,t]);
  const backTo=fromReview?'/review' as const:pickup?{pathname:'/location' as const,params:{target:'destination'}}:editing?{pathname:'/location' as const,params:{view:'saved'}}:'/' as const;
  function navigateToEditor(id:string){
   if(!confirming&&!saving)router.push({pathname:'/location',params:{view:'saved',edit:id}});
@@ -124,7 +124,7 @@ function LocationPicker({pickup,focus,savedView,edit,fromReview}:{pickup:boolean
     setSelectionCamera({point:next,revision:Date.now()});
    }
   }catch(error){
-   if(alive.current&&positionRequest.current===controller)setMessage(pickupPositionMessage(error,state.language==='ar'));
+   if(alive.current&&positionRequest.current===controller)setMessage(pickupPositionMessage(error,state.language));
   }finally{
    if(positionRequest.current===controller){positionRequest.current=null;if(alive.current)setLocating(false)}
   }
@@ -139,7 +139,7 @@ function LocationPicker({pickup,focus,savedView,edit,fromReview}:{pickup:boolean
   try{
    const places=await Promise.race([searchGooglePlaces(query,state.language,near.current),new Promise<never>((_,reject)=>{timer=setTimeout(()=>reject(Error('timeout')),15000)})]);
    if(alive.current&&id===task.current){setResults(places);if(!places.length)setMessage(t('لا توجد نتائج. جرّب اسمًا أوضح أو حدد نقطة على الخريطة.','No results. Try another name or choose on the map.'))}
-  }catch(error){console.warn('[yalla:places]',error instanceof Error?error.message:'places_unavailable');if(alive.current&&id===task.current)setMessage(t('تعذر البحث في Google حاليًا. أعد المحاولة أو اختر نقطة على الخريطة.','Google search failed. Try again or choose a point on the map.'))}
+  }catch(error){console.warn('[yalla:places]',error instanceof Error?error.message:'places_unavailable');if(alive.current&&id===task.current)setMessage(t('تعذر البحث في Google حاليًا. أعد المحاولة أو اختر نقطة على الخريطة.','Search is unavailable. Try again or pick a point on the map.'))}
   finally{if(timer)clearTimeout(timer);if(alive.current&&id===task.current)setBusy(false)}
  }
  async function confirm(){
@@ -173,7 +173,7 @@ function LocationPicker({pickup,focus,savedView,edit,fromReview}:{pickup:boolean
   }catch(error){
    if(!alive.current)return;
    if(pickup&&pickupMode==='current')setPoint(null);
-   setMessage(pickupPositionMessage(error,state.language==='ar'));
+   setMessage(pickupPositionMessage(error,state.language));
   }
   finally{if(alive.current)setConfirming(false)}
  }
@@ -269,7 +269,7 @@ function LocationPicker({pickup,focus,savedView,edit,fromReview}:{pickup:boolean
   </Panel></View>
   {!typing&&<>
   {pickup&&(pickupMode==='manual'||!point||locating)&&<Button secondary icon="locate" title={locating?t('جارٍ تحديد موقعك…','Finding your location…'):t('استخدام موقعي الحالي','Use my current location')} onPress={()=>void selectCurrent()} disabled={confirming||busy||locating}/>}
-  {pickup&&!message&&!locating&&!point&&gps.failure&&<Label muted>{pickupPositionMessage(new PositionError(gps.failure),state.language==='ar')}</Label>}
+  {pickup&&!message&&!locating&&!point&&gps.failure&&<Label muted>{pickupPositionMessage(new PositionError(gps.failure),state.language)}</Label>}
   {oldPlace&&!point&&!typing&&<Label muted>{t('العنوان المحفوظ حاليًا: ','Current saved address: ')}{oldPlace.label}</Label>}
   {point?<Panel>
    {editing?<Field label={t('اسم العنوان','Address name')} value={label} onChangeText={setLabel} maxLength={200} editable={!confirming&&!busy&&!saving}/>:<>
