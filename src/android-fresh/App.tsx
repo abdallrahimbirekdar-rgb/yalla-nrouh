@@ -9,7 +9,7 @@ import {localAlertsGranted,readLocalAlerts,requestLocalAlerts,notifyLocal} from 
 import Storage from 'expo-sqlite/kv-store';
 import {setupPermission} from './permission-setup';
 import {acceptableFix,awaitFreshFix,deadlineOr,GpsTaskPool} from './gps';
-import {SITE,bootstrapScript,diagnosticScript,eventScript,autoFixScript,externalTarget,positionScript,readWebMessage,trustedSite,trustedWebMessage,
+import {SITE,websiteEntryUrl,bootstrapScript,diagnosticScript,eventScript,autoFixScript,externalTarget,positionScript,readWebMessage,trustedSite,trustedWebMessage,
  type WebMessage,type PositionResponse} from './bridge';
 
 // Fresh native app: it owns ONLY Android foreground location and the live website.
@@ -85,6 +85,7 @@ const nativeDriverSpeech=typeof screenModule?.speakDirection==='function';
 const nativeVoiceSetup=typeof screenModule?.openVoiceSetup==='function';
 const stopDriverSpeech=()=>{if(nativeDriverSpeech)void screenModule?.stopDirection().catch(()=>{});};
 const btn={paddingVertical:13,paddingHorizontal:18,backgroundColor:'#d67749',borderRadius:12} as const;
+const websiteEntryKey='android-website-entry-v1';
 const websiteVersion=(v:unknown):string|null=>typeof v==='string'&&/^[a-f0-9]{40}$/i.test(v)?v:null;
 export default function FreshAndroid(){
  const web=useRef<WebView>(null);
@@ -96,7 +97,12 @@ export default function FreshAndroid(){
   const driverStream=useRef<DriverStream|null>(null),screenAwake=useRef(false);
  const autoStarted=useRef(false),locationRequestedByPage=useRef(false);
  const safeToReload=useRef(false),websiteRevision=useRef<string|null>(null);
- const [uri,setUri]=useState(()=>SITE+'?app=android&launch='+Date.now());
+ const [uri,setUri]=useState(()=>{
+  try{return websiteEntryUrl(Storage.getItemSync(websiteEntryKey))}
+  catch{return websiteEntryUrl()}
+ });
+ const pendingEntry=useRef<string|null>(null),bootStarted=useRef(false);
+ const updateCheck=useRef<AbortController|null>(null);
  const [loading,setLoading]=useState(true),[failed,setFailed]=useState(false),[newWeb,setNewWeb]=useState(false);
  const [webSession,setWebSession]=useState(0),[rendererLost,setRendererLost]=useState(false);
  const pageReady=useRef(false),wasBackground=useRef(false),resumeIndex=useRef(0),pendingResume=useRef<string|null>(null);
@@ -119,7 +125,11 @@ export default function FreshAndroid(){
   clearReadyTimer();clearResumeTimer();pendingResume.current=null;
   pageReady.current=false;safeToReload.current=false;canGoBack.current=false;documentUrl.current='';
   setNotice('');setNewWeb(false);setFailed(false);setLoading(true);setRendererLost(false);
-  setUri(SITE+'?app=android&launch='+Date.now());
+  websiteRevision.current=null;
+  updateCheck.current?.abort();
+  updateCheck.current=null;
+  pendingEntry.current=String(Date.now());
+  setUri(websiteEntryUrl(pendingEntry.current));
   setWebSession(value=>value+1);
  },[clearReadyTimer,clearResumeTimer]);
  const inject=useCallback((script:string)=>{
@@ -154,9 +164,9 @@ export default function FreshAndroid(){
    driverStream.current=null;
    setScreenAwake(false);
   },[setScreenAwake]);
-  useEffect(()=>{const requests=runs.current;active.current=true;void boot();return()=>{
-  active.current=false;clearReadyTimer();clearResumeTimer();stopDriverSpeech();stopDriverStream();for(const task of requests.values())task.controller.abort();requests.clear();
- }},[boot,stopDriverStream,clearReadyTimer,clearResumeTimer]);
+  useEffect(()=>{const requests=runs.current;active.current=true;return()=>{
+  active.current=false;updateCheck.current?.abort();updateCheck.current=null;clearReadyTimer();clearResumeTimer();stopDriverSpeech();stopDriverStream();for(const task of requests.values())task.controller.abort();requests.clear();
+ }},[stopDriverStream,clearReadyTimer,clearResumeTimer]);
  const refresh=useCallback(()=>{
   if(!safeToReload.current){
    setNotice(text('أكمل تعديلك أو رحلتك أولًا ثم حدّث من الصفحة الرئيسية.','Finish your edit or ride, then refresh at home.'));
@@ -165,15 +175,17 @@ export default function FreshAndroid(){
   reopenWebsite();
  },[reopenWebsite,text]); // no automatic reset of drafts or website storage
  const checkWebUpdate=useCallback(async()=>{
-  if(!websiteRevision.current)return;
+  const revision=websiteRevision.current;
+  if(!revision||updateCheck.current)return;
   const controller=new AbortController();
+  updateCheck.current=controller;
   const timer=setTimeout(()=>controller.abort(),7000);
   try{
    const response=await fetch(SITE+'version.json?check='+Date.now(),{cache:'no-store',signal:controller.signal});
    if(!response.ok)return;
    const next=websiteVersion((await response.json()).version);
-   if(next&&next!==websiteRevision.current&&active.current)setNewWeb(true);
-  }catch{}finally{clearTimeout(timer)}
+   if(next&&revision===websiteRevision.current&&active.current&&!controller.signal.aborted)setNewWeb(next!==revision);
+  }catch{}finally{clearTimeout(timer);if(updateCheck.current===controller)updateCheck.current=null}
  },[]);
  useEffect(()=>{
   const handle=BackHandler.addEventListener('hardwareBackPress',()=>{
@@ -308,6 +320,7 @@ export default function FreshAndroid(){
     return;
    }
    if(message.type==='status'){
+    const firstStatus=!pageReady.current;
     pageReady.current=true;clearReadyTimer();pendingResume.current=null;clearResumeTimer();
     safeToReload.current=message.safeToReload;
    canGoBack.current=message.canGoBack;
@@ -318,8 +331,19 @@ export default function FreshAndroid(){
    if(message.language)setLanguage(message.language);
    if(message.theme)setColorMode(message.theme);
    setLoading(false);setFailed(false);
+   if(firstStatus){
+    if(pendingEntry.current){
+     void Storage.setItem(websiteEntryKey,pendingEntry.current).catch(()=>{});
+     pendingEntry.current=null;
+    }
+    void checkWebUpdate();
+   }
+   if(!bootStarted.current){bootStarted.current=true;void boot()}
   }else if(message.type==='bootstrap'){
-   websiteRevision.current=websiteVersion(message.version);
+   const revision=websiteVersion(message.version);
+   const firstRevision=revision!==websiteRevision.current;
+   websiteRevision.current=revision;
+   if(firstRevision&&pageReady.current)void checkWebUpdate();
    void engine.permission(false).then(permission=>{
     inject(bootstrapScript(message.id,permission.granted,nativeDriverSpeech,nativeVoiceSetup,nativeOsmAndPassenger));
     void syncPermission('ready');
@@ -398,7 +422,7 @@ export default function FreshAndroid(){
   else if(message.type==='back-default'){
    if(canGoBack.current)web.current?.goBack();else BackHandler.exitApp();
   }
- },[engine,inject,language,locate,refresh,syncPermission,startDriverStream,stopDriverStream,text,clearReadyTimer,clearResumeTimer]);
+ },[engine,inject,language,locate,refresh,syncPermission,startDriverStream,stopDriverStream,text,clearReadyTimer,clearResumeTimer,checkWebUpdate,boot]);
  const openExternal=(url:string)=>{
   if(externalTarget(url))void Linking.openURL(url).catch(()=>setNotice(text('تعذر فتح الرابط.','Could not open the link.')));
  };
@@ -423,9 +447,10 @@ export default function FreshAndroid(){
    onOpenWindow={event=>openExternal(event.nativeEvent.targetUrl)}
    onMessage={handleMessage}
    onNavigationStateChange={nav=>{canGoBack.current=nav.canGoBack}}
-   onLoadStart={event=>{documentUrl.current=event.nativeEvent.url;stopDriverSpeech();stopDriverStream();autoStarted.current=false;locationRequestedByPage.current=false;for(const task of runs.current.values())task.controller.abort();setLoading(true);setFailed(false);beginPageLoad()}}
+   onLoadStart={event=>{documentUrl.current=event.nativeEvent.url;stopDriverSpeech();stopDriverStream();autoStarted.current=false;locationRequestedByPage.current=false;for(const task of runs.current.values())task.controller.abort();if(!pageReady.current){setLoading(true);setFailed(false);beginPageLoad()}}}
     onLoadEnd={()=>{
-     // HTML is not proof of a usable page: wait until React signals readiness.
+     // Request the current status again in case the first message arrived before navigation was recorded.
+     inject(eventScript('yalla:native-status-request',{}));
      void syncPermission('page-loaded');
     // If the website cannot post its location request to Android,
     // native GPS still starts and injects a cached position for the map.

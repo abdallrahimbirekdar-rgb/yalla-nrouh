@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {acceptableFix,awaitFreshFix,deadlineOr} from '../src/android-fresh/gps.ts';
-import {readWebMessage,trustedSite,trustedWebMessage,positionScript,bootstrapScript,autoFixScript} from '../src/android-fresh/bridge.ts';
+import {readWebMessage,trustedSite,trustedWebMessage,positionScript,bootstrapScript,autoFixScript,websiteEntryUrl} from '../src/android-fresh/bridge.ts';
 test('trusted website only; no JavaScript URL injection',()=>{
  assert.equal(trustedSite('https://abdallrahimbirekdar-rgb.github.io/yalla-nrouh/'),true);
  assert.equal(trustedSite('https://evil.example/yalla-nrouh/'),false);
@@ -22,6 +22,15 @@ test('trusted website only; no JavaScript URL injection',()=>{
  assert.equal(readWebMessage(JSON.stringify({type:'driver-speak',id:'turn-1',text:'a'.repeat(241),language:'en'})),null);
  assert.deepEqual(readWebMessage('{"type":"driver-speech-stop"}'),{type:'driver-speech-stop'});
  assert.deepEqual(readWebMessage('{"type":"driver-voice-setup"}'),{type:'driver-voice-setup'});
+});
+test('Android launches reuse the document cache after a successful manual refresh',()=>{
+ const entry=websiteEntryUrl();
+ assert.equal(entry,websiteEntryUrl(null));
+ assert.equal(entry,websiteEntryUrl('https://foreign.example/'));
+ const refreshed=websiteEntryUrl('1794069000000');
+ assert.notEqual(entry,refreshed);
+ assert.equal(refreshed,websiteEntryUrl('1794069000000'));
+ assert.equal(trustedSite(refreshed),true);
 });
 test('Android messages accept a sender origin only on a trusted top-level document',()=>{
  const origin='https://abdallrahimbirekdar-rgb.github.io';

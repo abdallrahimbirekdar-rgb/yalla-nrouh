@@ -1,9 +1,9 @@
 # One website, shown inside the Android application
 
 ## Delivery
-The Android entry `src/app/index.tsx` opens the live `https://abdallrahimbirekdar-rgb.github.io/yalla-nrouh/` website through `SiteShell`. Website UI remains in `index.web.tsx` with a separate web root layout. This uses the same website-view model as Sooq Daraya. It requires no Expo account, Expo Update service, project UUID or publishing token. The existing build framework and installed WebView library remain in use.
+The installed Android app starts from `src/entry.android.tsx` and renders the live HTTPS site through `src/android-fresh/App.tsx`. Android bundles only this host and its dependencies. The website still uses Expo Router, with its home in `src/app/index.web.tsx` and its own web layout. The app uses the same live website and does not require Expo Update or an Expo account.
 
-Install the 0.8.0 transition APK once. Thereafter publish ordinary UI, text, zoom and web-logic changes with the web workflow. The installed app requests a fresh HTML document on a fresh launch, while hashed assets can be cached. On return from the background it checks a small version.json and offers Refresh page if needed. The in-app menu also includes Refresh page. Refresh is allowed only from the home page with no active trip, unfinished draft or failed save.
+Install the 0.8.0 transition APK once. Thereafter publish ordinary UI, text, zoom and web-logic changes with the web workflow. The installed app reuses a stable launch URL and lets the browser cache rules control the document and hashed assets. After the interface opens and on return from the background, it checks a small version.json and offers Refresh page if needed. A successful manual refresh becomes the cached launch URL for later opens. The in-app menu also includes Refresh page. Refresh is allowed only from the home page with no active trip, unfinished draft or failed save.
 
 The APK workflow runs automatically only for listed wrapper/native inputs. Updates to the website do not require changing app.json version/versionCode. A change to native permissions, native wrapper behavior, dependencies, icons or app configuration still needs an APK. Add any new native build input to the path filter, or manually dispatch the APK workflow.
 

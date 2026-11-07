@@ -1,7 +1,7 @@
 {
   "name": "yalla-nrouh",
   "version": "0.9.0",
-  "main": "expo-router/entry",
+  "main": "./src/entry",
   "scripts": {
     "start": "expo start",
     "android": "expo run:android",

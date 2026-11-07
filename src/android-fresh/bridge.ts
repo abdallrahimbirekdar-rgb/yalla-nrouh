@@ -2,6 +2,11 @@
 // Never execute strings received from the website; only parse a small JSON protocol.
 const SITE_ORIGIN='https://abdallrahimbirekdar-rgb.github.io';
 export const SITE=SITE_ORIGIN+'/yalla-nrouh/';
+export function websiteEntryUrl(cacheKey?:string|null):string{
+ const entry=SITE+'?app=android';
+ return cacheKey&&/^\d{13}$/.test(cacheKey)?entry+'&refresh='+cacheKey:entry;
+}
+
 export type WebMessage=
  |{type:'bootstrap';id:string;version:string|null}
  |{type:'location';id:string;askPermission:boolean;track:boolean}
