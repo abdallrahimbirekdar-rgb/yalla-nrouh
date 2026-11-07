@@ -124,11 +124,12 @@ export default function Rides(){
  });
  const approachingRide=currentDriverRide?.status==='accepted'?currentDriverRide:undefined;
  const sharing=useRideSharing(userId);
- const [consentRevision,setConsentRevision]=useState(0);
+ const [consentChoice,setConsentChoice]=useState<{owner:string;allowed:boolean}|null>(null);
  const driverConsent=useMemo(()=>{
   if(!userId||typeof localStorage==='undefined')return false;
+  if(consentChoice?.owner===userId)return consentChoice.allowed;
   return readDriverSharingConsent(localStorage,userId).allowed;
- },[userId,consentRevision]);
+ },[userId,consentChoice]);
  const [consentError,setConsentError]=useState(false);
  const [trackingBackend,setTrackingBackend]=useState(false);
  const hasLiveRide=rides.some(live);
@@ -160,7 +161,7 @@ export default function Rides(){
   if(!userId||typeof localStorage==='undefined')return;
   const saved=saveDriverSharingConsent(localStorage,userId,{allowed});
   setConsentError(!saved);
-  if(saved)setConsentRevision(value=>value+1);
+  if(saved||!allowed)setConsentChoice({owner:userId,allowed});
   if(!allowed&&sharingRide&&sharingRide===driverRideId)void sharing.stop(sharingRide);
  }
  const [compactRide,setCompactRide]=useState<string|null>(()=>{
