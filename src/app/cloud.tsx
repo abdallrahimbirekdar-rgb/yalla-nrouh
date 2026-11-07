@@ -345,7 +345,7 @@ export default function Rides(){
      :<Button secondary title={t('اقتراح موقعي الحالي كنقطة التقاء','Suggest my current location as the meeting point')} disabled={proposing} onPress={()=>void proposePickup(ride)}/>}
     {(proposed===ride.id||proposal)&&!proposal?.approved&&<Label muted>{t('الاقتراح بانتظار موافقة السائق.','The proposal is waiting for the driver’s approval.')}</Label>}
    </>}
-   {ride.driver_id&&live(ride)&&<PassengerTaxiMap key={ride.id+':'+ride.driver_id} rideId={ride.id} pickup={{latitude:ride.pickup_lat,longitude:ride.pickup_lng}} riding={ride.status==='riding'}/>}
+   {ride.driver_id&&live(ride)&&<PassengerTaxiMap key={ride.id+':'+ride.driver_id} rideId={ride.id} pickup={proposal?.approved?proposal.point:{latitude:ride.pickup_lat,longitude:ride.pickup_lng}} status={ride.status} category={ride.category}/>}
    {historyMode&&<>
     <Label muted>{new Date(ride.created_at).toLocaleString(state.language==='ar'?'ar':'en')}</Label>
     <Button secondary icon="repeat-outline" title={t('استخدام الوجهة مرة أخرى','Use this destination again')} onPress={()=>reuseDestination(ride)} disabled={!!currentPassengerRide}/>

@@ -21,6 +21,7 @@ export interface CloudRide {
   status:'requested'|'accepted'|'arrived'|'riding'|'completed'|'cancelled';
   created_at:string;updated_at:string;search_expired_at?:string|null;
 }
+export interface DriverVehicleDetails {display_name?:string|null;vehicle_color?:string|null;vehicle_plate?:string|null;category?:string}
 export interface CloudDriver {user_id:string;region:number;category:string;approved:boolean;online:boolean;last_seen_at:string|null}
 export interface RidePreview {ride_id:string;region:number;category:string;created_at:string;pickup_lat_approx:number;pickup_lng_approx:number;estimated_fare?:number|null;remaining_ms?:number;expiresOnDevice?:number}
 export interface StaffDriver {user_id:string;region:number;category:string;approved:boolean;online:boolean;created_at:string}
@@ -112,6 +113,18 @@ export async function cloudMyDriver(token:string):Promise<CloudDriver|null>{
   requireToken(token);
   const accounts=await call<CloudDriver[]>('/rest/v1/driver_accounts?select=user_id,region,category,approved,online,last_seen_at&limit=1','GET',token);
   return accounts[0]??null;
+}
+export async function cloudMyDriverVehicleDetails(token:string){
+ requireToken(token);
+ const rows=await call<DriverVehicleDetails[]>('/rest/v1/driver_accounts?select=display_name,vehicle_color,vehicle_plate&approved=eq.true&limit=1','GET',token);
+ return rows[0]??null;
+}
+export const cloudSaveDriverVehicleDetails=(token:string,details:DriverVehicleDetails)=>rpc<boolean>('save_driver_vehicle_details',token,{
+ p_name:details.display_name?.trim()||null,p_color:details.vehicle_color?.trim()||null,p_plate:details.vehicle_plate?.trim()||null,
+});
+export async function cloudRideDriverVehicleDetails(token:string,rideId:string){
+ const rows=await rpc<DriverVehicleDetails[]>('ride_driver_vehicle_details',token,{p_ride:rideId});
+ return rows[0]??null;
 }
 export async function cloudRideOperation(token:string,kind:'request'|'accept',id:string,owner:string):Promise<CloudRide|null>{
   requireToken(token);

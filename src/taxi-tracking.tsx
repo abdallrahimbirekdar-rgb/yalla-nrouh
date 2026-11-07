@@ -1,13 +1,15 @@
 import React,{useEffect,useMemo,useState} from 'react';
 import {ActivityIndicator,Platform,View} from 'react-native';
-import {rideSearchLimitMs} from './cloud-api';
+import {cloudCurrentToken,cloudRideDriverVehicleDetails,rideSearchLimitMs,type DriverVehicleDetails} from './cloud-api';
+import {categories} from './domain';
+import {usePickupEta} from './use-pickup-eta';
 import {authClient} from './auth-client';
 import {useApp} from './context';
 import {isCoordinate,type Coordinate} from './geo';
 import MapCanvas from './map/MapCanvas';
 import {navigationPosition} from './navigation-position';
 import {positionDeadline} from './position-deadline';
-import {Label,Panel,useText,useTheme} from './ui';
+import {Icon,Label,Panel,useText,useTheme} from './ui';
 
 const foregroundTab=()=>Platform.OS==='web'&&document.visibilityState!=='hidden';
 const freshForMs=30000;
@@ -65,8 +67,17 @@ export function RideSearchTimer({startedAt,onExpired}:{startedAt:string;onExpire
  </View>;
 }
 
-export function PassengerTaxiMap({rideId,pickup,riding}:{rideId:string;pickup:Coordinate;riding:boolean}){
- const {foreground}=useApp();const t=useText();
+export function PassengerTaxiMap({rideId,pickup,status,category}:{rideId:string;pickup:Coordinate;status:string;category:string}){
+ const {foreground,connection,state}=useApp();const t=useText();const {colors}=useTheme();
+ const riding=status==='riding',approaching=status==='accepted';
+ const [vehicle,setVehicle]=useState<DriverVehicleDetails|null>(null);
+ useEffect(()=>{
+  if(!foreground||connection==='offline')return;
+  let active=true;
+  void cloudCurrentToken().then(token=>active?cloudRideDriverVehicleDetails(token,rideId):null)
+   .then(details=>{if(active)setVehicle(details)}).catch(()=>{/* The live map can still be shown. */});
+  return()=>{active=false};
+ },[rideId,foreground,connection]);
  const [fix,setFix]=useState<{point:Coordinate;time:number}|null>(null);
  const [now,setNow]=useState(Date.now);
  useEffect(()=>{
@@ -124,16 +135,34 @@ export function PassengerTaxiMap({rideId,pickup,riding}:{rideId:string;pickup:Co
  const age=fix?Math.max(0,Math.floor((now-fix.time)/1000)):0;
  const stale=age>=freshForMs/1000;
  const taxi=age<180?fix?.point:undefined;
+ const eta=usePickupEta(!stale?fix:null,pickup,approaching&&foreground&&connection!=='offline',state.language);
+ const vehicleCategory=categories.find(item=>item.id===(vehicle?.category??category))?.[state.language];
+ const format=new Intl.NumberFormat(state.language);
+ const etaText=!fix||stale||connection==='offline'
+  ?t('بانتظار تحديث موقع السيارة لحساب وقت الوصول.','Waiting for a location update to estimate arrival.')
+  :eta.minutes!==null
+   ?t('الوصول خلال نحو '+format.format(eta.minutes)+' دقيقة','Arriving in about '+format.format(eta.minutes)+' min')
+   :eta.pending?t('جارٍ حساب وقت الوصول…','Estimating arrival…')
+    :t('وقت الوصول غير متاح الآن. تابع السيارة على الخريطة.','Arrival time is unavailable. Follow the taxi on the map.');
  const lat=taxi?.latitude,lng=taxi?.longitude;
  const camera=useMemo(()=>riding&&lat!==undefined&&lng!==undefined
   ?{point:{latitude:lat,longitude:lng},revision:0,isLocation:false,zoom:16}:undefined,[riding,lat,lng]);
- const number=new Intl.NumberFormat(t('ar','en')).format(age);
+ const number=format.format(age);
  return <Panel>
-  <Label large>{t('موقع التاكسي','Taxi location')}</Label>
+  <View style={{backgroundColor:colors.selected,borderRadius:15,padding:12,gap:6}}>
+   <View style={{flexDirection:state.language==='ar'?'row-reverse':'row',alignItems:'center',gap:8}}>
+    <Icon name="car-outline" color={colors.purple}/>
+    <View style={{flex:1}}><Label large>{approaching?t('التاكسي في الطريق','Your taxi is on the way'):riding?t('الرحلة جارية','Ride in progress'):t('وصل التاكسي','Your taxi has arrived')}</Label></View>
+   </View>
+   {approaching&&<Label>{etaText}</Label>}
+   <Label muted>{fix?t('آخر تحديث للموقع قبل '+number+' ثانية','Location updated '+number+' s ago'):t('بانتظار أول تحديث لموقع التاكسي…','Waiting for the taxi’s first location update…')}</Label>
+   {fix&&stale&&<Label muted>{age<180?t('نعرض آخر موقع معروف للتاكسي.','Showing the last known taxi location.'):t('موقع التاكسي غير محدّث.','The taxi location is no longer current.')}</Label>}
+   {vehicle?.display_name&&<Label>{t('السائق','Driver')} · {vehicle.display_name}</Label>}
+   {(vehicleCategory||vehicle?.vehicle_color)&&<Label>{t('السيارة','Vehicle')} · {[vehicleCategory,vehicle?.vehicle_color].filter(Boolean).join(' · ')}</Label>}
+   {vehicle?.vehicle_plate&&<Label>{t('رقم اللوحة','Plate number')} · {vehicle.vehicle_plate}</Label>}
+  </View>
   <View style={{height:205,borderRadius:14,overflow:'hidden'}}>
    <MapCanvas compact readOnly minMapHeight={205} point={riding&&taxi?null:pickup} taxiPoint={taxi} cameraTarget={camera} onChange={()=>{}}/>
   </View>
-  <Label muted>{fix?t('آخر تحديث قبل '+number+' ثانية','Last updated '+number+' s ago'):t('بانتظار أول تحديث لموقع التاكسي…','Waiting for the taxi’s first location update…')}</Label>
-  {fix&&stale&&<Label muted>{age<180?t('نعرض آخر موقع معروف للتاكسي · بانتظار تحديث الموقع','Showing the last known taxi location · waiting for an update'):t('موقع التاكسي غير محدّث','The taxi location is no longer current')}</Label>}
  </Panel>;
 }

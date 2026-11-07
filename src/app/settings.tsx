@@ -4,6 +4,7 @@ import {Platform} from 'react-native';
 import {router,useLocalSearchParams} from 'expo-router';
 import {useAuth} from '../auth';
 import DriverNavigationSettings from '../driver-navigation-settings';
+import DriverVehicleSettings from '../driver-vehicle-settings';
 import {useApp} from '../context';
 import {enableLocalAlerts} from '../alerts';
 import {Button,Label,Page,Panel,useText} from '../ui';
@@ -23,7 +24,7 @@ export default function Settings(){
  const driverMode=!!auth.session&&(auth.driver||mode==='driver');
  return <Page title={driverMode?t('إعدادات السائق','Driver settings'):t('الإعدادات','Settings')}
   backTo={driverMode?{pathname:'/cloud',params:{mode:'driver'}}:'/'}>
-  {driverMode&&<DriverNavigationSettings/>}
+  {driverMode&&<><DriverNavigationSettings/><DriverVehicleSettings key={auth.session?.user.id}/></>}
   <SettingsContent/>
  </Page>;
 }
