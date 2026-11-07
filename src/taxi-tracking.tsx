@@ -1,4 +1,4 @@
-import React,{useEffect,useState} from 'react';
+import React,{useEffect,useMemo,useState} from 'react';
 import {ActivityIndicator,Platform,View} from 'react-native';
 import {rideSearchLimitMs} from './cloud-api';
 import {authClient} from './auth-client';
@@ -65,7 +65,7 @@ export function RideSearchTimer({startedAt,onExpired}:{startedAt:string;onExpire
  </View>;
 }
 
-export function PassengerTaxiMap({rideId,pickup}:{rideId:string;pickup:Coordinate}){
+export function PassengerTaxiMap({rideId,pickup,riding}:{rideId:string;pickup:Coordinate;riding:boolean}){
  const {foreground}=useApp();const t=useText();
  const [fix,setFix]=useState<{point:Coordinate;time:number}|null>(null);
  const [now,setNow]=useState(Date.now);
@@ -123,11 +123,15 @@ export function PassengerTaxiMap({rideId,pickup}:{rideId:string;pickup:Coordinat
  },[fix,foreground]);
  const age=fix?Math.max(0,Math.floor((now-fix.time)/1000)):0;
  const stale=age>=freshForMs/1000;
+ const taxi=age<180?fix?.point:undefined;
+ const lat=taxi?.latitude,lng=taxi?.longitude;
+ const camera=useMemo(()=>riding&&lat!==undefined&&lng!==undefined
+  ?{point:{latitude:lat,longitude:lng},revision:0,isLocation:false,zoom:16}:undefined,[riding,lat,lng]);
  const number=new Intl.NumberFormat(t('ar','en')).format(age);
  return <Panel>
-  <Label large>{t('تابع وصول التاكسي','Track your taxi')}</Label>
-  <View style={{height:300,borderRadius:14,overflow:'hidden'}}>
-   <MapCanvas compact readOnly minMapHeight={300} point={pickup} taxiPoint={age<180?fix?.point:undefined} onChange={()=>{}}/>
+  <Label large>{t('موقع التاكسي','Taxi location')}</Label>
+  <View style={{height:205,borderRadius:14,overflow:'hidden'}}>
+   <MapCanvas compact readOnly minMapHeight={205} point={riding&&taxi?null:pickup} taxiPoint={taxi} cameraTarget={camera} onChange={()=>{}}/>
   </View>
   <Label muted>{fix?t('آخر تحديث قبل '+number+' ثانية','Last updated '+number+' s ago'):t('بانتظار أول تحديث لموقع التاكسي…','Waiting for the taxi’s first location update…')}</Label>
   {fix&&stale&&<Label muted>{age<180?t('نعرض آخر موقع معروف للتاكسي · بانتظار تحديث الموقع','Showing the last known taxi location · waiting for an update'):t('موقع التاكسي غير محدّث','The taxi location is no longer current')}</Label>}

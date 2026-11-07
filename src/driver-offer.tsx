@@ -13,7 +13,7 @@ import {useApp} from './context';
 import {useAuth} from './auth';
 import MapCanvas from './map/MapCanvas';
 import {Button,Icon,Label,Panel,useText,useTheme} from './ui';
-export default function DriverOffer({offer,remainingSeconds,position,disabled,expanded,onExpand,onDecline,onAccept}:{offer:RidePreview;remainingSeconds:number;position?:Coordinate;disabled:boolean;expanded:boolean;onExpand:()=>void;onDecline:()=>void;onAccept:(routes:{trip:RoutePlan|null;pickup:RoutePlan|null})=>void}){
+export default function DriverOffer({offer,remainingSeconds,position,disabled,expanded,onExpand,onDecline,onAccept}:{offer:RidePreview;remainingSeconds:number;position?:Coordinate;disabled:boolean;expanded:boolean;onExpand:()=>void;onDecline:()=>void;onAccept:()=>void}){
  const {state}=useApp();const auth=useAuth();const t=useText();const {colors}=useTheme();
  const [plan,setPlan]=useState<RoutePlan|null>(null),[busy,setBusy]=useState(true),[error,setError]=useState(''),[attempt,setAttempt]=useState(0);
  const [pickupPlan,setPickupPlan]=useState<RoutePlan|null>(null),[pickupBusy,setPickupBusy]=useState(false),[pickupError,setPickupError]=useState(''),[pickupAttempt,setPickupAttempt]=useState(0);
@@ -71,7 +71,7 @@ export default function DriverOffer({offer,remainingSeconds,position,disabled,ex
    <View style={metric}><Label>{t('للزبون','To pickup')}</Label><Label display>{away===null?'—':(away/1000).toFixed(1)}</Label><Label>{away!==null?t('كم','km')+(eta===null?'':' · '+Math.ceil(eta/60)+' '+t('د','min')):expanded&&pickupBusy?t('جارٍ الحساب','Calculating'):t('مسافة القيادة','Driving distance')}</Label></View>
   </View>
   <View style={row}>
-   <View style={{flex:1.25}}><Button prominent tone="positive" icon="checkmark-circle-outline" title={t('قبول','Accept')} disabled={disabled||error==='ride_unavailable'} onPress={()=>onAccept({trip:plan,pickup:pickupPlan})}/></View>
+   <View style={{flex:1.25}}><Button prominent tone="positive" icon="checkmark-circle-outline" title={t('قبول','Accept')} disabled={disabled||error==='ride_unavailable'} onPress={onAccept}/></View>
    <View style={{flex:1}}><Button prominent secondary icon="close-circle-outline" title={t('رفض','Decline')} disabled={disabled} onPress={onDecline}/></View>
   </View>
   {!expanded&&<Button secondary icon="location-outline" title={t('عرض مكان الزبون','Show pickup location')} onPress={onExpand}/>}

@@ -4,22 +4,18 @@ import {router,useLocalSearchParams} from 'expo-router';
 import {useApp} from '../context';
 import {useAuth} from '../auth';
 import {authErrorMessage} from '../auth-errors';
-import {cloudCurrentToken,cloudDriverDispatchPing,cloudMutationUncertain,cloudMyRides,cloudDriverInbox,cloudOpenRides,cloudDeclineDriverOffer,cloudAcceptRide,cloudAdvanceRide,cloudReleaseRide,cloudCancelRide,cloudConfirmPickup,cloudRegisterDriver,cloudSetDriverOnline,type CloudRide,type CloudDriver,type DriverHistoryKind,type RidePreview} from '../cloud-api';
+import {cloudCurrentToken,cloudDriverDispatchPing,cloudMutationUncertain,cloudMyRides,cloudDriverInbox,cloudOpenRides,cloudDeclineDriverOffer,cloudAcceptRide,cloudAdvanceRide,cloudReleaseRide,cloudCancelRide,cloudRegisterDriver,cloudSetDriverOnline,type CloudRide,type CloudDriver,type DriverHistoryKind,type RidePreview} from '../cloud-api';
 import {navigationPosition} from '../navigation-position';
-import MapCanvas from '../map/MapCanvas';
 import RideOptions from '../ride-options';
 import {isCoordinate} from '../geo';
 import {PassengerFare,PassengerStops,RideFooter} from '../passenger-trip-summary';
 import DriverOffer from '../driver-offer';
-import type {RoutePlan} from '../routing';
-import DriverNavigation from '../driver-navigation';
-import {navigationProviders,useDriverNavigationPreference} from '../driver-navigation-preference';
 import {DriverQueueEmpty,DriverQueueHeader,DriverShift} from '../driver-dashboard';
 import {DriverHistory,DriverHistoryBar} from '../driver-history';
 import {useDriverOfferSound} from '../use-driver-offer-sound';
 import {useCurrentPosition} from '../use-current-position';
 import {PassengerTaxiMap,RideSearchTimer,useShareTaxiPosition} from '../taxi-tracking';
-import {CustomerTracking,openRideMaps,osmandPassengerSupported,pickupChange,stopOsmAndPassenger,useRideRow,useRideSharing} from '../ride-live-sharing';
+import {CustomerTracking,openOsmAnd,osmandNavigationSupported,pickupChange,stopOsmAndPassenger,useRideRow,useRideSharing} from '../ride-live-sharing';
 import {authClient} from '../auth-client';
 import {useRideRecovery} from '../use-ride-recovery';
 import {claimDriverSharingAttempt,readDriverSharingConsent,saveDriverSharingConsent} from '../driver-sharing-consent';
@@ -39,7 +35,6 @@ export default function Rides(){
   setHistoryKind(null);setFocusedOffer(null);setOfferLimit(3);
   setDeclined(null);
  },[userId]);
- const [acceptedPlans,setAcceptedPlans]=useState<{rideId:string;trip:RoutePlan|null;pickup:RoutePlan|null}|null>(null);
  const [rides,setRides]=useState<CloudRide[]>([]),[driver,setDriver]=useState<CloudDriver|null>(null),[offers,setOffers]=useState<RidePreview[]>([]),[busy,setBusy]=useState(false),[loading,setLoading]=useState(true),[notice,setNotice]=useState(''),[inboxProblem,setInboxProblem]=useState(false);
  const [offerClock,setOfferClock]=useState(()=>performance.now());
  useEffect(()=>{
@@ -145,7 +140,7 @@ export default function Rides(){
  useEffect(()=>{
   if(driverRideId)startDriverSharing(driverRideId);
  },[driverRideId,startDriverSharing]);
- useShareTaxiPosition(driverConsent&&(sharingCapability===false||!trackingBackend)?approachingRide?.id:undefined,foreground);
+ useShareTaxiPosition(driverConsent&&(sharingCapability===false||!trackingBackend)?driverRideId:undefined,foreground);
 
  function setDriverSharingConsent(allowed:boolean){
   if(!userId||typeof localStorage==='undefined')return;
@@ -161,11 +156,7 @@ export default function Rides(){
   setCompactRide(rideId);
   try{if(rideId)localStorage.setItem('yn-driver-split-ride',rideId);else localStorage.removeItem('yn-driver-split-ride')}catch{/* The view still switches. */}
  }
- const navigationProvider=useDriverNavigationPreference();
- const osmandWaiting=!!currentDriverRide&&['accepted','arrived'].includes(currentDriverRide.status)&&!currentDriverRide.pickup_confirmed_at;
- useEffect(()=>{
-  if(!osmandWaiting||navigationProvider!=='osmand')stopOsmAndPassenger();
- },[osmandWaiting,navigationProvider,userId]);
+ useEffect(()=>{if(driverMode)stopOsmAndPassenger()},[driverMode,userId]);
  const [proposing,setProposing]=useState(false);
  const [proposed,setProposed]=useState<string|null>(null);
  const activeRide=rides.some(live);const shouldPoll=foreground&&connection!=='offline'&&(activeRide||driverMode&&(!driver||driver.approved&&driver.online));
@@ -190,8 +181,8 @@ export default function Rides(){
   return()=>{active=false;clearInterval(timer)};
  },[userId,driverMode,driver?.approved,driver?.online,foreground,connection,currentDriverRide?.id,state.preferences.dataSaver]);
  useEffect(()=>{if(!userId)return;const resume=()=>{if(document.visibilityState!=='hidden')void refresh().catch(()=>{if(alive.current)setNotice(state.language==='ar'?'تعذر تحديث الطلبات. تحقق من الاتصال واضغط تحديث الرحلات.':'Could not update requests. Check internet and refresh.')})};const native=(event:Event)=>{if((event as CustomEvent).detail?.active===true)resume()};window.addEventListener('online',resume);window.addEventListener('focus',resume);window.addEventListener('pageshow',resume);document.addEventListener('visibilitychange',resume);window.addEventListener('yalla:native-visibility',native);return()=>{window.removeEventListener('online',resume);window.removeEventListener('focus',resume);window.removeEventListener('pageshow',resume);document.removeEventListener('visibilitychange',resume);window.removeEventListener('yalla:native-visibility',native)}},[userId,refresh,state.language]);
- async function run(work:(token:string)=>Promise<void>,success?:string){if(busy)return;setBusy(true);setNotice('');try{await work(await cloudCurrentToken());await refresh();if(success)setNotice(success)}catch(e){const kind=(e as {kind?:string})?.kind??(e as Error)?.message;setNotice(kind==='waiting_passenger_confirmation'?t('بانتظار تأكيد الراكب ركوب السيارة.','Waiting for passenger pickup confirmation.'):kind==='driver_not_approved'?t('حساب السائق بانتظار الاعتماد.','Driver account is waiting for approval.'):authErrorMessage(e,state.language==='ar'))}finally{setBusy(false)}}
- async function accept(offer:RidePreview,routes:{trip:RoutePlan|null;pickup:RoutePlan|null}){
+ async function run(work:(token:string)=>Promise<void>,success?:string){if(busy)return;setBusy(true);setNotice('');try{await work(await cloudCurrentToken());await refresh();if(success)setNotice(success)}catch(e){const kind=(e as {kind?:string})?.kind??(e as Error)?.message;setNotice(kind==='driver_not_approved'?t('حساب السائق بانتظار الاعتماد.','Driver account is waiting for approval.'):authErrorMessage(e,state.language==='ar'))}finally{setBusy(false)}}
+ async function accept(offer:RidePreview){
   if(busy||!userId||currentDriverRide||recovery.checking||recovery.id&&recovery.id!==offer.ride_id)return;
   if((offer.expiresOnDevice??0)<=performance.now()){
    setNotice(t('انتهت مهلة هذا الطلب.','This request has expired.'));
@@ -203,7 +194,6 @@ export default function Rides(){
    const token=await cloudCurrentToken();
    if(identity.current!==userId||!mode.current)return;
    recovery.remember(offer.ride_id);submitted=true;
-   setAcceptedPlans({rideId:offer.ride_id,...routes});
    const accepted=await cloudAcceptRide(token,offer.ride_id);
    if(identity.current!==userId||!mode.current)return;
    if(!accepted&&!recovery.id){
@@ -276,14 +266,12 @@ export default function Rides(){
     clearTimeout(timer);
    }
    if(!alive.current||identity.current!==userId||!mode.current)return;
-   if(navigationProvider==='osmand'&&!osmandPassengerSupported()){
+   if(!osmandNavigationSupported()){
     setNotice(t('لفتح OsmAnd من الرحلة، ثبّت أحدث نسخة أندرويد من يلّا نروح.','To open OsmAnd from a ride, install the latest Yalla Nrouh Android app.'));
     return;
    }
-   const ok=await openRideMaps(point,adjacent,sharing.capability===true,navigationProvider,ride.status==='accepted'?ride.id:undefined);
-   if(!ok&&alive.current&&identity.current===userId)setNotice(navigationProvider==='google'
-    ?t('تعذّر فتح خرائط Google. يمكنك إعادة المحاولة من شاشة الرحلة.','Could not open Google Maps. You can retry from the ride screen.')
-    :t('تعذّر بدء الملاحة في OsmAnd. تأكد أن التطبيق مثبت ويمكن فتحه على هاتفك.','Could not start navigation in OsmAnd. Check that OsmAnd is installed and opens on your phone.'));
+   const ok=await openOsmAnd(point,adjacent);
+   if(!ok&&alive.current&&identity.current===userId)setNotice(t('تعذّر فتح OsmAnd. تأكد أنه مثبت، ثم جرّب فتح الملاحة مرة أخرى.','Could not open OsmAnd. Check that it is installed, then try again.'));
   };
   void open();
  }
@@ -301,8 +289,8 @@ export default function Rides(){
  function driverRideAction(ride:CloudRide){
   if(ride.status==='accepted')return <Button prominent icon="location-outline" title={t('وصلت إلى الزبون','I arrived at pickup')} disabled={busy}
    onPress={()=>void run(async token=>{if(await cloudAdvanceRide(token,ride.id,'arrived')!=='arrived')throw Error('not_allowed')})}/>;
-  if(ride.status==='arrived')return <Button prominent title={ride.pickup_confirmed_at?t('بدء الرحلة وفتح الملاحة','Start ride and open navigation'):t('بانتظار تأكيد الزبون','Waiting for passenger')}
-   disabled={busy||!ride.pickup_confirmed_at} onPress={()=>startDriverRide(ride)}/>;
+  if(ride.status==='arrived')return <Button prominent title={t('بدء الرحلة وفتح OsmAnd','Start ride and open OsmAnd')}
+   disabled={busy} onPress={()=>startDriverRide(ride)}/>;
   return <Button prominent icon="checkmark-circle-outline" title={t('إنهاء الرحلة','Finish ride')} disabled={busy}
    onPress={()=>void run(async token=>{if(await cloudAdvanceRide(token,ride.id,'completed')!=='completed')throw Error('not_allowed')})}/>;
  }
@@ -357,17 +345,12 @@ export default function Rides(){
      :<Button secondary title={t('اقتراح موقعي الحالي كنقطة التقاء','Suggest my current location as the meeting point')} disabled={proposing} onPress={()=>void proposePickup(ride)}/>}
     {(proposed===ride.id||proposal)&&!proposal?.approved&&<Label muted>{t('الاقتراح بانتظار موافقة السائق.','The proposal is waiting for the driver’s approval.')}</Label>}
    </>}
-   {ride.status==='accepted'&&<PassengerTaxiMap key={ride.driver_id} rideId={ride.id} pickup={{latitude:ride.pickup_lat,longitude:ride.pickup_lng}}/>}
+   {ride.driver_id&&live(ride)&&<PassengerTaxiMap key={ride.id+':'+ride.driver_id} rideId={ride.id} pickup={{latitude:ride.pickup_lat,longitude:ride.pickup_lng}} riding={ride.status==='riding'}/>}
    {historyMode&&<>
     <Label muted>{new Date(ride.created_at).toLocaleString(state.language==='ar'?'ar':'en')}</Label>
     <Button secondary icon="repeat-outline" title={t('استخدام الوجهة مرة أخرى','Use this destination again')} onPress={()=>reuseDestination(ride)} disabled={!!currentPassengerRide}/>
    </>}
    {live(ride)&&<>
-    {ride.status==='arrived'&&!ride.pickup_confirmed_at&&<>
-     <Label muted>{t('تأكد من السائق والسيارة أولًا، ثم أكّد الركوب من حسابك. لا يلزم إعطاء أي رمز.','Check the driver and car first, then confirm pickup in your account. No code needed.')}</Label>
-     <Button title={t('تأكيد ركوب السيارة','Confirm pickup')} disabled={busy} onPress={()=>void run(async token=>{if(!await cloudConfirmPickup(token,ride.id))throw Error('not_allowed')},t('تم تأكيد الركوب. يمكن للسائق بدء الرحلة الآن.','Pickup confirmed. The driver can start the ride.'))}/>
-    </>}
-    {ride.status==='arrived'&&ride.pickup_confirmed_at&&<Label muted>{t('تم تأكيد الركوب. بانتظار بدء الرحلة من السائق.','Pickup confirmed. Waiting for driver to start the ride.')}</Label>}
     {ride.status!=='riding'&&ride.id!==searchingRide?.id&&<Button secondary title={t('إلغاء الطلب','Cancel request')} disabled={busy} onPress={()=>cancelRequest(ride)}/>}
    </>}
   </Panel>;
@@ -376,26 +359,23 @@ export default function Rides(){
   const atPickup=ride.status==='arrived';
   const pickup={latitude:ride.pickup_lat,longitude:ride.pickup_lng};
   const destination=pickingUp?(proposal?.approved?proposal.point:pickup):{latitude:ride.destination_lat,longitude:ride.destination_lng};
-  const tracking=pickingUp||atPickup&&!ride.pickup_confirmed_at;
+  const tracking=pickingUp||atPickup;
   const stage=pickingUp?t('إلى الزبون','To pickup'):atPickup?t('عند الزبون','At pickup'):t('إلى الوجهة','To destination');
   const address=pickingUp&&proposal?.approved?t('نقطة الالتقاء الجديدة المعتمدة','Approved meeting point'):pickingUp||atPickup?ride.pickup:ride.destination;
   const navButton=(adjacent:boolean,title:string)=><Button secondary icon={adjacent?'map-outline':'navigate-outline'}
    title={title} onPress={()=>atPickup?setSplitRide(ride.id):showExternal(ride,destination,adjacent)}/>;
-  const fullScreen=navButton(false,t('ملاحة بملء الشاشة','Full-screen navigation'));
+  const fullScreen=navButton(false,t('فتح OsmAnd','Open OsmAnd'));
   return <View key={ride.id} style={{gap:split?8:12}}>
    <View style={{gap:2}}>
     {split?<Label>{stage}</Label>:<Label large>{stage}</Label>}
     {(!split||!tracking)&&<Label>{address}</Label>}
-    {atPickup&&<Label muted>{ride.pickup_confirmed_at
-     ?t('أكد الزبون الركوب. يمكنك بدء الرحلة الآن.','The customer confirmed pickup. You can start the ride.')
-     :t('اطلب من الزبون تأكيد الركوب من هاتفه.','Ask the customer to confirm pickup on their phone.')}</Label>}
+    {atPickup&&<Label muted>{t('ابدأ الرحلة بعد ركوب الزبون.','Start the ride once the customer is in the car.')}</Label>}
    </View>
    {!!notice&&<View accessibilityRole="alert"><Label>{notice}</Label></View>}
-   <CustomerTracking key={ride.id+':'+ride.driver_id} rideId={ride.id} pickup={pickup} foreground={foreground} compact={split} duringTrip={!tracking}/>
+   <CustomerTracking key={ride.id+':'+ride.driver_id} rideId={ride.id} pickup={pickup} proposedPickup={pickingUp?proposal?.point:undefined} foreground={foreground} compact={split} duringTrip={!tracking}/>
    {split&&tracking&&<Label muted>{address}</Label>}
    {pickingUp&&proposal&&!proposal.approved&&<Panel outlined>
     <Label>{t('الزبون اقترح نقطة التقاء جديدة.','The customer suggested a new meeting point.')}</Label>
-    <View style={{height:155,overflow:'hidden',borderRadius:12}}><MapCanvas compact readOnly minMapHeight={155} point={proposal.point} onChange={()=>{}}/></View>
     <Button secondary title={t('اعتماد نقطة الالتقاء الجديدة','Approve the new meeting point')} disabled={busy} onPress={()=>void run(async()=>{
      const {data,error}=await authClient().rpc('change_pickup',{p_ride:ride.id,p_proposal:proposal.id,p_lat:null,p_lng:null});
      if(error||!data)throw Error('not_allowed');
@@ -403,10 +383,10 @@ export default function Rides(){
    </Panel>}
    {pickingUp&&proposal?.approved&&<Label muted>{t('افتح الملاحة مجددًا للتوجّه إلى نقطة الالتقاء الجديدة.','Reopen navigation to go to the new meeting point.')}</Label>}
    {!atPickup&&<View style={{gap:6}}>
-    <Label muted>{t('تطبيق الملاحة المختار','Selected navigation app')} · {navigationProviders[navigationProvider]}</Label>
-    {split?navButton(true,t('فتح الملاحة بجانب الرحلة','Open navigation beside the ride')):<View style={{flexDirection:'row',flexWrap:'wrap',gap:6}}>
+    <Label muted>{t('الملاحة الخارجية عبر OsmAnd','External navigation via OsmAnd')}</Label>
+    {split?navButton(true,t('فتح OsmAnd بجانب الرحلة','Open OsmAnd beside the ride')):<View style={{flexDirection:'row',flexWrap:'wrap',gap:6}}>
      <View style={{flexGrow:1}}>{fullScreen}</View>
-     <View style={{flexGrow:1}}>{navButton(true,t('ملاحة بتقسيم الشاشة','Split-screen navigation'))}</View>
+     <View style={{flexGrow:1}}>{navButton(true,t('OsmAnd بتقسيم الشاشة','OsmAnd in split screen'))}</View>
     </View>}
    </View>}
    {!split&&atPickup&&navButton(true,t('عرض الرحلة بشكل مختصر','Show compact ride view'))}
@@ -415,20 +395,14 @@ export default function Rides(){
     :t('مشاركة موقعي مع الزبون','Share my location with the customer')}>
     {driverSharingControl(ride)}
    </HelpTip>
-   <HelpTip title={t('تغيير تطبيق الملاحة وخيارات الرحلة','Change navigation app and ride options')}>
+   <HelpTip title={t('خيارات الرحلة','Ride options')}>
     {navigationSettings}
     {split&&!atPickup&&fullScreen}
     {ride.status!=='riding'&&<Button secondary title={t('إعادة الطلب للبحث عن سائق','Release request to other drivers')} disabled={busy} onPress={()=>void run(async token=>{if(!await cloudReleaseRide(token,ride.id))throw Error('not_allowed')})}/>}
     <Button secondary icon="refresh-outline" title={t('تحديث حالة الرحلة','Refresh ride status')} disabled={busy} onPress={()=>void run(async()=>{})}/>
     {!split&&<DriverHistoryBar onOpen={setHistoryKind}/>}
    </HelpTip>
-   {!split&&!atPickup&&<DriverNavigation key={ride.id+'-'+ride.status}
-    title={t('الملاحة داخل يلّا نروح','Navigation in Yalla Nrouh')} targetLabel={address}
-    action={driverRideAction(ride)} externalNavigation={fullScreen}
-    devicePosition={gps.camera?.point}
-    routeOrigin={ride.status==='riding'?pickup:undefined}
-    initialPlan={acceptedPlans?.rideId===ride.id&&!(pickingUp&&proposal?.approved)?(pickingUp?acceptedPlans.pickup:acceptedPlans.trip):null}
-    to={destination}/>}
+
   </View>;
  }
  if(!auth.ready||auth.session&&!auth.rolesReady)return <Page title={t('رحلاتي','My rides')}><Label>{t('جارٍ تحميل الحساب…','Loading account…')}</Label>{auth.problem&&<Button title={t('إعادة المحاولة','Try again')} onPress={()=>void auth.retry()}/>}</Page>;
@@ -471,7 +445,7 @@ export default function Rides(){
       {!recovery.checking&&<>
        {inboxProblem&&<Label muted>{t('تعذر تحديث الطلبات. حاول تحديث القائمة.','Could not update requests. Refresh the list to try again.')}</Label>}
        {!inboxProblem&&!visibleOffers.length&&<DriverQueueEmpty/>}
-       {visibleOffers.map(offer=><DriverOffer key={offer.ride_id} remainingSeconds={Math.max(0,Math.ceil(((offer.expiresOnDevice??0)-offerClock)/1000))} offer={offer} position={gps.camera?.point} disabled={busy||!!recovery.id&&recovery.id!==offer.ride_id} expanded={selectedOffer===offer.ride_id} onExpand={()=>setFocusedOffer(offer.ride_id)} onDecline={()=>decline(offer.ride_id)} onAccept={routes=>void accept(offer,routes)}/>)}
+       {visibleOffers.map(offer=><DriverOffer key={offer.ride_id} remainingSeconds={Math.max(0,Math.ceil(((offer.expiresOnDevice??0)-offerClock)/1000))} offer={offer} position={gps.camera?.point} disabled={busy||!!recovery.id&&recovery.id!==offer.ride_id} expanded={selectedOffer===offer.ride_id} onExpand={()=>setFocusedOffer(offer.ride_id)} onDecline={()=>decline(offer.ride_id)} onAccept={()=>void accept(offer)}/>)}
        {availableOffers.length>offerLimit&&<Button secondary title={t('عرض طلبات أخرى','Show more requests')} onPress={()=>setOfferLimit(value=>value+3)}/>}
        {!gps.camera&&visibleOffers.length>0&&<Button secondary icon="locate" title={gps.busy?t('جارٍ تحديد الموقع…','Finding location…'):t('تحديد موقعي لحساب طريق الزبون','Find my location to calculate pickup route')} disabled={gps.busy} onPress={()=>void gps.locate()}/>}
       </>}

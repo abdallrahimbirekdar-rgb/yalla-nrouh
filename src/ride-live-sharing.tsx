@@ -1,11 +1,8 @@
 import {useCallback,useEffect,useMemo,useRef,useState} from 'react';
 import {Linking,Pressable,useWindowDimensions,View} from 'react-native';
-import {cloudGetToken} from './cloud-api';
-import type {NavigationProvider} from './driver-navigation-preference';
 import {authClient} from './auth-client';
 import {isCoordinate,type Coordinate} from './geo';
 import {distanceMeters} from './navigation-progress';
-import {googleDirections} from './google-links';
 import MapCanvas from './map/MapCanvas';
 import {Button,HelpTip,Icon,Label,useText,useTheme} from './ui';
 
@@ -102,29 +99,21 @@ export function useRideSharing(owner:string|undefined){
  return {capability,activeRide,busy,problem,start,stop};
 }
 
-export const osmandPassengerSupported=()=>typeof window!=='undefined'&&
+export const osmandNavigationSupported=()=>typeof window!=='undefined'&&
  (window as Window&{__YALLA_OSMAND_PASSENGER__?:boolean}).__YALLA_OSMAND_PASSENGER__===true;
 
 export function stopOsmAndPassenger(){
- if(!osmandPassengerSupported())return;
+ if(!osmandNavigationSupported())return;
  try{bridge()?.postMessage(JSON.stringify({type:'osmand-passenger-stop'}))}catch{/* The native service also checks ride eligibility. */}
 }
 
-const navigationMessage={google:'ride-maps',osmand:'ride-osmand'} as const;
-export async function openRideMaps(point:Coordinate,adjacent:boolean,nativeAvailable:boolean,provider:NavigationProvider,waitingRideId?:string):Promise<boolean>{
- if(provider==='osmand'&&!osmandPassengerSupported())return false;
- const accessToken=provider==='osmand'&&waitingRideId?cloudGetToken():null;
- if(nativeAvailable)return (await nativeRequest(navigationMessage[provider],{
-  ...point,adjacent,...(accessToken?{rideId:waitingRideId,accessToken}:{}),
- })).ok;
- if(provider!=='google')return false;
- try{await Linking.openURL(googleDirections(point,undefined,true));return true}catch{return false}
+export async function openOsmAnd(point:Coordinate,adjacent:boolean):Promise<boolean>{
+ return (await nativeRequest('ride-osmand',{...point,adjacent})).ok;
 }
 
 export function OsmAndHelp(){
  const t=useText();
  const [storeError,setStoreError]=useState(false);
- const [permissionHint,setPermissionHint]=useState(false);
  return <HelpTip title={t('إعداد OsmAnd وتنزيل خريطة سوريا','Set up OsmAnd and download Syria')}>
   <Label>{t('١. اضغط زر Google Play أدناه وثبّت تطبيق OsmAnd.','1. Open Google Play below and install OsmAnd.')}</Label>
   <Label>{t('٢. افتح OsmAnd ثم القائمة ← الخرائط والموارد ← التنزيلات. ابحث عن «سوريا» أو Syria ونزّل الخريطة القياسية.','2. In OsmAnd, go to Menu → Maps & Resources → Downloads. Search for Syria and download the standard map.')}</Label>
@@ -133,12 +122,6 @@ export function OsmAndHelp(){
   <Button secondary icon="download-outline" title={t('تحميل OsmAnd من Google Play','Get OsmAnd on Google Play')}
    onPress={()=>{setStoreError(false);void Linking.openURL('https://play.google.com/store/apps/details?id=net.osmand').catch(()=>setStoreError(true));}}/>
   {storeError&&<Label muted>{t('تعذّر فتح المتجر. ابحث عن OsmAnd في Google Play.','Could not open the store. Search Google Play for OsmAnd.')}</Label>}
-  {osmandPassengerSupported()&&<>
-   <Label>{t('عند فتح ملاحة OsmAnd للذهاب إلى الزبون لأول مرة، تظهر نافذة الموافقة تلقائيًا في الإصدارات التي تدعمها. اضغط «سماح» مرة واحدة.','When you first open OsmAnd to drive to a customer, supported versions show a permission prompt automatically. Tap Allow once.')}</Label>
-   <Button secondary icon="person-outline" title={t('إعادة طلب إذن عرض العلامة','Request marker permission again')}
-    onPress={()=>{setPermissionHint(false);void nativeRequest('osmand-map-access').then(({ok})=>setPermissionHint(!ok));}}/>
-   {permissionHint&&<Label muted>{t('تعذّر فتح نافذة الموافقة. إصدارات OsmAnd الأقدم تفتح الملاحة، لكن عرض العلامة قد لا يكون متاحًا فيها.','Could not open the permission prompt. Older OsmAnd versions still open navigation, but the marker may be unavailable.')}</Label>}
-  </>}
  </HelpTip>;
 }
 
@@ -182,11 +165,11 @@ export function pickupChange(row:Record<string,unknown>|null){
  return isCoordinate(point)?{point,id:row.proposal_id,approved:row.approved===true}:null;
 }
 
-export function CustomerTracking({rideId,pickup,foreground,compact,duringTrip=false}:{rideId:string;pickup:Coordinate;foreground:boolean;compact?:boolean;duringTrip?:boolean}){
+export function CustomerTracking({rideId,pickup,proposedPickup,foreground,compact,duringTrip=false}:{rideId:string;pickup:Coordinate;proposedPickup?:Coordinate;foreground:boolean;compact?:boolean;duringTrip?:boolean}){
  const t=useText();
  const {colors}=useTheme();
  const {height}=useWindowDimensions();
- const mapHeight=compact?Math.max(110,Math.min(165,Math.round(height*0.33))):235;
+ const mapHeight=compact?Math.max(110,Math.min(165,Math.round(height*0.33))):165;
  const [showPickup,setShowPickup]=useState(false);
  const [cameraRevision,setCameraRevision]=useState(0);
  const [pageVisible,setPageVisible]=useState(()=>typeof document!=='undefined'&&document.visibilityState==='visible');
@@ -213,7 +196,8 @@ export function CustomerTracking({rideId,pickup,foreground,compact,duringTrip=fa
  const age=Math.max(0,Math.floor((now-measured)/1000));
  const passenger=isCoordinate(point)&&age<180?point:undefined;
  const distance=passenger&&!duringTrip?Math.round(distanceMeters(pickup,passenger)):null;
- const focus=(!duringTrip&&showPickup)||!passenger?pickup:passenger;
+ const meetingPoint=proposedPickup??pickup;
+ const focus=(!duringTrip&&showPickup)||!passenger?meetingPoint:passenger;
  const {latitude:focusLat,longitude:focusLng}=focus;
  const cameraTarget=useMemo(()=>({
   point:{latitude:focusLat,longitude:focusLng},revision:cameraRevision,isLocation:false,zoom:19,
@@ -225,7 +209,7 @@ export function CustomerTracking({rideId,pickup,foreground,compact,duringTrip=fa
  },[distance,age]);
  const title=passenger&&(duringTrip||!showPickup)
   ?age<30?t('موقع الزبون الآن','Customer location now'):t('آخر موقع للزبون','Last customer location')
-  :t('نقطة الالتقاء الأصلية','Original meeting point');
+  :proposedPickup?t('نقطة الالتقاء الجديدة','New meeting point'):t('نقطة الالتقاء الأصلية','Original meeting point');
  const status=passenger
   ?age<30?t(`تحديث قبل ${age} ث`,`Updated ${age}s ago`):t('موقع الزبون قديم','Customer location is stale')
   :t('موقع الزبون غير متاح الآن','Customer location unavailable');
@@ -234,7 +218,7 @@ export function CustomerTracking({rideId,pickup,foreground,compact,duringTrip=fa
  return <View style={{backgroundColor:colors.background,borderColor:colors.line,borderWidth:1,borderRadius:14,overflow:'hidden'}}>
   <View style={{paddingHorizontal:10,paddingVertical:5}}><Label>{title}</Label></View>
   <View style={{height:mapHeight,overflow:'hidden'}}>
-   <MapCanvas compact readOnly minMapHeight={mapHeight} point={pickup} passengerPoint={passenger} cameraTarget={cameraTarget} onChange={()=>{}}/>
+   <MapCanvas compact readOnly minMapHeight={mapHeight} point={duringTrip?null:meetingPoint} passengerPoint={passenger} cameraTarget={cameraTarget} onChange={()=>{}}/>
   </View>
   <View style={{paddingHorizontal:10,paddingVertical:5}}>
    <Label muted>{status}{distance!==null&&t(` · ${distance} م عن نقطة الالتقاء الأصلية`,` · ${distance} m from original meeting point`)}</Label>

@@ -1,11 +1,10 @@
 import React,{useEffect,useRef,useState} from 'react';
-import {ActivityIndicator,Linking,View} from 'react-native';
+import {ActivityIndicator,View} from 'react-native';
 import {router} from 'expo-router';
 import {useAuth} from './auth';
 import {cloudCurrentToken,cloudReportRouteProblem} from './cloud-api';
 import {siteCurrentPosition} from './site-bridge';
 import {type Coordinate} from './geo';
-import {googleDirections} from './google-links';
 import {createRoutingClient,type FareQuote,type RoutePlan} from './routing';
 import {ServiceError} from './api';
 import {priceForRoute} from './meter';
@@ -13,7 +12,7 @@ import {useApp} from './context';
 import MapCanvas from './map/MapCanvas';
 import {PassengerFare} from './passenger-trip-summary';
 import {Button,Icon,Label,Panel,useText,useTheme} from './ui';
-export default function RoutePanel({from,to,fromAddress,toAddress,currentLocation=false,estimate=false,autoEstimate=false,title,onQuote,children}:{from?:Coordinate;to?:Coordinate;fromAddress?:string;toAddress?:string;currentLocation?:boolean;estimate?:boolean;autoEstimate?:boolean;title:string;onQuote?:(quote:FareQuote|null)=>void;children?:React.ReactNode}){
+export default function RoutePanel({from,to,currentLocation=false,estimate=false,autoEstimate=false,title,onQuote,children}:{from?:Coordinate;to?:Coordinate;currentLocation?:boolean;estimate?:boolean;autoEstimate?:boolean;title:string;onQuote?:(quote:FareQuote|null)=>void;children?:React.ReactNode}){
  const auth=useAuth();const userId=auth.session?.user.id;const {state}=useApp();const t=useText();const {colors}=useTheme();const [plan,setPlan]=useState<RoutePlan|null>(null),[quotedFare,setQuotedFare]=useState<number|null>(null),[busy,setBusy]=useState(false),[error,setError]=useState(''),[expanded,setExpanded]=useState(false);
  const alive=useRef(true),generation=useRef(0),running=useRef(false),abort=useRef<AbortController|null>(null),lastAuto=useRef('');const quoteCallback=useRef(onQuote);quoteCallback.current=onQuote;
  const key=[from?.latitude,from?.longitude,to?.latitude,to?.longitude,currentLocation,auth.session?.user.id].join('|');
@@ -44,7 +43,6 @@ export default function RoutePanel({from,to,fromAddress,toAddress,currentLocatio
  }
  const action=useRef(calculate);action.current=calculate;
  useEffect(()=>{if(!autoEstimate||!auth.ready||!userId||!from||!to||lastAuto.current===key)return;lastAuto.current=key;void action.current()},[autoEstimate,auth.ready,userId,key,from,to]);
- async function navigate(){try{const end=to??toAddress;if(end)await Linking.openURL(googleDirections(end,currentLocation?undefined:from??fromAddress,currentLocation))}catch{setError('navigation')}}
  const price=quotedFare??(plan?priceForRoute(plan.meters,plan.seconds/60,plan.tariff??state.tariff):null);
  const message=error==='unauthorized'?t('سجّل الدخول مجددًا لحساب الأجرة.','Sign in again to check the fare.'):error==='busy'?t('تم بلوغ حد المحاولات أو أُعيد الطلب بسرعة. انتظر قليلًا قبل المحاولة.','Too many requests. Wait before trying again.'):error==='no_route'?t('لم تعثر Google على طريق قيادة بين النقطتين. جرّب تعديل النقاط.','Google found no driving route. Try changing the points.'):error==='not_configured'||error==='not_enabled'?t('خدمة حساب الطريق غير متاحة الآن. أعد المحاولة لاحقًا.','The route service is not available. Try later.'):t('تعذر حساب الطريق. تحقق من الاتصال وأعد المحاولة.','Could not find the route. Check internet and try again.');
  return <Panel outlined>
@@ -59,9 +57,7 @@ export default function RoutePanel({from,to,fromAddress,toAddress,currentLocatio
   {plan&&<Button secondary icon={expanded?'chevron-up':'map-outline'} title={expanded?t('إخفاء خريطة المسار','Hide route map'):t('عرض خريطة المسار','Show route map')} onPress={()=>setExpanded(value=>!value)}/>}
   {plan&&expanded&&<>
    <MapCanvas point={plan.from} route={plan.points} readOnly onChange={()=>{}}/>
-   {plan.steps.map((step,index)=><Label key={index}>{index+1}. {step.instruction}</Label>)}
    <Label muted>Google Maps</Label>
-   <Button secondary icon="navigate-outline" disabled={!to&&!toAddress} title={t('فتح الملاحة في Google Maps','Open directions in Google Maps')} onPress={()=>void navigate()}/>
   </>}
   {!auth.session?<Button icon="log-in-outline" title={t('تسجيل الدخول','Sign in')} onPress={()=>router.push({pathname:'/account',params:{next:'review'}})}/>:(!busy&&!plan||expanded)&&<Button secondary disabled={busy||!to||!from&&!currentLocation} title={plan?t('إعادة حساب الطريق والأجرة','Update route and fare'):estimate?t('إعادة حساب الأجرة','Recalculate fare'):t('حساب الطريق','Find route')} onPress={()=>void calculate()}/>}
  </Panel>;

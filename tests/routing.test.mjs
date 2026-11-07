@@ -1,13 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {parseDriverOffer,parseRoute,createRoutingClient} from '../src/routing.ts';
-import {googleDirections} from '../src/google-links.ts';
 import {priceForRoute} from '../src/meter.ts';
 const from={latitude:33.46,longitude:36.23},to={latitude:33.51,longitude:36.29};
 const response={routes:[{distanceMeters:8000,duration:'1200s',polyline:{geoJsonLinestring:{type:'LineString',coordinates:[[36.23,33.46],[36.29,33.51]]}},legs:[{steps:[{distanceMeters:8000,navigationInstruction:{instructions:'تابع السير'}}]}]}]};
-test('Google directions links need no key and preserve endpoints and driving mode',()=>{const url=new URL(googleDirections(to,from));assert.equal(url.origin,'https://www.google.com');assert.equal(url.searchParams.get('api'),'1');assert.equal(url.searchParams.get('destination'),'33.510000,36.290000');assert.equal(url.searchParams.get('origin'),'33.460000,36.230000');assert.equal(url.searchParams.get('travelmode'),'driving');assert.equal(url.searchParams.has('key'),false);});
-test('driver navigation lets Google Maps use its own current-location permission',()=>{const url=new URL(googleDirections(to,undefined,true));assert.equal(url.searchParams.get('dir_action'),'navigate');assert.equal(url.searchParams.has('origin'),false);});
-test('text addresses work without an in-app geocoding request',()=>{const url=new URL(googleDirections('دمشق & داريا','داريا'));assert.equal(url.searchParams.get('destination'),'دمشق & داريا');assert.equal(url.hostname,'www.google.com');assert.throws(()=>googleDirections(''));assert.throws(()=>googleDirections({latitude:100,longitude:20}));});
 test('Google response parser validates geometry and uses road distance, duration and instructions',()=>{const p=parseRoute(response,from,to);assert.equal(p.meters,8000);assert.equal(p.seconds,1200);assert.deepEqual(p.points[0],from);assert.equal(p.steps[0].instruction,'تابع السير');assert.equal(p.provider,'Google Maps');});
 test('invalid Google route responses cannot become a road or fare estimate',()=>{assert.throws(()=>parseRoute({},from,to));for(const patch of [{distanceMeters:-1},{duration:'Infinitys'},{duration:'-1s'},{polyline:{geoJsonLinestring:{type:'LineString',coordinates:[[999,200],[36,33]]}}},{legs:[]}])assert.throws(()=>parseRoute({routes:[{...response.routes[0],...patch}]},from,to));});
 test('no paid route request is sent until an explicit proxy is configured',async()=>{let count=0;const client=createRoutingClient(undefined,async()=>{count++;throw Error();});await assert.rejects(client.route(from,to),{code:'not_configured'});assert.equal(count,0);});

@@ -19,7 +19,7 @@ export interface CloudRide {
   category:string;region:number;pickup_lat:number;pickup_lng:number;destination_lat:number;destination_lng:number;
   estimated_fare?:number|null;
   status:'requested'|'accepted'|'arrived'|'riding'|'completed'|'cancelled';
-  created_at:string;updated_at:string;pickup_confirmed_at:string|null;search_expired_at?:string|null;
+  created_at:string;updated_at:string;search_expired_at?:string|null;
 }
 export interface CloudDriver {user_id:string;region:number;category:string;approved:boolean;online:boolean;last_seen_at:string|null}
 export interface RidePreview {ride_id:string;region:number;category:string;created_at:string;pickup_lat_approx:number;pickup_lng_approx:number;estimated_fare?:number|null;remaining_ms?:number;expiresOnDevice?:number}
@@ -73,7 +73,7 @@ export async function cloudWhoAmI(token:string):Promise<{id:string;email?:string
   requireToken(token);
   return call('/auth/v1/user','GET',token);
 }
-const rideColumns='id,passenger_id,driver_id,pickup,destination,pickup_lat,pickup_lng,destination_lat,destination_lng,category,region,estimated_fare,status,created_at,updated_at,pickup_confirmed_at,search_expired_at';
+const rideColumns='id,passenger_id,driver_id,pickup,destination,pickup_lat,pickup_lng,destination_lat,destination_lng,category,region,estimated_fare,status,created_at,updated_at,search_expired_at';
 export const rideSearchLimitMs=180000;
 export const cloudDriverDispatchPing=(token:string,point:{latitude:number;longitude:number;time:number})=>rpc<boolean>('driver_dispatch_ping',token,{
  p_lat:point.latitude,p_lng:point.longitude,p_measured_at:new Date(point.time).toISOString(),
@@ -140,7 +140,6 @@ export async function cloudRequestRide(token:string,draft:TripDraft,requestId:st
 }
 export const cloudCancelRide=(token:string,id:string)=>rpc<boolean>('cancel_ride',token,{p_ride_id:id});
 export const cloudReleaseRide=(token:string,id:string)=>rpc<boolean>('release_ride',token,{p_ride_id:id});
-export const cloudConfirmPickup=(token:string,id:string)=>rpc<boolean>('confirm_pickup',token,{p_ride_id:id});
 export const cloudRegisterDriver=(token:string,region:number,category:string)=>rpc<boolean>('register_driver',token,{p_region:region,p_category:category});
 export const cloudSetDriverOnline=(token:string,online:boolean)=>rpc<boolean>('set_driver_online',token,{p_online:online});
 export const cloudHeartbeat=(token:string)=>rpc<boolean>('driver_heartbeat',token);
