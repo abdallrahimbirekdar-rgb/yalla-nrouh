@@ -8,8 +8,7 @@ import {cloudCurrentToken,cloudDriverDispatchPing,cloudMutationUncertain,cloudMy
 import {navigationPosition} from '../navigation-position';
 import RideOptions from '../ride-options';
 import {isCoordinate} from '../geo';
-import {PassengerFare,PassengerMap,PassengerStops,RideFooter} from '../passenger-trip-summary';
-import {usePassengerRideRoute} from '../passenger-ride-route';
+import {PassengerFare,PassengerStops,RideFooter} from '../passenger-trip-summary';
 import DriverOffer from '../driver-offer';
 import {DriverQueueEmpty,DriverQueueHeader,DriverShift} from '../driver-dashboard';
 import {DriverHistory,DriverHistoryBar} from '../driver-history';
@@ -217,8 +216,6 @@ export default function Rides(){
  const proposal=pickupChange(useRideRow('ride_pickup_changes',proposalRide,foreground));
  const passengerRide=driverMode||historyMode?undefined:currentPassengerRide;
  const passengerPickup=passengerRide?(proposal?.approved?proposal.point:{latitude:passengerRide.pickup_lat,longitude:passengerRide.pickup_lng}):undefined;
- const passengerDestination=passengerRide?{latitude:passengerRide.destination_lat,longitude:passengerRide.destination_lng}:undefined;
- const passengerRoute=usePassengerRideRoute(userId,passengerRide?.id,passengerPickup,passengerDestination,foreground&&connection!=='offline',state.language);
  const driverSharingControl=(ride?:CloudRide)=><View style={{gap:6}}>
   <Label muted>{t('اسمح مرة واحدة على هذا الجهاز. يشارك التطبيق موقعك تلقائيًا مع زبون الرحلة المعيّنة لك، ويتوقف عند انتهاء الرحلة أو إلغائها.','Allow once on this device. Your location is shared automatically with the customer assigned to your ride and stops when the ride ends or is cancelled.')}</Label>
   <Button secondary icon="locate-outline" title={driverConsent
@@ -341,11 +338,10 @@ export default function Rides(){
   }finally{setWorkTarget(null)}
  }
  const renderRide=(ride:CloudRide)=><React.Fragment key={ride.id}>
-  {live(ride)&&(ride.driver_id
-   ?<PassengerTaxiMap key={ride.id+':'+ride.driver_id} rideId={ride.id} pickup={passengerPickup??{latitude:ride.pickup_lat,longitude:ride.pickup_lng}} destination={passengerDestination} route={passengerRoute} status={ride.status} category={ride.category}/>
-   :<PassengerMap point={passengerPickup??{latitude:ride.pickup_lat,longitude:ride.pickup_lng}} destinationPoint={passengerDestination} route={passengerRoute}/>)}
+  {live(ride)&&ride.driver_id&&(ride.status==='accepted'||ride.status==='arrived')&&
+   <PassengerTaxiMap key={ride.id+':'+ride.driver_id} rideId={ride.id} pickup={passengerPickup??{latitude:ride.pickup_lat,longitude:ride.pickup_lng}} status={ride.status} category={ride.category}/>}
   <Panel outlined={live(ride)}>
-   {(!live(ride)||!ride.driver_id&&ride.id!==searchingRide?.id)&&<View style={{alignSelf:'flex-start',borderRadius:20,paddingHorizontal:12,paddingVertical:4,backgroundColor:colors.selected}}><Label muted>{ride.search_expired_at?t('انتهى البحث بدون سائق','Search expired without a driver'):status(ride.status)}</Label></View>}
+   {(!live(ride)||ride.status==='riding'||!ride.driver_id&&ride.id!==searchingRide?.id)&&<View style={{alignSelf:'flex-start',borderRadius:20,paddingHorizontal:12,paddingVertical:4,backgroundColor:colors.selected}}><Label muted>{ride.search_expired_at?t('انتهى البحث بدون سائق','Search expired without a driver'):status(ride.status)}</Label></View>}
    {typeof ride.estimated_fare==='number'&&<PassengerFare compact={live(ride)} fare={ride.estimated_fare}/>}
    <PassengerStops compact={live(ride)} pickup={ride.pickup} destination={ride.destination} category={ride.category}/>
    {live(ride)&&sharePassenger(ride)}
