@@ -5,7 +5,7 @@ import {isCoordinate,type Coordinate} from './geo';
 import {distanceMeters} from './navigation-progress';
 import {googleDirections} from './google-links';
 import MapCanvas from './map/MapCanvas';
-import {Label,Panel,useText} from './ui';
+import {Button,HelpTip,Label,Panel,useText} from './ui';
 
 type Reply={ok:boolean;rideId?:string|null};
 type SharingRole='driver'|'passenger';
@@ -92,6 +92,20 @@ export async function openRideMaps(point:Coordinate,adjacent:boolean,nativeAvail
  if(nativeAvailable)return (await nativeRequest(navigationMessage[provider],{...point,adjacent})).ok;
  if(provider!=='google')return false;
  try{await Linking.openURL(googleDirections(point,undefined,true));return true}catch{return false}
+}
+
+export function OsmAndHelp(){
+ const t=useText();
+ const [storeError,setStoreError]=useState(false);
+ return <HelpTip title={t('كيف أُثبّت OsmAnd وأنزّل خريطة سوريا؟','How do I install OsmAnd and download Syria?')}>
+  <Label>{t('١. اضغط زر Google Play أدناه وثبّت تطبيق OsmAnd.','1. Open Google Play below and install OsmAnd.')}</Label>
+  <Label>{t('٢. افتح OsmAnd ثم القائمة ← الخرائط والموارد ← التنزيلات. ابحث عن «سوريا» أو Syria ونزّل الخريطة القياسية.','2. In OsmAnd, go to Menu → Maps & Resources → Downloads. Search for Syria and download the standard map.')}</Label>
+  <Label>{t('٣. ارجع إلى يلّا نروح واختر OsmAnd من خيارات الملاحة في الرحلة.','3. Return to Yalla Nrouh and choose OsmAnd in the ride’s navigation options.')}</Label>
+  <Label muted>{t('بعد تنزيل الخريطة يمكنك الملاحة دون إنترنت ضمن المنطقة المحمّلة. استقبال الطلبات وتحديثات موقع الزبون يحتاجان اتصالًا.','After downloading the map, you can navigate offline in that area. Ride requests and customer location updates need a connection.')}</Label>
+  <Button secondary icon="download-outline" title={t('تحميل OsmAnd من Google Play','Get OsmAnd on Google Play')}
+   onPress={()=>{setStoreError(false);void Linking.openURL('https://play.google.com/store/apps/details?id=net.osmand').catch(()=>setStoreError(true));}}/>
+  {storeError&&<Label muted>{t('تعذّر فتح المتجر. ابحث عن OsmAnd في Google Play.','Could not open the store. Search Google Play for OsmAnd.')}</Label>}
+ </HelpTip>;
 }
 
 export function useRideRow(table:RideTable,rideId:string|undefined,foreground:boolean){

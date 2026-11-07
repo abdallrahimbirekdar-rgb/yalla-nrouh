@@ -19,11 +19,11 @@ import {DriverHistory,DriverHistoryBar} from '../driver-history';
 import {useDriverOfferSound} from '../use-driver-offer-sound';
 import {useCurrentPosition} from '../use-current-position';
 import {PassengerTaxiMap,RideSearchTimer,useShareTaxiPosition} from '../taxi-tracking';
-import {CustomerTracking,openRideMaps,pickupChange,useRideRow,useRideSharing,type NavigationProvider} from '../ride-live-sharing';
+import {CustomerTracking,OsmAndHelp,openRideMaps,pickupChange,useRideRow,useRideSharing,type NavigationProvider} from '../ride-live-sharing';
 import {authClient} from '../auth-client';
 import {useRideRecovery} from '../use-ride-recovery';
 import {createRefreshQueue} from '../refresh-queue';
-import {Button,Icon,Label,Page,Panel,useText,useTheme} from '../ui';
+import {Button,HelpTip,Icon,Label,Page,Panel,useText,useTheme} from '../ui';
 const live=(r:CloudRide)=>!['completed','cancelled'].includes(r.status);
 export default function Rides(){
  const auth=useAuth();const userId=auth.session?.user.id;const {state,draft,setDraft,foreground,connection}=useApp();const t=useText();const {colors}=useTheme();const params=useLocalSearchParams<{mode?:string;ride?:string}>();const driverMode=auth.driver||params.mode==='driver';const historyMode=!driverMode&&params.mode==='history';
@@ -210,6 +210,9 @@ export default function Rides(){
    :t('بموافقتك يرى السائق المعيّن موقعك أثناء انتظار السيارة، حتى لو كان التطبيق في الخلفية.','With your consent, the assigned driver can see your location while you wait, including in the background.')}</Label>
   <Button secondary icon="locate-outline" title={sharing.activeRide===ride.id?t('إيقاف مشاركة موقعي','Stop sharing my location'):t('أوافق على مشاركة موقعي','I agree to share my location')}
    disabled={sharing.busy} onPress={()=>void sharing.toggle(ride.id,role)}/>
+  <HelpTip title={t('متى تُشارك إحداثياتي؟','When is my location shared?')}>
+   <Label>{t('يمكنك إيقاف المشاركة من هنا أو من إشعار أندرويد. تتوقف تلقائيًا عند انتهاء المرحلة التي تحتاج إلى موقعك.','You can stop sharing here or from the Android notification. Sharing stops automatically when your location is no longer needed for that part of the ride.')}</Label>
+  </HelpTip>
   {sharing.problem&&<Label muted>{t('تعذّر تغيير المشاركة. تحقق من الاتصال وإذن الموقع الدقيق والإشعارات.','Could not change sharing. Check your connection, precise location and notification permissions.')}</Label>}
  </View>;
  async function proposePickup(ride:CloudRide){
@@ -226,13 +229,19 @@ export default function Rides(){
   finally{clearTimeout(timer);setProposing(false)}
  }
  const providers={google:'Google Maps',yandex:'Yandex Navigator',osmand:'OsmAnd'} as const;
- const navigationOptions=<View style={{flexDirection:'row',flexWrap:'wrap',gap:6}}>
+ const navigationOptions=<View style={{gap:4}}>
+ <View style={{flexDirection:'row',flexWrap:'wrap',gap:6}}>
   {(['google','yandex','osmand'] as const).map(provider=><View key={provider} style={{flexGrow:1}}>
    <Button secondary={navigationProvider!==provider} title={providers[provider]} onPress={()=>{
     setNavigationProvider(provider);
     try{localStorage.setItem('yn-driver-navigation',provider)}catch{/* Use the selection for this session. */}
    }}/>
   </View>)}
+ </View>
+ <OsmAndHelp/>
+ <HelpTip title={t('كيف يعمل تقسيم الشاشة؟','How does split screen work?')}>
+  <Label>{t('يعرض وضع الشاشة المقسمة الرحلة وأزرارها بجانب الملاحة إذا سمح الهاتف. إذا فتحت الملاحة بملء الشاشة، جرّب التقسيم من التطبيقات الأخيرة أو استخدم الوضع العادي.','Split-screen mode keeps the ride and its buttons next to navigation on supported phones. If navigation opens full screen, try splitting from Recents or use normal mode.')}</Label>
+ </HelpTip>
  </View>;
  function showExternal(ride:CloudRide,point:{latitude:number;longitude:number},adjacent:boolean){
   setSplitRide(adjacent?ride.id:null);
@@ -412,6 +421,7 @@ export default function Rides(){
    online={driver.online} region={driver.region} category={driver.category} target={workTarget}
    disabled={busy||workTarget!==null||recovery.checking} onToggle={()=>void toggleWork()}
    soundReady={sound.ready} soundProblem={sound.problem} onEnableSound={()=>void sound.unlock()}/>}
+  {driverMode&&driver?.approved&&!currentDriverRide&&<OsmAndHelp/>}
   {currentDriverRide&&renderDriverRide(currentDriverRide)}
   {driverMode&&recovery.id&&!currentDriverRide&&<Panel>
    <Label>{busy||recovery.checking?t('جارٍ التحقق من قبول الطلب…','Checking request acceptance…'):t('لم يتأكد قبول الطلب. يمكنك المحاولة مجددًا إذا ظل متاحًا.','Acceptance is unconfirmed. You can retry if the request is still available.')}</Label>

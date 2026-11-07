@@ -33,6 +33,21 @@ export function Button({title,onPress,secondary=false,disabled=false,icon,promin
   </View>
  </Pressable>;
 }
+export function HelpTip({title,children}:{title:string;children:React.ReactNode}){
+ const [open,setOpen]=useState(false);
+ const {state}=useApp();const {colors}=useTheme();
+ return <View style={{gap:4}}>
+  <Pressable accessibilityRole="button" accessibilityLabel={title} accessibilityState={{expanded:open}}
+   onPress={()=>setOpen(value=>!value)} style={({pressed})=>({
+    alignSelf:state.language==='ar'?'flex-end':'flex-start',minHeight:44,paddingHorizontal:7,
+    flexDirection:state.language==='ar'?'row-reverse':'row',alignItems:'center',gap:7,borderRadius:10,
+    backgroundColor:pressed||open?colors.selected:undefined,
+   })}>
+   <Icon name="help-circle-outline" color={colors.purple} size={22}/><View style={{flexShrink:1}}><Label muted>{title}</Label></View>
+  </Pressable>
+  {open&&<View style={{borderColor:colors.line,borderWidth:1,borderRadius:12,padding:12,gap:7,backgroundColor:colors.surface}}>{children}</View>}
+ </View>;
+}
 export function Panel({children,outlined=false}:{children:React.ReactNode;outlined?:boolean}){const {colors}=useTheme();return <View style={[styles.panel,{backgroundColor:outlined?colors.background:colors.surface},outlined&&{borderWidth:1,borderColor:colors.line,padding:14,gap:10}]}>{children}</View>}
 export function Field({label,...props}:TextInputProps&{label:string}){const {state}=useApp();const {colors,dark}=useTheme();return <View style={{gap:5}}><Label muted>{label}</Label><TextInput accessibilityLabel={label} placeholderTextColor={colors.muted} keyboardAppearance={dark?'dark':'light'} selectionColor={colors.purple} {...props} style={[styles.input,{color:colors.ink,backgroundColor:colors.background,borderColor:colors.line,textAlign:state.language==='ar'?'right':'left',writingDirection:state.language==='ar'?'rtl':'ltr',fontFamily:font()},props.style]}/></View>}
 export function RideHero({title}:{title:string}){return <Label large>{title}</Label>}
@@ -67,7 +82,7 @@ export function Page({title,children,hero,footer,compact=false,simpleHeader=fals
   <KeyboardAvoidingView style={{flex:1}} behavior={Platform.OS==='ios'?'padding':undefined}>
    <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={[styles.page,compact&&styles.compactPage]}>
     <View style={{flexDirection:driverHeader||showBrand?'row-reverse':arabic?'row-reverse':'row',alignItems:'center',justifyContent:'space-between',gap:8}}>
-     {driverHeader||showBrand?<BrandLogo/>:back}
+     {driverHeader||showBrand?<BrandLogo driver/>:back}
      {simpleHeader?<View style={{flex:1}}><Label large>{title}</Label></View>:<View style={{flexDirection:'row',gap:8,alignItems:'center'}}><AccountButton/><AppMenu/></View>}
     </View>
     {hero??(!simpleHeader&&!driverHeader?<Label large>{title}</Label>:null)}

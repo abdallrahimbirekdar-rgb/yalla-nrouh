@@ -14,7 +14,7 @@ import {useAuth} from './auth';
 import MapCanvas from './map/MapCanvas';
 import {Button,Icon,Label,Panel,useText,useTheme} from './ui';
 export default function DriverOffer({offer,remainingSeconds,position,disabled,expanded,onExpand,onDecline,onAccept}:{offer:RidePreview;remainingSeconds:number;position?:Coordinate;disabled:boolean;expanded:boolean;onExpand:()=>void;onDecline:()=>void;onAccept:(routes:{trip:RoutePlan|null;pickup:RoutePlan|null})=>void}){
- const {state}=useApp();const auth=useAuth();const t=useText();const {colors,dark}=useTheme();
+ const {state}=useApp();const auth=useAuth();const t=useText();const {colors}=useTheme();
  const [plan,setPlan]=useState<RoutePlan|null>(null),[busy,setBusy]=useState(true),[error,setError]=useState(''),[attempt,setAttempt]=useState(0);
  const [pickupPlan,setPickupPlan]=useState<RoutePlan|null>(null),[pickupBusy,setPickupBusy]=useState(false),[pickupError,setPickupError]=useState(''),[pickupAttempt,setPickupAttempt]=useState(0);
  const currentPosition=useRef(position);currentPosition.current=position;
@@ -61,9 +61,9 @@ export default function DriverOffer({offer,remainingSeconds,position,disabled,ex
  return <Panel outlined>
   <View style={{...row,alignItems:'center'}}>
    <View style={{flex:1}}><Label muted>{t('عرض رحلة','Ride offer')}</Label><Label>{regions[offer.region]?.[state.language==='ar'?0:1]} · {categories.find(c=>c.id===offer.category)?.[state.language]??offer.category}</Label></View>
-   <View style={{...row,gap:4,alignItems:'center',paddingHorizontal:8,borderRadius:10,backgroundColor:urgent?(dark?'#47262a':'#ffeded'):colors.selected}}>
-    <Icon name="time-outline" size={16} color={urgent?colors.error:colors.ink}/>
-    <Label>{t('متبقّي','Left')} {Math.floor(remainingSeconds/60)}:{String(remainingSeconds%60).padStart(2,'0')}</Label>
+   <View style={{...row,gap:4,alignItems:'center',paddingHorizontal:8,borderRadius:10,backgroundColor:urgent?colors.selected:colors.soft}}>
+    <Icon name="time-outline" size={16} color={urgent?colors.purple:colors.ink}/>
+    <Label>{urgent?t('ينتهي قريبًا','Ends soon'):t('متبقّي','Left')} {Math.floor(remainingSeconds/60)}:{String(remainingSeconds%60).padStart(2,'0')}</Label>
    </View>
   </View>
   <View style={row}>
@@ -72,7 +72,7 @@ export default function DriverOffer({offer,remainingSeconds,position,disabled,ex
   </View>
   <View style={row}>
    <View style={{flex:1.25}}><Button prominent tone="positive" icon="checkmark-circle-outline" title={t('قبول','Accept')} disabled={disabled||error==='ride_unavailable'} onPress={()=>onAccept({trip:plan,pickup:pickupPlan})}/></View>
-   <View style={{flex:1}}><Button prominent secondary tone="danger" icon="close-circle-outline" title={t('رفض','Decline')} disabled={disabled} onPress={onDecline}/></View>
+   <View style={{flex:1}}><Button prominent secondary icon="close-circle-outline" title={t('رفض','Decline')} disabled={disabled} onPress={onDecline}/></View>
   </View>
   {!expanded&&<Button secondary icon="location-outline" title={t('عرض مكان الزبون','Show pickup location')} onPress={onExpand}/>}
   {expanded&&<>

@@ -2,17 +2,17 @@ import React from 'react';
 import {Pressable,View} from 'react-native';
 import {useApp} from './context';
 import {categories,regions} from './domain';
-import {Button,Icon,Label,useText,useTheme} from './ui';
+import {Button,HelpTip,Icon,Label,useText,useTheme} from './ui';
 
 export function DriverShift({online,region,category,target,disabled,onToggle,soundReady,soundProblem,onEnableSound}:{online:boolean;region:number;category:string;target:boolean|null;disabled:boolean;onToggle:()=>void;soundReady:boolean;soundProblem:boolean;onEnableSound:()=>void}){
- const {state}=useApp();const t=useText();const {colors,dark}=useTheme();
+ const {state}=useApp();const t=useText();const {colors}=useTheme();
  const ar=state.language==='ar';
- const accent=online?(dark?'#85dfb1':'#116443'):colors.muted;
+ const accent=online?colors.purple:colors.muted;
  const area=regions[region]?.[ar?0:1];
  const service=categories.find(item=>item.id===category)?.[state.language]??category;
  return <View style={{backgroundColor:colors.background,borderColor:colors.line,borderWidth:1,borderRadius:18,padding:15,gap:12}}>
   <View style={{flexDirection:ar?'row-reverse':'row',alignItems:'center',gap:10}}>
-   <View style={{width:46,height:46,borderRadius:14,alignItems:'center',justifyContent:'center',backgroundColor:online?(dark?'#18382b':'#e4f4eb'):colors.soft}}>
+   <View style={{width:46,height:46,borderRadius:14,alignItems:'center',justifyContent:'center',backgroundColor:online?colors.selected:colors.soft}}>
     <Icon name={online?'radio-outline':'pause-circle-outline'} size={25} color={accent}/>
    </View>
    <View style={{flex:1}}>
@@ -20,11 +20,13 @@ export function DriverShift({online,region,category,target,disabled,onToggle,sou
     <Label muted>{[area,service].filter(Boolean).join(' · ')}</Label>
    </View>
   </View>
-  <Button prominent tone={online?'danger':'positive'} icon={online?'stop-circle-outline':'power-outline'}
+  <Button prominent secondary={online} icon={online?'stop-circle-outline':'power-outline'}
    title={target===null?(online?t('إيقاف استقبال الطلبات','Stop receiving requests'):t('تفعيل استقبال الطلبات','Start receiving requests'))
     :target?t('جارٍ تفعيل الاستقبال…','Starting requests…'):t('جارٍ إيقاف الاستقبال…','Stopping requests…')}
    disabled={disabled} onPress={onToggle}/>
-  <Label muted>{t('أثناء الاستقبال والتطبيق مفتوح، يُستخدم موقعك لترتيب الطلبات القريبة.','While accepting requests with the app open, your location is used to match nearby pickups.')}</Label>
+  <HelpTip title={t('كيف يعمل استقبال الطلبات؟','How do I receive requests?')}>
+   <Label>{t('فعّل الاستقبال ليظهر لك ما يناسب منطقتك وفئة سيارتك. أثناء فتح التطبيق يُستخدم موقعك لترتيب الطلبات القريبة.','Turn on requests to see offers matching your region and car type. While the app is open, your location is used to match nearby pickups.')}</Label>
+  </HelpTip>
   {online&&!soundReady&&<Button secondary icon="volume-high-outline" title={t('تفعيل صوت الطلبات','Enable request sound')} onPress={onEnableSound}/>}
   {online&&soundProblem&&<Label muted>{t('تعذّر تشغيل صوت الطلبات. جرّب تفعيله مرة ثانية.','Request sound could not start. Try enabling it again.')}</Label>}
  </View>;
