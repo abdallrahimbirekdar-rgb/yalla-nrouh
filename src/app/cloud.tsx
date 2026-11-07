@@ -20,7 +20,7 @@ import {authClient} from '../auth-client';
 import {useRideRecovery} from '../use-ride-recovery';
 import {claimDriverSharingAttempt,readDriverSharingConsent,saveDriverSharingConsent} from '../driver-sharing-consent';
 import {createRefreshQueue} from '../refresh-queue';
-import {Button,HelpTip,Icon,Label,Page,Panel,useText,useTheme} from '../ui';
+import {Button,DriverModeIcon,HelpTip,Icon,Label,Page,Panel,useText,useTheme} from '../ui';
 const live=(r:CloudRide)=>!['completed','cancelled'].includes(r.status);
 export default function Rides(){
  const auth=useAuth();const userId=auth.session?.user.id;const {state,draft,setDraft,foreground,connection}=useApp();const t=useText();const {colors}=useTheme();const params=useLocalSearchParams<{mode?:string;ride?:string;shareUnavailable?:string}>();const driverMode=auth.driver||params.mode==='driver';const historyMode=!driverMode&&params.mode==='history';
@@ -411,8 +411,10 @@ export default function Rides(){
 
   </View>;
  }
- if(!auth.ready||auth.session&&!auth.rolesReady)return <Page title={t('رحلاتي','My rides')}><Label>{t('جارٍ تحميل الحساب…','Loading account…')}</Label>{auth.problem&&<Button title={t('إعادة المحاولة','Try again')} onPress={()=>void auth.retry()}/>}</Page>;
- if(!auth.session)return <Page title={driverMode?t('وضع السائق','Driver mode'):passengerTitle}><Panel><Icon name="person-circle-outline" size={42}/><Label>{t('سجّل الدخول لعرض رحلاتك أو العمل كسائق.','Sign in to view your rides or use driver mode.')}</Label><Button title={t('تسجيل الدخول','Sign in')} onPress={()=>router.push(historyMode?{pathname:'/account',params:{next:'history'}}:'/account')}/></Panel></Page>;
+ const title=driverMode?t('وضع السائق','Driver mode'):passengerTitle;
+ const titleIcon=driverMode?<DriverModeIcon/>:undefined;
+ if(!auth.ready||auth.session&&!auth.rolesReady)return <Page title={driverMode?title:t('رحلاتي','My rides')} titleIcon={titleIcon}><Label>{t('جارٍ تحميل الحساب…','Loading account…')}</Label>{auth.problem&&<Button title={t('إعادة المحاولة','Try again')} onPress={()=>void auth.retry()}/>}</Page>;
+ if(!auth.session)return <Page title={title} titleIcon={titleIcon}><Panel><Icon name="person-circle-outline" size={42}/><Label>{t('سجّل الدخول لعرض رحلاتك أو العمل كسائق.','Sign in to view your rides or use driver mode.')}</Label><Button title={t('تسجيل الدخول','Sign in')} onPress={()=>router.push(historyMode?{pathname:'/account',params:{next:'history'}}:'/account')}/></Panel></Page>;
  const split=!!currentDriverRide&&currentDriverRide.id===compactRide;
  const splitHeader=split?<View style={{flexDirection:state.language==='ar'?'row-reverse':'row',justifyContent:'space-between',alignItems:'center',flexWrap:'wrap',columnGap:8}}>
   <Label muted>{t('عرض مختصر للرحلة','Compact ride view')}</Label>
@@ -428,7 +430,7 @@ export default function Rides(){
  </RideFooter>:!driverMode&&!historyMode&&params.ride&&loading?<RideFooter>
   <Label>{t('جارٍ تحميل حالة الطلب…','Loading request status…')}</Label>
  </RideFooter>:undefined;
- return <Page title={driverMode?t('وضع السائق','Driver mode'):passengerTitle} compact={driverMode||!historyMode} showBrand={driverMode} onSettings={driverMode?openDriverSettings:undefined} header={splitHeader} footer={footer}>
+ return <Page title={title} titleIcon={titleIcon} compact={driverMode||!historyMode} showBrand={driverMode} onSettings={driverMode?openDriverSettings:undefined} header={splitHeader} footer={footer}>
   {driverMode&&historyKind&&userId&&<DriverHistory key={userId} kind={historyKind} owner={userId} onSelect={setHistoryKind} onClose={closeHistory}/>}
   {driverMode&&driver?.approved&&!currentDriverRide&&<DriverShift
    online={driver.online} region={driver.region} category={driver.category} target={workTarget}

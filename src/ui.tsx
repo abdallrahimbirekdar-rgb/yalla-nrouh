@@ -18,7 +18,7 @@ export function useText(){
  return useCallback((ar:string,en:string,de?:string)=>translate(language,ar,en,de),[language]);
 }
 export function Label({children,muted=false,large=false,display=false}:{children:React.ReactNode;muted?:boolean;large?:boolean;display?:boolean}){const {state}=useApp();const {colors}=useTheme();return <Text style={[styles.text,{color:muted?colors.muted:colors.ink,textAlign:state.language==='ar'?'right':'left',writingDirection:state.language==='ar'?'rtl':'ltr',fontWeight:large||display?'700':'400'},muted&&styles.muted,large&&styles.large,display&&styles.display]}>{children}</Text>}
-export function Button({title,onPress,secondary=false,disabled=false,icon,prominent=false,tone}:{title:string;onPress:()=>void;secondary?:boolean;disabled?:boolean;icon?:IconName|React.ReactElement;prominent?:boolean;tone?:'positive'|'danger'}){
+export function Button({title,onPress,secondary=false,disabled=false,icon,prominent=false,tone}:{title:string;onPress:()=>void;secondary?:boolean;disabled?:boolean;icon?:IconName;prominent?:boolean;tone?:'positive'|'danger'}){
  const {state}=useApp();const {colors,dark}=useTheme();
  const fill=tone==='positive'?'#116443':tone==='danger'?'#9a292f':colors.ink;
  const accent=tone==='positive'?(dark?'#85dfb1':fill):tone==='danger'?(dark?'#ffb0b4':fill):colors.ink;
@@ -30,7 +30,7 @@ export function Button({title,onPress,secondary=false,disabled=false,icon,promin
   (pressed||disabled)&&{opacity:0.45},
  ]}>
   <View style={{flexDirection:state.language==='ar'?'row-reverse':'row',alignItems:'center',justifyContent:'center',gap:9}}>
-   {typeof icon==='string'?<Icon name={icon} size={prominent?24:20} color={foreground}/>:icon}
+   {icon&&<Icon name={icon} size={prominent?24:20} color={foreground}/>}
    <Text style={{fontWeight:prominent?'700':'600',fontSize:prominent?18:14,lineHeight:26,color:foreground,textAlign:'center',flexShrink:1}}>{title}</Text>
   </View>
  </Pressable>;
@@ -79,7 +79,7 @@ export function LanguagePicker(){
   </View>
  </View>;
 }
-function DriverModeIcon(){
+export function DriverModeIcon(){
  if(Platform.OS!=='web')return <Icon name="car-sport-outline" size={24}/>;
  return <svg width={36} height={36} viewBox="0 0 32 32" aria-hidden="true" focusable="false">
   <rect width={32} height={32} rx={10} fill={brandHeader.background}/>
@@ -103,7 +103,7 @@ export function AppMenu({onSettings,inverse=false}:{onSettings?:()=>void;inverse
  {!auth.driver&&<Button icon="car-outline" title={t('حجز رحلة','Book a ride')} onPress={()=>go('/')}/>}
  <Button secondary icon="person-circle-outline" title={auth.session?(auth.driver?t('حسابي','My account'):t('حسابي وأماكني','My account and places')):t('تسجيل الدخول / حساب جديد','Sign in or create an account')} onPress={()=>go('/account')}/>
  {!auth.driver&&<Button secondary icon="time-outline" title={t('رحلاتي','My rides')} onPress={()=>go('/cloud')}/>}
- <Button secondary icon={<DriverModeIcon/>} title={t('وضع السائق','Driver mode')} onPress={()=>{setOpen(false);router.push({pathname:'/cloud',params:{mode:'driver'}})}}/>
+ <Button secondary icon="car-sport-outline" title={t('وضع السائق','Driver mode')} onPress={()=>{setOpen(false);router.push({pathname:'/cloud',params:{mode:'driver'}})}}/>
  {auth.admin&&<Button secondary icon="shield-checkmark-outline" title={t('لوحة الإدارة','Administration')} onPress={()=>go('/admin')}/>}
  <Button secondary icon="options-outline" title={t('الإعدادات والأذونات','Settings and permissions')} onPress={()=>go('/settings')}/>
  {shell&&<Button secondary icon="refresh-outline" title={t('تحديث العرض','Refresh page')} onPress={()=>{setOpen(false);shell.postMessage(JSON.stringify({type:'refresh'}))}}/>}
@@ -111,20 +111,25 @@ export function AppMenu({onSettings,inverse=false}:{onSettings?:()=>void;inverse
  <Label muted>{t('نسخة اختبار • الدفع نقدًا','Test version • Pay in cash')}</Label>
  </ScrollView></View></View></Modal></>;
 }
-export function Page({title,children,hero,footer,header,compact=false,simpleHeader=false,showBrand=false,viewportHeight,backTo='/'}:{title:string;children:React.ReactNode;hero?:React.ReactNode;footer?:React.ReactNode;header?:React.ReactNode;compact?:boolean;simpleHeader?:boolean;showBrand?:boolean;viewportHeight?:number;onSettings?:()=>void;backTo?:Href}){
+export function Page({title,titleIcon,children,hero,footer,header,compact=false,simpleHeader=false,showBrand=false,viewportHeight,backTo='/'}:{title:string;titleIcon?:React.ReactElement;children:React.ReactNode;hero?:React.ReactNode;footer?:React.ReactNode;header?:React.ReactNode;compact?:boolean;simpleHeader?:boolean;showBrand?:boolean;viewportHeight?:number;onSettings?:()=>void;backTo?:Href}){
  const auth=useAuth();const {ready,loadError,retry,state}=useApp();const {colors}=useTheme();const t=useText();const themed=themedStyles(colors);
  const arabic=state.language==='ar';
  const driverHeader=compact&&auth.driver&&!simpleHeader;
  const brandedHeader=driverHeader||showBrand;
+ const heading=titleIcon
+  ? <View style={{flexDirection:arabic?'row-reverse':'row',alignItems:'center',gap:10}}>
+     {titleIcon}<View style={{flexShrink:1}}><Label large>{title}</Label></View>
+    </View>
+  : <Label large>{title}</Label>;
  const back=<Pressable accessibilityRole="button" accessibilityLabel={auth.driver?t('لوحة السائق','Driver dashboard'):simpleHeader?t('رجوع','Back'):t('العودة للحجز','Back to booking')} style={themed.circle} onPress={()=>auth.driver?router.replace({pathname:'/cloud',params:{mode:'driver'}}):router.replace(backTo)}><Icon name={arabic?'arrow-forward':'arrow-back'}/></Pressable>;
  return <SafeAreaView style={[styles.safe,{backgroundColor:compact?colors.soft:colors.background,maxHeight:viewportHeight}]}>
   <KeyboardAvoidingView style={{flex:1}} behavior={Platform.OS==='ios'?'padding':undefined}>
    <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={[styles.page,compact&&styles.compactPage]}>
     {header??<View style={{flexDirection:arabic?'row-reverse':'row',alignItems:'center',gap:8,minHeight:44}}>
      {!brandedHeader&&back}
-     {(simpleHeader||brandedHeader)&&<View style={{flex:1}}><Label large>{title}</Label></View>}
+     {(simpleHeader||brandedHeader)&&<View style={{flex:1}}>{heading}</View>}
     </View>}
-    {hero??(!header&&!simpleHeader&&!brandedHeader?<Label large>{title}</Label>:null)}
+    {hero??(!header&&!simpleHeader&&!brandedHeader?heading:null)}
     {!ready?<Panel>{loadError?<><Label>{t('تعذر تحميل البيانات المحفوظة.','Could not load saved data.')}</Label><Button title={t('إعادة المحاولة','Try again')} onPress={retry}/></>:<ActivityIndicator color={colors.purple}/>}</Panel>:<><DeviceStatus/>{children}</>}
    </ScrollView>
    {ready&&footer}
