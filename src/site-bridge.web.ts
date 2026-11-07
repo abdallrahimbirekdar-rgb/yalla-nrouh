@@ -140,7 +140,6 @@ export async function loadSiteState(storage:Pick<Storage,'getItem'|'setItem'>,ke
  const host=window as SiteWindow;
  const bridge=host.ReactNativeWebView;
  if(!bridge)return saved;
- document.documentElement?.classList.add('yn-native-app');
  listenNativePosition(host);
  const id=Date.now().toString(36)+'-'+Math.random().toString(36).slice(2);
  const version=document.querySelector('meta[name="yalla-site-version"]')?.getAttribute('content')??null;

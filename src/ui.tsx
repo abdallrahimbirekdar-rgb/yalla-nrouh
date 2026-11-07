@@ -4,7 +4,7 @@ import {Modal,ActivityIndicator,KeyboardAvoidingView,Platform,Pressable,ScrollVi
 import {SafeAreaView} from 'react-native-safe-area-context';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import {BrandLogo} from './brand-logo';
-import {router,type Href} from 'expo-router';
+import {Link,router,type Href} from 'expo-router';
 import {useApp} from './context';
 import {languages,translate} from './locale';
 import {getMigrationPending} from './storage';
@@ -95,6 +95,7 @@ export function DriverModeIcon(){
 
 export function AppMenu({onSettings,inverse=false}:{onSettings?:()=>void;inverse?:boolean}={}){
  const auth=useAuth();const [open,setOpen]=useState(false);const {colors}=useTheme();const t=useText();
+ const {state:{language}}=useApp();
  const shell=Platform.OS==='web'&&typeof window!=='undefined'?(window as Window&{ReactNativeWebView?:{postMessage:(value:string)=>void}}).ReactNativeWebView:undefined;
  useEffect(()=>{if(Platform.OS!=='web'||!open)return;const back=(event:Event)=>{event.preventDefault();setOpen(false)};window.addEventListener('yalla:native-back',back);return()=>window.removeEventListener('yalla:native-back',back)},[open]);
  const go=(path:'/'|'/account'|'/cloud'|'/admin'|'/settings')=>{setOpen(false);if(path==='/settings'&&onSettings)onSettings();else router.push(path)};
@@ -108,6 +109,17 @@ export function AppMenu({onSettings,inverse=false}:{onSettings?:()=>void;inverse
  <Button secondary icon="options-outline" title={t('الإعدادات والأذونات','Settings and permissions')} onPress={()=>go('/settings')}/>
  {shell&&<Button secondary icon="refresh-outline" title={t('تحديث العرض','Refresh page')} onPress={()=>{setOpen(false);shell.postMessage(JSON.stringify({type:'refresh'}))}}/>}
  <LanguagePicker/>
+ {Platform.OS==='web'&&!shell&&<Link
+  href="https://github.com/abdallrahimbirekdar-rgb/yalla-nrouh/releases/download/android-test-unified/yalla-nrouh-test.apk" asChild>
+  <Pressable accessibilityRole="link" onPress={()=>setOpen(false)}
+   style={({pressed})=>[styles.button,{flexDirection:language==='ar'?'row-reverse':'row',gap:9,alignItems:'center',
+    backgroundColor:colors.brandAction,opacity:pressed ? .82 : 1}]}>
+   <Icon name="download-outline" size={21} color={brandHeader.accent}/>
+   <Text style={{color:brandHeader.ink,fontSize:14,fontWeight:'700',textAlign:'center'}}>
+    {t('تحميل تطبيق أندرويد','Download the Android app','Android-App herunterladen')}
+   </Text>
+  </Pressable>
+ </Link>}
  <Label muted>{t('نسخة اختبار • الدفع نقدًا','Test version • Pay in cash')}</Label>
  </ScrollView></View></View></Modal></>;
 }

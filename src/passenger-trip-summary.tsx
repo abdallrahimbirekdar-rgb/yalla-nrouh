@@ -17,12 +17,21 @@ export function usePassengerMapHeight(){
  return Math.min(252,Math.max(176,Math.round(height*.32)));
 }
 
+export function PassengerMapFrame({children}:{children:React.ReactNode}){
+ const {colors}=useTheme();
+ return <View style={{borderWidth:1,borderColor:colors.line,borderRadius:20,padding:4,
+  backgroundColor:colors.surface,boxShadow:'0px 4px 12px #08264818'}}>
+  <View style={{borderRadius:15,overflow:'hidden',backgroundColor:colors.surface}}>{children}</View>
+ </View>;
+}
+
 export function PassengerMap(props:Omit<React.ComponentProps<typeof MapCanvas>,'compact'|'readOnly'|'onChange'|'minMapHeight'>){
  const height=usePassengerMapHeight();
- const {colors}=useTheme();
- return <View style={{height,borderRadius:16,overflow:'hidden',backgroundColor:colors.surface}}>
-  <MapCanvas {...props} compact readOnly minMapHeight={height} onChange={()=>{}}/>
- </View>;
+ return <PassengerMapFrame>
+  <View style={{height}}>
+   <MapCanvas {...props} compact readOnly minMapHeight={height} onChange={()=>{}}/>
+  </View>
+ </PassengerMapFrame>;
 }
 
 export function PassengerFare({fare,pending=false,compact=false}:{fare:number|null;pending?:boolean;compact?:boolean}){

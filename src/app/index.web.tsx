@@ -9,7 +9,7 @@ import {useApp} from '../context';
 import {useAuth} from '../auth';
 import {useCurrentPosition} from '../use-current-position';
 import MapCanvas from '../map/MapCanvas';
-import {usePassengerMapHeight} from '../passenger-trip-summary';
+import {PassengerMapFrame,usePassengerMapHeight} from '../passenger-trip-summary';
 import {brandHeader} from '../theme';
 import {Button,DeviceStatus,Icon,Label,type IconName,useText,useTheme} from '../ui';
 
@@ -66,11 +66,11 @@ export default function Booking(){
  return <SafeAreaView style={{flex:1,backgroundColor:colors.background}}>
   <View style={styles.frame}>
    <ScrollView contentContainerStyle={styles.scroll}>
-    <View style={[styles.mapFrame,{backgroundColor:colors.surface,borderColor:colors.line}]}>
+    <View style={styles.mapFrame}><PassengerMapFrame>
      <MapCanvas compact readOnly minMapHeight={mapHeight} cameraTarget={gps.camera} point={gps.camera?.point??null} onChange={()=>{}}/>
      {(gps.busy||gps.failure)&&<View pointerEvents="none" style={[styles.status,{backgroundColor:colors.background}]}><Label muted>{status}</Label></View>}
      <Pressable accessibilityRole="button" accessibilityLabel={t('موقعي الحالي','My current location')} onPress={()=>void gps.locate()} disabled={gps.busy} style={[styles.locate,{backgroundColor:colors.background,borderColor:colors.line}]}>{gps.busy?<ActivityIndicator color={colors.purple}/>:<Icon name="locate" color={colors.purple}/>}</Pressable>
-    </View>
+    </PassengerMapFrame></View>
     <View style={styles.content}>
      <DeviceStatus/>
      <Pressable accessibilityRole="button" disabled={bookingBlocked} accessibilityState={{disabled:bookingBlocked}} accessibilityLabel={t('لوين بدك تروح؟ ابحث عن وجهتك','Where to? Search for your destination')} onPress={choose} style={({pressed})=>[styles.search,row,{backgroundColor:colors.brandAction,opacity:pressed ? .82 : 1}]}>
@@ -104,7 +104,7 @@ function Shortcut({icon,title,onPress,mint=false}:{icon:IconName;title:string;on
 const styles=StyleSheet.create({
  frame:{flex:1,width:'100%',maxWidth:1000,alignSelf:'center'},
  scroll:{paddingBottom:28,paddingTop:10},
- mapFrame:{marginHorizontal:12,borderRadius:22,borderWidth:1,overflow:'hidden'},
+ mapFrame:{marginHorizontal:12},
  content:{width:'100%',maxWidth:640,alignSelf:'center',paddingHorizontal:16,gap:12},
  status:{position:'absolute',top:12,left:16,right:16,borderRadius:12,paddingVertical:7,paddingHorizontal:12,elevation:2},
  locate:{position:'absolute',bottom:12,left:16,width:48,height:48,borderRadius:24,borderWidth:1,alignItems:'center',justifyContent:'center',elevation:3,boxShadow:'0px 2px 10px #00000018'},

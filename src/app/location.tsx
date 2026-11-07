@@ -7,7 +7,7 @@ import {PositionError} from '../current-position';
 import {recentWebPosition} from '../web-position';
 import {type CameraTarget,useCurrentPosition} from '../use-current-position';
 import MapCanvas from '../map/MapCanvas';
-import {usePassengerMapHeight} from '../passenger-trip-summary';
+import {PassengerMapFrame,usePassengerMapHeight} from '../passenger-trip-summary';
 import {googlePlaceAutocomplete,searchGooglePlaces} from '../map/search-places';
 import type {PlaceSuggestion} from '../map/place-autocomplete';
 import {useAuth} from '../auth';
@@ -256,7 +256,7 @@ function LocationPicker({pickup,focus,savedView,edit,fromReview}:{pickup:boolean
  const row={flexDirection:rtl?'row-reverse' as const:'row' as const};
  const clearSearch=t('مسح البحث','Clear search');
  return <Page compact simpleHeader viewportHeight={keyboardHeight} backTo={backTo} title={title}>
-  {showSearch&&<View nativeID={searchActive?'ride-address-search-active':undefined}>
+  {showSearch&&<View>
   <Panel outlined>
    <View style={{flexDirection:state.language==='ar'?'row-reverse':'row',alignItems:'flex-end',gap:8}}>
     <View style={{flex:1}}>
@@ -315,7 +315,7 @@ function LocationPicker({pickup,focus,savedView,edit,fromReview}:{pickup:boolean
     onPress={()=>{Keyboard.dismiss();setMapOpen(value=>!value)}}/></View>
    {!editing&&<View style={{flex:1}}><Button secondary icon="bookmark-outline" title={savedOpen?t('إخفاء العناوين','Hide saved addresses'):t('العناوين المحفوظة','Saved addresses')} onPress={()=>{Keyboard.dismiss();setSavedOpen(value=>!value)}}/></View>}
   </View>
-  {mapOpen&&<MapCanvas minMapHeight={mapHeight} point={point??oldPlace?.coordinate??null} initialCenter={initialCenter.current} cameraTarget={selectionCamera??gps.camera} onChange={next=>{if(!confirming&&!busy&&!saving)choose(next)}}/>}
+  {mapOpen&&<PassengerMapFrame><MapCanvas minMapHeight={mapHeight} point={point??oldPlace?.coordinate??null} initialCenter={initialCenter.current} cameraTarget={selectionCamera??gps.camera} onChange={next=>{if(!confirming&&!busy&&!saving)choose(next)}}/></PassengerMapFrame>}
   {!editing&&<View style={{gap:8}}>
    {savedOpen&&(token?<Panel>{savedList}{point&&(!pickup||pickupMode==='manual')&&<Button secondary icon="bookmark-outline" title={t('حفظ النقطة المحددة كعنوان','Save selected point as an address')} onPress={()=>void savePlace()} disabled={!loaded||saving||confirming}/>}</Panel>:signIn)}
   </View>}
