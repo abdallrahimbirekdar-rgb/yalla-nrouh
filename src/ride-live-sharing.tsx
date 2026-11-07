@@ -1,6 +1,6 @@
 import {useCallback,useEffect,useMemo,useRef,useState} from 'react';
 import {Linking,Pressable,useWindowDimensions,View} from 'react-native';
-import {recentVerifiedWebPosition} from './web-position';
+import {cloudGetToken} from './cloud-api';
 import {authClient} from './auth-client';
 import {isCoordinate,type Coordinate} from './geo';
 import {distanceMeters} from './navigation-progress';
@@ -8,7 +8,7 @@ import {googleDirections} from './google-links';
 import MapCanvas from './map/MapCanvas';
 import {Button,HelpTip,Icon,Label,useText,useTheme} from './ui';
 
-type Reply={ok:boolean;rideId?:string|null;reason?:string};
+type Reply={ok:boolean;rideId?:string|null};
 type SharingRole='driver'|'passenger';
 type RideTable='ride_passenger_positions'|'ride_pickup_changes';
 const bridge=()=>typeof window==='undefined'?undefined:(window as Window&{ReactNativeWebView?:{postMessage:(data:string)=>void}}).ReactNativeWebView;
@@ -101,29 +101,44 @@ export function useRideSharing(owner:string|undefined){
  return {capability,activeRide,busy,problem,start,stop};
 }
 
-export type NavigationProvider='google'|'mapsme';
-export async function openRideMaps(point:Coordinate,adjacent:boolean,nativeAvailable:boolean,provider:NavigationProvider):Promise<'opened'|'pin'|'unavailable'|'update-required'>{
- if(provider==='mapsme'){
-  if(typeof window==='undefined'||(window as Window&{__YALLA_MAPS_ME__?:boolean}).__YALLA_MAPS_ME__!==true)return 'update-required';
-  const origin=recentVerifiedWebPosition(20000);
-  const result=await nativeRequest('ride-maps-me',{...point,adjacent,origin:origin??undefined});
-  return result.ok?(result.reason==='pin'?'pin':'opened'):'unavailable';
- }
- if(nativeAvailable)return (await nativeRequest('ride-maps',{...point,adjacent})).ok?'opened':'unavailable';
- try{await Linking.openURL(googleDirections(point,undefined,true));return 'opened'}catch{return 'unavailable'}
+export const osmandPassengerSupported=()=>typeof window!=='undefined'&&
+ (window as Window&{__YALLA_OSMAND_PASSENGER__?:boolean}).__YALLA_OSMAND_PASSENGER__===true;
+
+export function stopOsmAndPassenger(){
+ if(!osmandPassengerSupported())return;
+ try{bridge()?.postMessage(JSON.stringify({type:'osmand-passenger-stop'}))}catch{/* The native service also checks ride eligibility. */}
 }
 
-export function MapsMeHelp(){
+const navigationMessage={google:'ride-maps',osmand:'ride-osmand'} as const;
+export type NavigationProvider=keyof typeof navigationMessage;
+export async function openRideMaps(point:Coordinate,adjacent:boolean,nativeAvailable:boolean,provider:NavigationProvider,waitingRideId?:string):Promise<boolean>{
+ if(provider==='osmand'&&!osmandPassengerSupported())return false;
+ const accessToken=provider==='osmand'&&waitingRideId?cloudGetToken():null;
+ if(nativeAvailable)return (await nativeRequest(navigationMessage[provider],{
+  ...point,adjacent,...(accessToken?{rideId:waitingRideId,accessToken}:{}),
+ })).ok;
+ if(provider!=='google')return false;
+ try{await Linking.openURL(googleDirections(point,undefined,true));return true}catch{return false}
+}
+
+export function OsmAndHelp(){
  const t=useText();
  const [storeError,setStoreError]=useState(false);
- return <HelpTip title={t('إعداد MAPS.ME وتنزيل خريطة سوريا','Set up MAPS.ME and download the Syria map')}>
-  <Label>{t('١. اضغط زر Google Play أدناه وثبّت MAPS.ME على هاتف السائق.','1. Open Google Play below and install MAPS.ME on the driver’s phone.')}</Label>
-  <Label>{t('٢. افتح MAPS.ME، ثم القائمة ← تنزيل الخرائط (Download Maps). ابحث عن «سوريا» أو Syria ونزّل خريطة المنطقة اللي بتشتغل فيها.','2. In MAPS.ME, go to Menu → Download Maps. Search for Syria and download the map for your driving area.')}</Label>
-  <Label>{t('٣. ارجع إلى يلّا نروح واختر MAPS.ME من خيارات الملاحة في الرحلة. إذا ظهر دبوس الوجهة، اضغط عليه واختر «الطريق إلى هنا». ثم اضغط «ابدأ» في MAPS.ME.','3. Return to Yalla Nrouh and select MAPS.ME in the ride’s navigation options. If you see a destination pin, tap it and choose Route To. Then tap Start in MAPS.ME.')}</Label>
-  <Label muted>{t('تقدر تتنقّل دون إنترنت ضمن الخريطة المنزّلة. موقع الزبون المتحرّك يبقى على خريطة يلّا نروح عند مشاركة الموقع وتوفر الإنترنت.','You can navigate offline in the downloaded area. The live customer location stays on the Yalla Nrouh map when location is shared and internet is available.')}</Label>
-  <Button secondary icon="download-outline" title={t('تحميل MAPS.ME من Google Play','Get MAPS.ME on Google Play')}
-   onPress={()=>{setStoreError(false);void Linking.openURL('https://play.google.com/store/apps/details?id=com.mapswithme.maps.pro').catch(()=>setStoreError(true));}}/>
-  {storeError&&<Label muted>{t('تعذّر فتح المتجر. ابحث عن MAPS.ME في Google Play.','Could not open the store. Search for MAPS.ME in Google Play.')}</Label>}
+ const [permissionHint,setPermissionHint]=useState(false);
+ return <HelpTip title={t('إعداد OsmAnd وتنزيل خريطة سوريا','Set up OsmAnd and download Syria')}>
+  <Label>{t('١. اضغط زر Google Play أدناه وثبّت تطبيق OsmAnd.','1. Open Google Play below and install OsmAnd.')}</Label>
+  <Label>{t('٢. افتح OsmAnd ثم القائمة ← الخرائط والموارد ← التنزيلات. ابحث عن «سوريا» أو Syria ونزّل الخريطة القياسية.','2. In OsmAnd, go to Menu → Maps & Resources → Downloads. Search for Syria and download the standard map.')}</Label>
+  <Label>{t('٣. ارجع إلى يلّا نروح واضغط زر الملاحة في الرحلة. يبدأ OsmAnd مسار السيارة من موقعك الحالي بعد حساب الطريق.','3. Return to Yalla Nrouh and tap the ride’s navigation button. OsmAnd starts driving guidance from your current location after calculating the route.')}</Label>
+  <Label muted>{t('بعد تنزيل الخريطة يمكنك الملاحة دون إنترنت ضمن المنطقة المحمّلة. استقبال الطلبات وتحديثات موقع الزبون يحتاجان اتصالًا.','After downloading the map, you can navigate offline in that area. Ride requests and customer location updates need a connection.')}</Label>
+  <Button secondary icon="download-outline" title={t('تحميل OsmAnd من Google Play','Get OsmAnd on Google Play')}
+   onPress={()=>{setStoreError(false);void Linking.openURL('https://play.google.com/store/apps/details?id=net.osmand').catch(()=>setStoreError(true));}}/>
+  {storeError&&<Label muted>{t('تعذّر فتح المتجر. ابحث عن OsmAnd في Google Play.','Could not open the store. Search Google Play for OsmAnd.')}</Label>}
+  {osmandPassengerSupported()&&<>
+   <Label>{t('عند فتح ملاحة OsmAnd للذهاب إلى الزبون لأول مرة، تظهر نافذة الموافقة تلقائيًا في الإصدارات التي تدعمها. اضغط «سماح» مرة واحدة.','When you first open OsmAnd to drive to a customer, supported versions show a permission prompt automatically. Tap Allow once.')}</Label>
+   <Button secondary icon="person-outline" title={t('إعادة طلب إذن عرض العلامة','Request marker permission again')}
+    onPress={()=>{setPermissionHint(false);void nativeRequest('osmand-map-access').then(({ok})=>setPermissionHint(!ok));}}/>
+   {permissionHint&&<Label muted>{t('تعذّر فتح نافذة الموافقة. إصدارات OsmAnd الأقدم تفتح الملاحة، لكن عرض العلامة قد لا يكون متاحًا فيها.','Could not open the permission prompt. Older OsmAnd versions still open navigation, but the marker may be unavailable.')}</Label>}
+  </>}
  </HelpTip>;
 }
 

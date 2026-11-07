@@ -1,16 +1,18 @@
 package com.yallanrouh.navigation
 
 import android.app.Activity
-import android.content.ActivityNotFoundException
+import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import androidx.core.content.ContextCompat
 import android.media.AudioAttributes
+import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
 import android.view.WindowManager
+import android.widget.Toast
 import expo.modules.kotlin.Promise
 import expo.modules.kotlin.functions.Queues
 import expo.modules.kotlin.modules.Module
@@ -20,6 +22,11 @@ import java.util.UUID
 
 class DriverNavigationModule : Module() {
   private data class Prompt(val text: String, val language: String, val result: Promise)
+  private data class OsmAndRequest(
+    val target: String, val navigation: Intent? = null, val ride: String? = null,
+    val token: String? = null, val arabic: Boolean = false
+  )
+  private var osmAndRequest: OsmAndRequest? = null
   private val main = Handler(Looper.getMainLooper())
   private var speech: TextToSpeech? = null
   private var initialized = false
@@ -64,13 +71,76 @@ class DriverNavigationModule : Module() {
 
     AsyncFunction("rideSharingStatus") { RideSharingService.currentRide }.runOnQueue(Queues.MAIN)
 
-    AsyncFunction("openRideMaps") { latitude: Double, longitude: Double, adjacent: Boolean ->
+    AsyncFunction("stopOsmAndPassenger") {
+      appContext.reactContext?.let(::stopPassenger)
+    }.runOnQueue(Queues.MAIN)
+
+    AsyncFunction("requestOsmAndMapAccess") {
+      val activity = appContext.currentActivity ?: return@AsyncFunction false
+      val target = OSMAND_PACKAGES.firstOrNull {
+        activity.packageManager.getLaunchIntentForPackage(it) != null
+      } ?: return@AsyncFunction false
+      requestOsmAndConsent(activity, OsmAndRequest(target))
+    }.runOnQueue(Queues.MAIN)
+
+    OnActivityResult { activity, result ->
+      val request = osmAndRequest
+      if (result.requestCode == OSMAND_PERMISSION && request != null) {
+        val allowed = result.resultCode == Activity.RESULT_OK &&
+          result.data?.getStringArrayExtra("granted_groups")?.contains("map") == true
+        osmAndPreferences(activity).edit().putBoolean(request.target, allowed).apply()
+        // Android can deliver the result before onResume. Let the activity resume
+        // before starting the foreground service and opening navigation.
+        main.post {
+          if (osmAndRequest !== request) return@post
+          osmAndRequest = null
+          val navigation = request.navigation ?: return@post
+          if (activity.isFinishing || activity.isDestroyed) return@post
+          if (!launchOsmAnd(activity, navigation, request, allowed)) {
+            val text = if (request.arabic) "تعذّر فتح OsmAnd. أعد المحاولة." else "Could not open OsmAnd. Try again."
+            Toast.makeText(activity, text, Toast.LENGTH_LONG).show()
+          }
+        }
+      }
+    }
+
+    AsyncFunction("openRideMaps") { latitude: Double, longitude: Double, adjacent: Boolean, provider: String,
+      ride: String?, accessToken: String?, arabic: Boolean ->
       val activity = appContext.currentActivity ?: return@AsyncFunction false
       if (latitude !in -90.0..90.0 || longitude !in -180.0..180.0) return@AsyncFunction false
       val point = "$latitude,$longitude"
-      val intent = Intent(Intent.ACTION_VIEW, Uri.parse("google.navigation:q=$point&mode=d"))
-        .setPackage("com.google.android.apps.maps")
+      val intent = when (provider) {
+        "google" -> Intent(Intent.ACTION_VIEW, Uri.parse("google.navigation:q=$point&mode=d")).setPackage("com.google.android.apps.maps")
+        "osmand" -> Intent(Intent.ACTION_VIEW, Uri.parse("osmand.api://navigate").buildUpon()
+          .appendQueryParameter("dest_lat", latitude.toString())
+          .appendQueryParameter("dest_lon", longitude.toString())
+          .appendQueryParameter("profile", "car")
+          .appendQueryParameter("force", "true")
+          .appendQueryParameter("location_permission", "true")
+          .build())
+        else -> return@AsyncFunction false
+      }
       if (adjacent) intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_LAUNCH_ADJACENT)
+      if (provider == "osmand") {
+        if (osmAndRequest != null) return@AsyncFunction true
+        for (target in OSMAND_PACKAGES) {
+          val targetIntent = Intent(intent).setPackage(target)
+          if (targetIntent.resolveActivity(activity.packageManager) == null) continue
+          val request = OsmAndRequest(target, targetIntent, ride, accessToken, arabic)
+          val tracking = ride != null && accessToken != null
+          val preferences = osmAndPreferences(activity)
+          val permissionIntent = osmAndPermissionIntent(target)
+          val supportsConsent = permissionIntent.resolveActivity(activity.packageManager) != null
+          if (tracking && supportsConsent && !preferences.contains(target) &&
+            requestOsmAndConsent(activity, request)) return@AsyncFunction true
+          // Older OsmAnd versions may already allow this app. The service
+          // checks access before it reads any passenger positions.
+          val showMarker = tracking && (!supportsConsent || preferences.getBoolean(target, false))
+          if (launchOsmAnd(activity, targetIntent, request, showMarker)) return@AsyncFunction true
+        }
+        return@AsyncFunction false
+      }
+      stopPassenger(activity)
       try {
         activity.startActivity(intent)
         true
@@ -83,52 +153,6 @@ class DriverNavigationModule : Module() {
       }
     }.runOnQueue(Queues.MAIN)
 
-    AsyncFunction("openMapsMe") { latitude: Double, longitude: Double, adjacent: Boolean,
-      originLatitude: Double?, originLongitude: Double? ->
-      val activity = appContext.currentActivity ?: return@AsyncFunction "unavailable"
-      if (latitude !in -90.0..90.0 || longitude !in -180.0..180.0) return@AsyncFunction "unavailable"
-      val point = "$latitude,$longitude"
-      val packageName = "com.mapswithme.maps.pro"
-      // With no explicit start point, MAPS.ME builds the route from its current location.
-      val routeIntent = Intent("$packageName.action.BUILD_ROUTE")
-        .putExtra("lat_to", latitude.toFloat())
-        .putExtra("lon_to", longitude.toFloat())
-        .putExtra("router", "vehicle")
-      val routeLink = if (originLatitude != null && originLatitude in -90.0..90.0 &&
-        originLongitude != null && originLongitude in -180.0..180.0) {
-        Uri.parse("https://dlink.maps.me/route").buildUpon()
-          .appendQueryParameter("sll", "$originLatitude,$originLongitude")
-          .appendQueryParameter("saddr", "")
-          .appendQueryParameter("dll", point)
-          .appendQueryParameter("daddr", "")
-          .appendQueryParameter("type", "vehicle")
-          .build()
-      } else null
-      val pinIntent = Intent("$packageName.action.SHOW_ON_MAP")
-        .putExtra("lat", latitude.toFloat())
-        .putExtra("lon", longitude.toFloat())
-      val pinLink = Uri.parse("mapsme://map").buildUpon()
-        .appendQueryParameter("v", "1")
-        .appendQueryParameter("ll", point)
-        .build()
-      val intents = listOfNotNull(
-        "route" to routeIntent,
-        routeLink?.let { "route" to Intent(Intent.ACTION_VIEW, it) },
-        "pin" to pinIntent,
-        "pin" to Intent(Intent.ACTION_VIEW, pinLink),
-        "pin" to Intent(Intent.ACTION_VIEW, Uri.parse("geo:$point?q=$point"))
-      )
-      for ((result, candidate) in intents) {
-        candidate.setPackage(packageName)
-        if (adjacent) {
-          val besideRide = Intent(candidate)
-            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_LAUNCH_ADJACENT)
-          if (tryOpenMapsMe(activity, besideRide)) return@AsyncFunction result
-        }
-        if (tryOpenMapsMe(activity, candidate)) return@AsyncFunction result
-      }
-      "unavailable"
-    }.runOnQueue(Queues.MAIN)
 
     AsyncFunction("setScreenAwake") { active: Boolean ->
       val window = appContext.currentActivity?.window ?: return@AsyncFunction
@@ -196,15 +220,67 @@ class DriverNavigationModule : Module() {
     }
   }
 
-  private fun tryOpenMapsMe(activity: Activity, intent: Intent): Boolean {
+  private fun osmAndPreferences(context: Context) =
+    context.getSharedPreferences("osmand-map-consent", Context.MODE_PRIVATE)
+
+  private fun osmAndPermissionIntent(target: String) =
+    Intent("net.osmand.aidl.REQUEST_PERMISSIONS").setPackage(target).putExtra("groups", arrayOf("map"))
+
+  private fun requestOsmAndConsent(activity: Activity, request: OsmAndRequest): Boolean {
+    if (osmAndRequest != null) return false
+    osmAndRequest = request
+    return try {
+      @Suppress("DEPRECATION")
+      activity.startActivityForResult(osmAndPermissionIntent(request.target), OSMAND_PERMISSION)
+      true
+    } catch (_: Exception) {
+      osmAndRequest = null
+      false
+    }
+  }
+
+  private fun launchOsmAnd(activity: Activity, intent: Intent, request: OsmAndRequest, showMarker: Boolean): Boolean {
+    if (showMarker) startPassenger(activity, request.ride, request.token, request.target, request.arabic)
+    else stopPassenger(activity)
+    if (tryOpenOsmAnd(activity, intent)) return true
+    if (intent.flags and Intent.FLAG_ACTIVITY_LAUNCH_ADJACENT != 0 &&
+      tryOpenOsmAnd(activity, Intent(intent).setFlags(0))) return true
+    stopPassenger(activity)
+    return false
+  }
+
+  private fun tryOpenOsmAnd(activity: Activity, intent: Intent): Boolean {
     return try {
       activity.startActivity(intent)
       true
-    } catch (_: ActivityNotFoundException) {
-      false
-    } catch (_: SecurityException) {
+    } catch (_: Exception) {
       false
     }
+  }
+
+  private fun startPassenger(activity: Activity, ride: String?, token: String?, target: String, arabic: Boolean) {
+    if (ride == null || token == null || Build.VERSION.SDK_INT < 26) {
+      stopPassenger(activity)
+      return
+    }
+    try {
+      UUID.fromString(ride)
+      OsmAndPassengerService.pending = OsmAndPassengerService.Session(ride, token, target, arabic)
+      ContextCompat.startForegroundService(activity, Intent(activity, OsmAndPassengerService::class.java))
+    } catch (_: Exception) {
+      stopPassenger(activity)
+    }
+  }
+
+  private fun stopPassenger(context: Context) {
+    osmAndRequest = null
+    OsmAndPassengerService.pending = null
+    context.stopService(Intent(context, OsmAndPassengerService::class.java))
+  }
+
+  companion object {
+    private const val OSMAND_PERMISSION = 4312
+    private val OSMAND_PACKAGES = listOf("net.osmand", "net.osmand.plus")
   }
 
   private fun configure(engine: TextToSpeech): Boolean {

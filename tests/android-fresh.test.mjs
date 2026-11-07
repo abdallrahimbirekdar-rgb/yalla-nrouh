@@ -105,22 +105,28 @@ test('ride sharing and external maps are narrow native operations',()=>{
  assert.equal(readWebMessage(JSON.stringify({...start,secret:'account-token'})),null);
  const maps={type:'ride-maps',id:'test-2',latitude:51.481,longitude:7.219,adjacent:true};
  assert.deepEqual(readWebMessage(JSON.stringify(maps)),maps);
+ assert.equal(readWebMessage(JSON.stringify({...maps,type:'ride-yandex'})),null);
+ assert.equal(readWebMessage(JSON.stringify({...maps,type:'ride-maps-me'})),null);
+ assert.equal(readWebMessage(JSON.stringify({...maps,longitude:181})),null);
+ const osmand={...maps,type:'ride-osmand'};
+ assert.deepEqual(readWebMessage(JSON.stringify(osmand)),osmand);
+ assert.deepEqual(readWebMessage(JSON.stringify({...osmand,adjacent:false})),{...osmand,adjacent:false});
+ assert.equal(readWebMessage(JSON.stringify({...osmand,latitude:'33.5'})),null);
  assert.equal(readWebMessage(JSON.stringify({...maps,latitude:91})),null);
  assert.equal(readWebMessage(JSON.stringify({...maps,adjacent:'true'})),null);
 });
 
 
-test('MAPS.ME accepts an optional measured origin and never receives credentials',()=>{
- const location={type:'ride-maps-me',id:'maps-1',latitude:33.5,longitude:36.3,adjacent:false};
- const origin={latitude:33.48,longitude:36.24};
+test('only the OsmAnd bridge accepts authenticated passenger display data',()=>{
+ const rideId='00000000-0000-4000-8000-000000000001';
+ const accessToken='header.payload.signature';
+ const location={type:'ride-osmand',id:'maps-1',latitude:33.5,longitude:36.3,adjacent:false};
  const read=message=>readWebMessage(JSON.stringify(message));
- assert.deepEqual(read(location),location);
- assert.deepEqual(read({...location,origin}),{...location,origin});
- assert.deepEqual(read({...location,origin:{...origin,accuracy:20},accessToken:'secret',rideId:'ride'}),{...location,origin});
- assert.equal(read({...location,origin:{...origin,longitude:181}}),null);
- assert.equal(read({...location,origin:{latitude:33.48}}),null);
- assert.equal(read({...location,latitude:'33.5'}),null);
- assert.equal(read({...location,type:'ride-osmand'}),null);
- assert.equal(read({...location,type:'ride-yandex'}),null);
- assert.match(bootstrapScript('x',true,false,false,true),/YALLA_MAPS_ME__=true/);
+ assert.deepEqual(read({...location,rideId,accessToken}),{...location,passenger:{rideId,accessToken}});
+ assert.deepEqual(read({...location,rideId,accessToken:'Bearer bad'}),location);
+ assert.deepEqual(read({...location,rideId:'not-a-ride',accessToken}),location);
+ assert.deepEqual(read({...location,rideId,accessToken,type:'ride-maps'}),{...location,type:'ride-maps'});
+ assert.deepEqual(read({type:'osmand-map-access',id:'permission-1'}),{type:'osmand-map-access',id:'permission-1'});
+ assert.deepEqual(read({type:'osmand-passenger-stop'}),{type:'osmand-passenger-stop'});
+ assert.match(bootstrapScript('x',true,false,false,true),/YALLA_OSMAND_PASSENGER__=true/);
 });

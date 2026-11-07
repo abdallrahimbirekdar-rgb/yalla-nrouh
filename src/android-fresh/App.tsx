@@ -72,12 +72,15 @@ const screenModule=requireOptionalNativeModule<{setScreenAwake:(active:boolean)=
  startRideSharing:(ride:string,secret:string,arabic:boolean)=>Promise<boolean>;
  stopRideSharing:(ride:string)=>Promise<void>;
  rideSharingStatus:()=>Promise<string|null>;
- openRideMaps:(latitude:number,longitude:number,adjacent:boolean)=>Promise<boolean>;
- openMapsMe:(latitude:number,longitude:number,adjacent:boolean,originLatitude:number|null,originLongitude:number|null)=>Promise<'route'|'pin'|'unavailable'>;
+ openRideMaps:(latitude:number,longitude:number,adjacent:boolean,provider:'google'|'osmand',
+  ride:string|null,accessToken:string|null,arabic:boolean)=>Promise<boolean>;
+ stopOsmAndPassenger:()=>Promise<void>;
+ requestOsmAndMapAccess:()=>Promise<boolean>;
  addListener:(event:'rideSharing',callback:(event:ShareEvent)=>void)=>{remove:()=>void};
  stopDirection:()=>Promise<void>}>('YallaDriverNavigation');
 const supportsSharing=typeof screenModule?.startRideSharing==='function';
-const nativeMapsMe=typeof screenModule?.openMapsMe==='function';
+const nativeOsmAndPassenger=typeof screenModule?.requestOsmAndMapAccess==='function';
+const stopOsmAndPassenger=()=>{if(nativeOsmAndPassenger)void screenModule?.stopOsmAndPassenger().catch(()=>{});};
 const nativeDriverSpeech=typeof screenModule?.speakDirection==='function';
 const nativeVoiceSetup=typeof screenModule?.openVoiceSetup==='function';
 const stopDriverSpeech=()=>{if(nativeDriverSpeech)void screenModule?.stopDirection().catch(()=>{});};
@@ -279,6 +282,7 @@ export default function FreshAndroid(){
    safeToReload.current=message.safeToReload;
    canGoBack.current=message.canGoBack;
    if(message.signedOut){
+    stopOsmAndPassenger();
     if(sharing.current)void screenModule?.stopRideSharing(sharing.current).catch(()=>{});
    }
    if(message.language)setLanguage(message.language);
@@ -287,9 +291,9 @@ export default function FreshAndroid(){
   }else if(message.type==='bootstrap'){
    websiteRevision.current=websiteVersion(message.version);
    void engine.permission(false).then(permission=>{
-    inject(bootstrapScript(message.id,permission.granted,nativeDriverSpeech,nativeVoiceSetup,nativeMapsMe));
+    inject(bootstrapScript(message.id,permission.granted,nativeDriverSpeech,nativeVoiceSetup,nativeOsmAndPassenger));
     void syncPermission('ready');
-   }).catch(()=>inject(bootstrapScript(message.id,false,nativeDriverSpeech,nativeVoiceSetup,nativeMapsMe)));
+   }).catch(()=>inject(bootstrapScript(message.id,false,nativeDriverSpeech,nativeVoiceSetup,nativeOsmAndPassenger)));
   }else if(message.type==='location'){
    locationRequestedByPage.current=true;
    void locate(message);
@@ -328,14 +332,17 @@ export default function FreshAndroid(){
    const stop=supportsSharing?screenModule!.stopRideSharing(message.rideId):Promise.resolve();
    void stop.then(()=>inject(eventScript('yalla:native-result',{id:message.id,ok:supportsSharing})))
     .catch(()=>inject(eventScript('yalla:native-result',{id:message.id,ok:false})));
-  }else if(message.type==='ride-maps'){
-   const open=supportsSharing?screenModule!.openRideMaps(message.latitude,message.longitude,message.adjacent):Promise.resolve(false);
+  }else if(message.type==='ride-maps'||message.type==='ride-osmand'){
+   const provider={'ride-maps':'google','ride-osmand':'osmand'} as const;
+   const open=supportsSharing?screenModule!.openRideMaps(message.latitude,message.longitude,message.adjacent,provider[message.type],
+    message.passenger?.rideId??null,message.passenger?.accessToken??null,language==='ar'):Promise.resolve(false);
    void open.then(ok=>inject(eventScript('yalla:native-result',{id:message.id,ok})))
     .catch(()=>inject(eventScript('yalla:native-result',{id:message.id,ok:false})));
-  }else if(message.type==='ride-maps-me'){
-   const open=nativeMapsMe?screenModule!.openMapsMe(message.latitude,message.longitude,message.adjacent,
-    message.origin?.latitude??null,message.origin?.longitude??null):Promise.resolve('unavailable');
-   void open.then(reason=>inject(eventScript('yalla:native-result',{id:message.id,ok:reason!=='unavailable',reason})))
+  }else if(message.type==='osmand-passenger-stop'){
+   stopOsmAndPassenger();
+  }else if(message.type==='osmand-map-access'){
+   const permission=nativeOsmAndPassenger?screenModule!.requestOsmAndMapAccess():Promise.resolve(false);
+   void permission.then(ok=>inject(eventScript('yalla:native-result',{id:message.id,ok})))
     .catch(()=>inject(eventScript('yalla:native-result',{id:message.id,ok:false})));
   }else if(message.type==='driver-speak'){
    const operation=nativeDriverSpeech&&AppState.currentState!=='background'

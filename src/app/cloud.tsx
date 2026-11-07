@@ -19,7 +19,7 @@ import {DriverHistory,DriverHistoryBar} from '../driver-history';
 import {useDriverOfferSound} from '../use-driver-offer-sound';
 import {useCurrentPosition} from '../use-current-position';
 import {PassengerTaxiMap,RideSearchTimer,useShareTaxiPosition} from '../taxi-tracking';
-import {CustomerTracking,MapsMeHelp,openRideMaps,pickupChange,useRideRow,useRideSharing,type NavigationProvider} from '../ride-live-sharing';
+import {CustomerTracking,OsmAndHelp,openRideMaps,osmandPassengerSupported,pickupChange,stopOsmAndPassenger,useRideRow,useRideSharing,type NavigationProvider} from '../ride-live-sharing';
 import {authClient} from '../auth-client';
 import {useRideRecovery} from '../use-ride-recovery';
 import {claimDriverSharingAttempt,readDriverSharingConsent,saveDriverSharingConsent} from '../driver-sharing-consent';
@@ -172,11 +172,17 @@ export default function Rides(){
   try{if(rideId)localStorage.setItem('yn-driver-split-ride',rideId);else localStorage.removeItem('yn-driver-split-ride')}catch{/* The view still switches. */}
  }
  const [navigationProvider,setNavigationProvider]=useState<NavigationProvider>(()=>{
+  const androidHost=typeof window!=='undefined'&&'ReactNativeWebView' in window;
   try{
    const saved=localStorage.getItem('yn-driver-navigation');
-   return saved==='mapsme'?saved:'google';
-  }catch{return 'google'}
+   if(saved==='google'||saved==='osmand')return saved;
+  }catch{/* Use the default when storage is unavailable. */}
+  return androidHost?'osmand':'google';
  });
+ const osmandWaiting=!!currentDriverRide&&['accepted','arrived'].includes(currentDriverRide.status)&&!currentDriverRide.pickup_confirmed_at;
+ useEffect(()=>{
+  if(!osmandWaiting||navigationProvider!=='osmand')stopOsmAndPassenger();
+ },[osmandWaiting,navigationProvider,userId]);
  const [proposing,setProposing]=useState(false);
  const [proposed,setProposed]=useState<string|null>(null);
  const activeRide=rides.some(live);const shouldPoll=foreground&&connection!=='offline'&&(activeRide||driverMode&&(!driver||driver.approved&&driver.online));
@@ -270,17 +276,17 @@ export default function Rides(){
   }catch{setNotice(t('تعذّر اقتراح موقعك الحالي. تحقق من GPS والاتصال.','Could not propose your current location. Check GPS and internet.'))}
   finally{clearTimeout(timer);setProposing(false)}
  }
- const providers={google:'Google Maps',mapsme:'MAPS.ME'} as const;
+ const providers={google:'Google Maps',osmand:'OsmAnd'} as const;
  const navigationOptions=<View style={{gap:4}}>
  <View style={{flexDirection:'row',flexWrap:'wrap',gap:6}}>
-  {(['google','mapsme'] as const).map(provider=><View key={provider} style={{flexGrow:1}}>
+  {(['osmand','google'] as const).map(provider=><View key={provider} style={{flexGrow:1}}>
    <Button secondary={navigationProvider!==provider} title={providers[provider]} onPress={()=>{
     setNavigationProvider(provider);
     try{localStorage.setItem('yn-driver-navigation',provider)}catch{/* Use the selection for this session. */}
    }}/>
   </View>)}
  </View>
- <MapsMeHelp/>
+ <OsmAndHelp/>
  <HelpTip title={t('كيف يعمل تقسيم الشاشة؟','How does split screen work?')}>
   <Label>{t('إذا فتحت الملاحة وحدها، افتح «التطبيقات الأخيرة»، اضغط أيقونة «يلّا نروح» واختر «فتح في عرض تقسيم الشاشة»، ثم اختر تطبيق الملاحة. إذا لم يظهر الخيار، استخدم الوضع العادي.','If navigation opens on its own, open Recents, tap the Yalla Nrouh icon, choose split screen and select your navigation app. If the option is missing, use normal mode.')}</Label>
  </HelpTip>
@@ -299,13 +305,14 @@ export default function Rides(){
     clearTimeout(timer);
    }
    if(!alive.current||identity.current!==userId||!mode.current)return;
-   const result=await openRideMaps(point,adjacent,sharing.capability===true,navigationProvider);
-   if(!alive.current||identity.current!==userId||result==='opened')return;
-   if(result==='update-required')setNotice(t('لفتح MAPS.ME من الرحلة، ثبّت أحدث نسخة أندرويد من يلّا نروح.','To open MAPS.ME from a ride, install the latest Yalla Nrouh Android app.'));
-   else if(result==='pin')setNotice(t('فتحت نقطة الوجهة في MAPS.ME. اضغط عليها واختر «الطريق إلى هنا».','The destination opened in MAPS.ME. Tap it and choose Route To.'));
-   else setNotice(navigationProvider==='google'
+   if(navigationProvider==='osmand'&&!osmandPassengerSupported()){
+    setNotice(t('لفتح OsmAnd من الرحلة، ثبّت أحدث نسخة أندرويد من يلّا نروح.','To open OsmAnd from a ride, install the latest Yalla Nrouh Android app.'));
+    return;
+   }
+   const ok=await openRideMaps(point,adjacent,sharing.capability===true,navigationProvider,ride.status==='accepted'?ride.id:undefined);
+   if(!ok&&alive.current&&identity.current===userId)setNotice(navigationProvider==='google'
     ?t('تعذّر فتح خرائط Google. يمكنك إعادة المحاولة من شاشة الرحلة.','Could not open Google Maps. You can retry from the ride screen.')
-    :t('تعذّر إرسال الوجهة إلى MAPS.ME. يمكنك إعادة المحاولة من شاشة الرحلة.','Could not send the destination to MAPS.ME. You can retry from the ride screen.'));
+    :t('تعذّر بدء الملاحة في OsmAnd. تأكد أن التطبيق مثبت ويمكن فتحه على هاتفك.','Could not start navigation in OsmAnd. Check that OsmAnd is installed and opens on your phone.'));
   };
   void open();
  }
@@ -508,7 +515,7 @@ export default function Rides(){
       {driver?<><Label>{t('طلبك بانتظار مراجعة الإدارة','Your application is waiting for review')}</Label><Label muted>{t('يمكنك تحديث الصفحة بعد اعتماد الحساب.','Refresh after your account is approved.')}</Label></>
        :<><Label>{t('التسجيل كسائق','Register as a driver')}</Label><RideOptions driver/><Button title={t('إرسال طلب اعتماد سائق','Apply for driver approval')} disabled={busy} onPress={()=>void run(async token=>{await cloudRegisterDriver(token,draft.region,draft.category)},t('تم إرسال الطلب إلى الإدارة.','Application sent to admin.'))}/></>}
      </Panel>)}
-   {driver?.approved&&!currentDriverRide&&<MapsMeHelp/>}
+   {driver?.approved&&!currentDriverRide&&<OsmAndHelp/>}
    {!currentDriverRide&&(!driver?.approved||!driver.online&&!!notice)&&<Button secondary icon="refresh-outline" title={t('تحديث الحالة','Refresh status')} disabled={busy} onPress={()=>void run(async()=>{})}/>}
   </>:<>
    {passengerRides.map(renderRide)}
