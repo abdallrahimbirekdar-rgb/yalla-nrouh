@@ -10,6 +10,7 @@ export default function MapContent({point,taxiPoint,passengerPoint,onChange,comp
  const {state}=useApp();const t=useText();const {colors,dark}=useTheme();const host=useRef<HTMLDivElement>(null);
  const map=useRef<GoogleMap|null>(null),api=useRef<GoogleMaps|null>(null),marker=useRef<GoogleMarker|null>(null),line=useRef<GoogleLine|null>(null);
  const userMarker=useRef<GoogleMarker|null>(null),endMarker=useRef<GoogleMarker|null>(null),taxiMarker=useRef<GoogleMarker|null>(null);
+ const hasCameraTarget=!!cameraTarget;
  const current=useRef(point);current.current=point;const choose=useRef(onChange);choose.current=onChange;
  const profile=useRef({lean,dark});profile.current={lean,dark};
  const entry=useRef({initialCenter,compact});
@@ -40,8 +41,8 @@ export default function MapContent({point,taxiPoint,passengerPoint,onChange,comp
  useEffect(()=>{
   const instance=map.current,pin=marker.current;if(!ready||!instance||!pin)return;
   pin.position=point?position(point):undefined;
-  if(point&&!passengerPoint&&instance.getBounds()&&!instance.getBounds()?.contains(position(point)))instance.setCenter(position(point));
- },[point,passengerPoint,ready]);
+  if(point&&!hasCameraTarget&&!passengerPoint&&instance.getBounds()&&!instance.getBounds()?.contains(position(point)))instance.setCenter(position(point));
+ },[point,passengerPoint,hasCameraTarget,ready]);
  useEffect(()=>{
   if(!ready||!map.current||!api.current||!line.current)return;
   const path=route?.map(position)??[];line.current.setPath(path);
@@ -69,6 +70,7 @@ export default function MapContent({point,taxiPoint,passengerPoint,onChange,comp
    Object.assign(icon.style,{display:'grid',placeItems:'center',width:'34px',height:'34px',background:passengerPoint?'#15803d':'#102a43',color:'white',border:'2px solid white',borderRadius:'50%',fontSize:'21px'});
    taxiMarker.current=new maps.marker.AdvancedMarkerElement({map:instance,position:taxi,content:icon,title:passengerPoint?(state.language==='ar'?'موقع الزبون':'Customer location'):(state.language==='ar'?'موقع التاكسي':'Taxi location')});
   }else taxiMarker.current.position=taxi;
+  if(hasCameraTarget)return;
   if(passengerPoint){
    instance.setCenter(taxi);
    if(first)instance.setZoom(18);
@@ -82,12 +84,12 @@ export default function MapContent({point,taxiPoint,passengerPoint,onChange,comp
     const overview=new maps.LatLngBounds();overview.extend(position(point));overview.extend(taxi);instance.fitBounds(overview,42);
    }
   }
- },[point,taxiPoint,passengerPoint,ready,state.language]);
+ },[point,taxiPoint,passengerPoint,hasCameraTarget,ready,state.language]);
  useEffect(()=>{map.current?.setOptions({tilt:0,heading:0,headingInteractionEnabled:!lean,tiltInteractionEnabled:false})},[lean,ready]);
  return <View style={compact?{flex:1,minHeight:minMapHeight}:{gap:10}}>
   {React.createElement('div',{ref:host,role:'region','aria-label':t('خريطة Google لاختيار الموقع','Google map to choose a location'),style:{height:compact?'100%':340,minHeight:compact?minMapHeight:340,width:'100%',borderRadius:compact?0:16,overflow:'hidden',background:colors.surface}})}
-  {(!key||error||!ready)&&<View style={{position:'absolute',left:16,right:16,top:compact?70:30,padding:18,borderRadius:14,gap:12,backgroundColor:colors.background}}>
-   {!key||error?<Label>{t('خريطة Google غير متاحة حاليًا. يمكنك إدخال العنوان يدويًا والمحاولة لاحقًا.','Google Maps is not available right now. You can enter an address by hand and try later.')}</Label>:<><ActivityIndicator color={colors.purple}/><Label>{t('جارٍ تحميل خريطة Google…','Loading Google Maps…')}</Label></>}
+  {(!key||error||!ready)&&<View style={{position:'absolute',left:readOnly&&compact?6:16,right:readOnly&&compact?6:16,top:readOnly&&compact?4:compact?70:30,padding:readOnly&&compact?6:18,borderRadius:14,gap:12,backgroundColor:colors.background}}>
+   {!key||error?<Label>{readOnly?t('الخريطة غير متاحة الآن.','The map is unavailable right now.'):t('خريطة Google غير متاحة حاليًا. يمكنك إدخال العنوان يدويًا والمحاولة لاحقًا.','Google Maps is not available right now. You can enter an address by hand and try later.')}</Label>:<><ActivityIndicator color={colors.purple}/><Label>{t('جارٍ تحميل خريطة Google…','Loading Google Maps…')}</Label></>}
    {key&&error&&<Button secondary title={t('إعادة المحاولة','Try again')} onPress={()=>setAttempt(value=>value+1)}/>}
   </View>}
   {!compact&&!readOnly&&ready&&<Button secondary title={t('اختيار مركز الخريطة','Select map center')} onPress={()=>{const center=map.current?.getCenter();if(center){const next={latitude:center.lat(),longitude:center.lng()};if(isCoordinate(next))onChange(next)}}}/>}

@@ -1,11 +1,11 @@
 import {useEffect,useMemo,useRef,useState} from 'react';
-import {Linking,View} from 'react-native';
+import {Linking,Pressable,useWindowDimensions,View} from 'react-native';
 import {authClient} from './auth-client';
 import {isCoordinate,type Coordinate} from './geo';
 import {distanceMeters} from './navigation-progress';
 import {googleDirections} from './google-links';
 import MapCanvas from './map/MapCanvas';
-import {Button,HelpTip,Label,Panel,useText} from './ui';
+import {Button,HelpTip,Icon,Label,useText,useTheme} from './ui';
 
 type Reply={ok:boolean;rideId?:string|null};
 type SharingRole='driver'|'passenger';
@@ -150,6 +150,11 @@ export function pickupChange(row:Record<string,unknown>|null){
 
 export function CustomerTracking({rideId,pickup,foreground,compact}:{rideId:string;pickup:Coordinate;foreground:boolean;compact?:boolean}){
  const t=useText();
+ const {colors}=useTheme();
+ const {height}=useWindowDimensions();
+ const mapHeight=compact?Math.max(110,Math.min(165,Math.round(height*0.33))):235;
+ const [showPickup,setShowPickup]=useState(false);
+ const [cameraRevision,setCameraRevision]=useState(0);
  const [pageVisible,setPageVisible]=useState(()=>typeof document!=='undefined'&&document.visibilityState==='visible');
  useEffect(()=>{
   if(!compact||typeof document==='undefined')return;
@@ -172,23 +177,41 @@ export function CustomerTracking({rideId,pickup,foreground,compact}:{rideId:stri
  const point=useMemo(()=>({latitude,longitude}),[latitude,longitude]);
  const measured=typeof row?.measured_at==='string'?Date.parse(row.measured_at):NaN;
  const age=Math.max(0,Math.floor((now-measured)/1000));
- const shown=isCoordinate(point)&&age<180;
- const distance=shown?Math.round(distanceMeters(pickup,point as Coordinate)):null;
+ const passenger=isCoordinate(point)&&age<180?point:undefined;
+ const distance=passenger?Math.round(distanceMeters(pickup,passenger)):null;
+ const focus=showPickup||!passenger?pickup:passenger;
+ const {latitude:focusLat,longitude:focusLng}=focus;
+ const cameraTarget=useMemo(()=>({
+  point:{latitude:focusLat,longitude:focusLng},revision:cameraRevision,isLocation:false,zoom:19,
+ }),[focusLat,focusLng,cameraRevision]);
  useEffect(()=>{
   if(distance===null||age>=30)return;
   if(distance>=100)setAway(true);
   else if(distance<=65)setAway(false);
  },[distance,age]);
- return <Panel>
-  <Label large>{t('موقع الزبون ونقطة الالتقاء','Customer location and meeting point')}</Label>
-  <View style={{height:compact?155:220,overflow:'hidden',borderRadius:12}}>
-   <MapCanvas compact readOnly minMapHeight={compact?155:220} point={pickup} passengerPoint={shown?point as Coordinate:undefined} onChange={()=>{}}/>
+ const title=passenger&&!showPickup
+  ?age<30?t('موقع الزبون الآن','Customer location now'):t('آخر موقع للزبون','Last customer location')
+  :t('نقطة الالتقاء الأصلية','Original meeting point');
+ const status=passenger
+  ?age<30?t(`تحديث قبل ${age} ث`,`Updated ${age}s ago`):t('موقع الزبون قديم','Customer location is stale')
+  :t('موقع الزبون غير متاح الآن','Customer location unavailable');
+ const switchTitle=showPickup?t('عرض الزبون','Show customer'):t('عرض نقطة الالتقاء','Show meeting point');
+ return <View style={{backgroundColor:colors.background,borderColor:colors.line,borderWidth:1,borderRadius:14,overflow:'hidden'}}>
+  <View style={{paddingHorizontal:10,paddingVertical:5}}><Label>{title}</Label></View>
+  <View style={{height:mapHeight,overflow:'hidden'}}>
+   <MapCanvas compact readOnly minMapHeight={mapHeight} point={pickup} passengerPoint={passenger} cameraTarget={cameraTarget} onChange={()=>{}}/>
   </View>
-  <Label muted>{t('الأخضر: موقع الزبون · العلامة الأخرى: نقطة الالتقاء الأصلية','Green: customer · other pin: original meeting point')}</Label>
-  <Label>{shown?t('آخر تحديث قبل '+age+' ثانية','Updated '+age+' seconds ago'):t('بانتظار مشاركة الزبون موقعه أو وصول تحديث جديد','Waiting for the customer to share or update their location')}</Label>
-  {distance!==null&&<Label muted>{t('المسافة التقريبية عن نقطة الالتقاء الأصلية: '+distance+' متر','Approximate distance from original meeting point: '+distance+' m')}</Label>}
-  {shown&&age>=30&&<Label muted>{t('موقع قديم · نعرض آخر موقع معروف','Location is stale · showing last known location')}</Label>}
-  {shown&&age<30&&away&&<View accessibilityRole="alert"><Label>{t('الزبون بعيد عن نقطة الالتقاء الأصلية.','The customer is away from the original meeting point.')}</Label></View>}
-  {compact&&<Label muted>{t('إذا فُتحت الملاحة بملء الشاشة، افتح التطبيقات الأخيرة واختر تقسيم الشاشة من أيقونة «يلّا نروح»، ثم اختر تطبيق الملاحة.','If Maps opens full screen, open Recents, tap the Yalla Nrouh app icon, choose split screen if available, then select the navigation app.')}</Label>}
- </Panel>;
+  <View style={{paddingHorizontal:10,paddingVertical:5}}>
+   <Label muted>{status}{distance!==null&&t(` · ${distance} م عن نقطة الالتقاء الأصلية`,` · ${distance} m from original meeting point`)}</Label>
+   {passenger&&age<30&&away&&<Label>{t('الزبون ابتعد عن نقطة الالتقاء.','The customer moved away from the meeting point.')}</Label>}
+   <View style={{flexDirection:'row',flexWrap:'wrap',justifyContent:'space-between',columnGap:8}}>
+    <Pressable accessibilityRole="button" onPress={()=>setCameraRevision(value=>value+1)} style={{minHeight:44,flexDirection:'row',alignItems:'center',gap:5}}>
+     <Icon name="locate-outline" size={17} color={colors.purple}/><Label>{t('إعادة التوسيط','Recenter map')}</Label>
+    </Pressable>
+    {passenger&&<Pressable accessibilityRole="button" onPress={()=>{setShowPickup(value=>!value);setCameraRevision(value=>value+1)}} style={{minHeight:44,justifyContent:'center'}}>
+     <Label>{switchTitle}</Label>
+    </Pressable>}
+   </View>
+  </View>
+ </View>;
 }

@@ -1,6 +1,6 @@
 import {isValhallaPilotDriver} from '../valhalla-route';
 import React,{useCallback,useEffect,useMemo,useRef,useState} from 'react';
-import {AppState,View} from 'react-native';
+import {AppState,Pressable,View} from 'react-native';
 import {router,useLocalSearchParams} from 'expo-router';
 import {useApp} from '../context';
 import {useAuth} from '../auth';
@@ -240,7 +240,7 @@ export default function Rides(){
  </View>
  <OsmAndHelp/>
  <HelpTip title={t('كيف يعمل تقسيم الشاشة؟','How does split screen work?')}>
-  <Label>{t('يعرض وضع الشاشة المقسمة الرحلة وأزرارها بجانب الملاحة إذا سمح الهاتف. إذا فتحت الملاحة بملء الشاشة، جرّب التقسيم من التطبيقات الأخيرة أو استخدم الوضع العادي.','Split-screen mode keeps the ride and its buttons next to navigation on supported phones. If navigation opens full screen, try splitting from Recents or use normal mode.')}</Label>
+  <Label>{t('إذا فتحت الملاحة وحدها، افتح «التطبيقات الأخيرة»، اضغط أيقونة «يلّا نروح» واختر «فتح في عرض تقسيم الشاشة»، ثم اختر تطبيق الملاحة. إذا لم يظهر الخيار، استخدم الوضع العادي.','If navigation opens on its own, open Recents, tap the Yalla Nrouh icon, choose split screen and select your navigation app. If the option is missing, use normal mode.')}</Label>
  </HelpTip>
  </View>;
  function showExternal(ride:CloudRide,point:{latitude:number;longitude:number},adjacent:boolean){
@@ -337,97 +337,98 @@ export default function Rides(){
     {ride.status!=='riding'&&ride.id!==searchingRide?.id&&<Button secondary title={t('إلغاء الطلب','Cancel request')} disabled={busy} onPress={()=>cancelRequest(ride)}/>}
    </>}
   </Panel>;
- function renderDriverRide(ride:CloudRide){
+ function renderDriverRide(ride:CloudRide,split:boolean){
   const pickingUp=ride.status==='accepted';
-  const pickup={latitude:ride.pickup_lat,longitude:ride.pickup_lng};
-  const meeting=pickingUp&&proposal?.approved?proposal.point:pickup;
-  const destination=pickingUp?meeting:{latitude:ride.destination_lat,longitude:ride.destination_lng};
-  const tracking=pickingUp||ride.status==='arrived'&&!ride.pickup_confirmed_at;
   const atPickup=ride.status==='arrived';
-  const action=driverRideAction(ride);
-  return <View key={ride.id} style={{gap:12}}>
-   {shareButton(ride,'driver')}
-   {navigationOptions}
-   <Button secondary icon="map-outline" title={t('وضع الشاشة المقسمة','Split-screen mode')}
-    onPress={()=>atPickup?setSplitRide(ride.id):showExternal(ride,destination,true)}/>
-   {tracking&&<CustomerTracking key={ride.id+':'+ride.driver_id} rideId={ride.id} pickup={pickup} foreground={foreground}/>}
-   {pickingUp&&<>
-    {proposal&&!proposal.approved&&<Panel>
-     <Label>{t('الزبون اقترح نقطة التقاء جديدة.','The customer suggested a new meeting point.')}</Label>
-     <View style={{height:155,overflow:'hidden',borderRadius:12}}><MapCanvas compact readOnly minMapHeight={155} point={proposal.point} onChange={()=>{}}/></View>
-     <Button secondary title={t('الموافقة على نقطة الالتقاء الجديدة','Approve the new meeting point')} disabled={busy} onPress={()=>void run(async()=>{
-      const {data,error}=await authClient().rpc('change_pickup',{p_ride:ride.id,p_proposal:proposal.id,p_lat:null,p_lng:null});
-      if(error||!data)throw Error('not_allowed');
-     })}/>
-    </Panel>}
-    {proposal?.approved&&<Label>{t('الملاحة إلى نقطة الالتقاء المعتمدة. افتح تطبيق الملاحة من هنا مجددًا لتحديث وجهته.','Navigation now uses the approved point. Reopen the navigation app from here to update its destination.')}</Label>}
-   </>}
-
-   {atPickup
-    ? <Panel><Label display>{t('عند الزبون','At pickup')}</Label>{action}<Label>{ride.pickup}</Label></Panel>
-    : <DriverNavigation key={ride.id+'-'+ride.status}
-       title={pickingUp?t('إلى الزبون','To pickup'):t('إلى الوجهة','To destination')}
-       targetLabel={pickingUp?(proposal?.approved?t('نقطة الالتقاء المعتمدة','Approved meeting point'):ride.pickup):ride.destination}
-       action={action}
-       externalNavigation={<Button secondary icon="navigate-outline" title={t('ملء الشاشة','Full screen')+' · '+providers[navigationProvider]}
-        onPress={()=>showExternal(ride,destination,false)}/>}
-       pilotAvailable={pilotOwner===userId&&!!driver?.approved}
-       pilotActive={pilotOwner===userId&&!!driver?.approved&&pilotRide===ride.id}
-       onPilotToggle={()=>setPilotRide(pilotRide===ride.id?null:ride.id)}
-       devicePosition={gps.camera?.point}
-       routeOrigin={ride.status==='riding'?{latitude:ride.pickup_lat,longitude:ride.pickup_lng}:undefined}
-       initialPlan={acceptedPlans?.rideId===ride.id&&!(pickingUp&&proposal?.approved)?(pickingUp?acceptedPlans.pickup:acceptedPlans.trip):null}
-       to={destination}/>}
-   {ride.status!=='riding'&&<Button secondary title={t('إعادة الطلب للبحث عن سائق','Release request to other drivers')} disabled={busy} onPress={()=>void run(async token=>{if(!await cloudReleaseRide(token,ride.id))throw Error('not_allowed')})}/>}
+  const pickup={latitude:ride.pickup_lat,longitude:ride.pickup_lng};
+  const destination=pickingUp?(proposal?.approved?proposal.point:pickup):{latitude:ride.destination_lat,longitude:ride.destination_lng};
+  const tracking=pickingUp||atPickup&&!ride.pickup_confirmed_at;
+  const stage=pickingUp?t('إلى الزبون','To pickup'):atPickup?t('عند الزبون','At pickup'):t('إلى الوجهة','To destination');
+  const address=pickingUp&&proposal?.approved?t('نقطة الالتقاء الجديدة المعتمدة','Approved meeting point'):pickingUp||atPickup?ride.pickup:ride.destination;
+  const navButton=(adjacent:boolean,title:string)=><Button secondary icon={adjacent?'map-outline':'navigate-outline'}
+   title={title} onPress={()=>atPickup?setSplitRide(ride.id):showExternal(ride,destination,adjacent)}/>;
+  const fullScreen=navButton(false,t('ملاحة بملء الشاشة','Full-screen navigation'));
+  return <View key={ride.id} style={{gap:split?8:12}}>
+   <View style={{gap:2}}>
+    {split?<Label>{stage}</Label>:<Label large>{stage}</Label>}
+    {(!split||!tracking)&&<Label>{address}</Label>}
+    {atPickup&&<Label muted>{ride.pickup_confirmed_at
+     ?t('أكد الزبون الركوب. يمكنك بدء الرحلة الآن.','The customer confirmed pickup. You can start the ride.')
+     :t('اطلب من الزبون تأكيد الركوب من هاتفه.','Ask the customer to confirm pickup on their phone.')}</Label>}
+   </View>
+   {!!notice&&<View accessibilityRole="alert"><Label>{notice}</Label></View>}
+   {tracking&&<CustomerTracking key={ride.id+':'+ride.driver_id} rideId={ride.id} pickup={pickup} foreground={foreground} compact={split}/>}
+   {split&&tracking&&<Label muted>{address}</Label>}
+   {pickingUp&&proposal&&!proposal.approved&&<Panel outlined>
+    <Label>{t('الزبون اقترح نقطة التقاء جديدة.','The customer suggested a new meeting point.')}</Label>
+    <View style={{height:155,overflow:'hidden',borderRadius:12}}><MapCanvas compact readOnly minMapHeight={155} point={proposal.point} onChange={()=>{}}/></View>
+    <Button secondary title={t('اعتماد نقطة الالتقاء الجديدة','Approve the new meeting point')} disabled={busy} onPress={()=>void run(async()=>{
+     const {data,error}=await authClient().rpc('change_pickup',{p_ride:ride.id,p_proposal:proposal.id,p_lat:null,p_lng:null});
+     if(error||!data)throw Error('not_allowed');
+    })}/>
+   </Panel>}
+   {pickingUp&&proposal?.approved&&<Label muted>{t('افتح الملاحة مجددًا للتوجّه إلى نقطة الالتقاء الجديدة.','Reopen navigation to go to the new meeting point.')}</Label>}
+   {!atPickup&&<View style={{gap:6}}>
+    <Label muted>{t('تطبيق الملاحة المختار','Selected navigation app')} · {providers[navigationProvider]}</Label>
+    {split?navButton(true,t('فتح الملاحة بجانب الرحلة','Open navigation beside the ride')):<View style={{flexDirection:'row',flexWrap:'wrap',gap:6}}>
+     <View style={{flexGrow:1}}>{fullScreen}</View>
+     <View style={{flexGrow:1}}>{navButton(true,t('ملاحة بتقسيم الشاشة','Split-screen navigation'))}</View>
+    </View>}
+   </View>}
+   {!split&&atPickup&&navButton(true,t('عرض الرحلة بشكل مختصر','Show compact ride view'))}
+   {sharing.capability&&trackingBackend&&<HelpTip title={sharing.activeRide===ride.id
+    ?t('موقعك قيد المشاركة','You are sharing your location')
+    :t('مشاركة موقعي مع الزبون','Share my location with the customer')}>
+    {shareButton(ride,'driver')}
+   </HelpTip>}
+   <HelpTip title={t('تغيير تطبيق الملاحة وخيارات الرحلة','Change navigation app and ride options')}>
+    {navigationOptions}
+    {split&&!atPickup&&fullScreen}
+    {ride.status!=='riding'&&<Button secondary title={t('إعادة الطلب للبحث عن سائق','Release request to other drivers')} disabled={busy} onPress={()=>void run(async token=>{if(!await cloudReleaseRide(token,ride.id))throw Error('not_allowed')})}/>}
+    <Button secondary icon="refresh-outline" title={t('تحديث حالة الرحلة','Refresh ride status')} disabled={busy} onPress={()=>void run(async()=>{})}/>
+    {!split&&<DriverHistoryBar onOpen={setHistoryKind}/>}
+   </HelpTip>
+   {!split&&!atPickup&&<DriverNavigation key={ride.id+'-'+ride.status}
+    title={t('الملاحة داخل يلّا نروح','Navigation in Yalla Nrouh')} targetLabel={address}
+    action={driverRideAction(ride)} externalNavigation={fullScreen}
+    pilotAvailable={pilotOwner===userId&&!!driver?.approved}
+    pilotActive={pilotOwner===userId&&!!driver?.approved&&pilotRide===ride.id}
+    onPilotToggle={()=>setPilotRide(pilotRide===ride.id?null:ride.id)}
+    devicePosition={gps.camera?.point}
+    routeOrigin={ride.status==='riding'?pickup:undefined}
+    initialPlan={acceptedPlans?.rideId===ride.id&&!(pickingUp&&proposal?.approved)?(pickingUp?acceptedPlans.pickup:acceptedPlans.trip):null}
+    to={destination}/>}
   </View>;
  }
  if(!auth.ready||auth.session&&!auth.rolesReady)return <Page title={t('رحلاتي','My rides')}><Label>{t('جارٍ تحميل الحساب…','Loading account…')}</Label>{auth.problem&&<Button title={t('إعادة المحاولة','Try again')} onPress={()=>void auth.retry()}/>}</Page>;
  if(!auth.session)return <Page title={driverMode?t('وضع السائق','Driver mode'):passengerTitle}><Panel><Icon name="person-circle-outline" size={42}/><Label>{t('سجّل الدخول لعرض رحلاتك أو العمل كسائق.','Sign in to view your rides or use driver mode.')}</Label><Button title={t('تسجيل الدخول','Sign in')} onPress={()=>router.push(historyMode?{pathname:'/account',params:{next:'history'}}:'/account')}/></Panel></Page>;
- if(currentDriverRide?.id===compactRide){
-  const ride=currentDriverRide;
-  const goingToCustomer=ride.status==='accepted';
-  const pickup={latitude:ride.pickup_lat,longitude:ride.pickup_lng};
-  const destination=goingToCustomer?(proposal?.approved?proposal.point:pickup):{latitude:ride.destination_lat,longitude:ride.destination_lng};
-  return <Page compact title={t('وضع الشاشة المقسمة','Split-screen mode')}
-   footer={<View style={{paddingHorizontal:10,paddingVertical:6,backgroundColor:colors.background,borderTopWidth:1,borderColor:colors.line}}>
-    {driverRideAction(ride)}
-   </View>}>
-   <View style={{gap:6}}>
-    <Label>{status(ride.status)}</Label>
-    <Label>{goingToCustomer?ride.pickup:ride.destination}</Label>
-    {proposal?.approved&&goingToCustomer&&<Label muted>{t('تم اعتماد نقطة التقاء جديدة','A new meeting point was approved')}</Label>}
-    {sharing.activeRide===ride.id&&<Label muted>{t('مشاركة موقعك فعّالة','Your location sharing is active')}</Label>}
-    <Button secondary title={t('العودة للوضع العادي','Back to normal mode')} onPress={()=>setSplitRide(null)}/>
-   </View>
-   {goingToCustomer||ride.status==='arrived'&&!ride.pickup_confirmed_at
-    ?<CustomerTracking compact rideId={ride.id} pickup={pickup} foreground={foreground}/>
-    :null}
-   {navigationOptions}
-   {ride.status!=='arrived'&&<Button secondary icon="navigate-outline" title={t('فتح الملاحة','Open navigation')+' · '+providers[navigationProvider]}
-    onPress={()=>showExternal(ride,destination,true)}/>}
-   {!!notice&&<Label muted>{notice}</Label>}
-  </Page>;
- }
- const footer=driverMode&&userId?<View style={{backgroundColor:colors.background,borderTopWidth:1,borderColor:colors.line,paddingHorizontal:12,paddingVertical:7}}><DriverHistoryBar onOpen={setHistoryKind}/></View>:searchingRide?<RideFooter>
+ const split=!!currentDriverRide&&currentDriverRide.id===compactRide;
+ const splitHeader=split?<View style={{flexDirection:state.language==='ar'?'row-reverse':'row',justifyContent:'space-between',alignItems:'center',flexWrap:'wrap',columnGap:8}}>
+  <Label muted>{t('عرض مختصر للرحلة','Compact ride view')}</Label>
+  <Pressable accessibilityRole="button" onPress={()=>setSplitRide(null)} style={{minHeight:44,justifyContent:'center',paddingHorizontal:8}}>
+   <Label>{t('الوضع العادي','Normal view')}</Label>
+  </Pressable>
+ </View>:undefined;
+ const footer=currentDriverRide?<RideFooter>{driverRideAction(currentDriverRide)}</RideFooter>
+  :driverMode&&userId?<View style={{backgroundColor:colors.background,borderTopWidth:1,borderColor:colors.line,paddingHorizontal:12,paddingVertical:7}}><DriverHistoryBar onOpen={setHistoryKind}/></View>:searchingRide?<RideFooter>
   <RideSearchTimer key={searchingRide.id} startedAt={searchingRide.updated_at??searchingRide.created_at} onExpired={()=>void refresh().catch(()=>{})}/>
   {!!notice&&<View accessibilityRole="alert"><Label>{notice}</Label></View>}
   <Button secondary title={t('إلغاء الطلب','Cancel request')} disabled={busy} onPress={()=>cancelRequest(searchingRide)}/>
  </RideFooter>:!driverMode&&!historyMode&&params.ride&&loading?<RideFooter>
   <Label>{t('جارٍ تحميل حالة الطلب…','Loading request status…')}</Label>
  </RideFooter>:undefined;
- return <Page title={driverMode?t('وضع السائق','Driver mode'):passengerTitle} compact={driverMode||!historyMode} showBrand={driverMode} footer={footer}>
+ return <Page title={driverMode?t('وضع السائق','Driver mode'):passengerTitle} compact={driverMode||!historyMode} showBrand={driverMode} header={splitHeader} footer={footer}>
   {driverMode&&historyKind&&userId&&<DriverHistory key={userId} kind={historyKind} owner={userId} onSelect={setHistoryKind} onClose={closeHistory}/>}
   {driverMode&&driver?.approved&&!currentDriverRide&&<DriverShift
    online={driver.online} region={driver.region} category={driver.category} target={workTarget}
    disabled={busy||workTarget!==null||recovery.checking} onToggle={()=>void toggleWork()}
    soundReady={sound.ready} soundProblem={sound.problem} onEnableSound={()=>void sound.unlock()}/>}
-  {driverMode&&driver?.approved&&!currentDriverRide&&<OsmAndHelp/>}
-  {currentDriverRide&&renderDriverRide(currentDriverRide)}
+  {currentDriverRide&&renderDriverRide(currentDriverRide,split)}
   {driverMode&&recovery.id&&!currentDriverRide&&<Panel>
    <Label>{busy||recovery.checking?t('جارٍ التحقق من قبول الطلب…','Checking request acceptance…'):t('لم يتأكد قبول الطلب. يمكنك المحاولة مجددًا إذا ظل متاحًا.','Acceptance is unconfirmed. You can retry if the request is still available.')}</Label>
    {!busy&&!recovery.checking&&<Button secondary title={t('العودة للطلبات المتاحة','Back to available requests')} onPress={()=>{recovery.clear();void refresh().catch(()=>{})}}/>}
   </Panel>}
-  {!!notice&&!searchingRide&&<View accessibilityRole="alert"><Label>{notice}</Label></View>}
+  {!!notice&&!searchingRide&&!currentDriverRide&&<View accessibilityRole="alert"><Label>{notice}</Label></View>}
   {driverMode?<>
    {!currentDriverRide&&(driver?.approved
     ? driver.online
@@ -448,7 +449,8 @@ export default function Rides(){
       {driver?<><Label>{t('طلبك بانتظار مراجعة الإدارة','Your application is waiting for review')}</Label><Label muted>{t('يمكنك تحديث الصفحة بعد اعتماد الحساب.','Refresh after your account is approved.')}</Label></>
        :<><Label>{t('التسجيل كسائق','Register as a driver')}</Label><RideOptions driver/><Button title={t('إرسال طلب اعتماد سائق','Apply for driver approval')} disabled={busy} onPress={()=>void run(async token=>{await cloudRegisterDriver(token,draft.region,draft.category)},t('تم إرسال الطلب إلى الإدارة.','Application sent to admin.'))}/></>}
      </Panel>)}
-   {(currentDriverRide||!driver?.approved||!driver.online&&!!notice)&&<Button secondary icon="refresh-outline" title={t('تحديث الحالة','Refresh status')} disabled={busy} onPress={()=>void run(async()=>{})}/>}
+   {driver?.approved&&!currentDriverRide&&<OsmAndHelp/>}
+   {!currentDriverRide&&(!driver?.approved||!driver.online&&!!notice)&&<Button secondary icon="refresh-outline" title={t('تحديث الحالة','Refresh status')} disabled={busy} onPress={()=>void run(async()=>{})}/>}
   </>:<>
    {passengerRides.map(renderRide)}
    {loading&&<Label muted>{t('جارٍ تحميل الرحلات…','Loading rides…')}</Label>}
