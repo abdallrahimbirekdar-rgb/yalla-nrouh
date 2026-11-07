@@ -9,6 +9,7 @@ import {useApp} from '../context';
 import {useAuth} from '../auth';
 import {useCurrentPosition} from '../use-current-position';
 import MapCanvas from '../map/MapCanvas';
+import {brandHeader} from '../theme';
 import {Button,DeviceStatus,Icon,Label,type IconName,useText,useTheme} from '../ui';
 
 export default function Booking(){
@@ -18,6 +19,7 @@ export default function Booking(){
  const userId=auth.session?.user.id;
  const pendingRequest=readPendingRideOperation('request',userId);
  const canBook=auth.rolesReady&&(!auth.driver||auth.admin);
+ const bookingBlocked=!!auth.session&&!canBook;
  const t=useText();
  const {colors}=useTheme();
  const isFocused=useIsFocused();
@@ -57,7 +59,6 @@ export default function Booking(){
   if(rideState.active){router.push('/cloud');return}
   router.push({pathname:'/location',params:{target:'pickup'}});
  }
- if(auth.session&&!canBook)return <SafeAreaView style={[styles.loading,{backgroundColor:colors.background}]}><ActivityIndicator color={colors.purple}/>{auth.problem&&<Button title={t('إعادة المحاولة','Try again')} onPress={()=>void auth.retry()}/>}</SafeAreaView>;
 
  const status=gps.busy?t('جارٍ تحديد موقعك…','Finding your location…'):gps.failure==='permission'?t('اسمح بالموقع لعرض مكانك على الخريطة','Allow location access to see where you are.'):gps.failure==='accuracy'?t('فعّل الموقع الدقيق من أذونات التطبيق','Turn on precise location in app settings'):gps.failure==='services'?t('فعّل خدمة الموقع في الهاتف','Turn on phone location'):t('تعذر تحديد الموقع؛ اضغط زر موقعي للمحاولة','We couldn’t find your location. Tap My location to try again.');
  return <SafeAreaView style={{flex:1,backgroundColor:colors.background}}>
@@ -70,14 +71,19 @@ export default function Booking(){
     </View>
     <View style={styles.content}>
      <DeviceStatus/>
-     <Pressable accessibilityRole="button" accessibilityLabel={t('لوين بدك تروح؟ ابحث عن وجهتك','Where to? Search for your destination')} onPress={choose} style={({pressed})=>[styles.search,row,{backgroundColor:colors.brandAction,opacity:pressed ? .82 : 1}]}>
-      <View style={[styles.iconBadge,{backgroundColor:colors.brandTint}]}><Icon name="search-outline" size={23} color={colors.brandAccent}/></View>
+     <Pressable accessibilityRole="button" disabled={bookingBlocked} accessibilityState={{disabled:bookingBlocked}} accessibilityLabel={t('لوين بدك تروح؟ ابحث عن وجهتك','Where to? Search for your destination')} onPress={choose} style={({pressed})=>[styles.search,row,{backgroundColor:colors.brandAction,opacity:pressed ? .82 : 1}]}>
+      <View style={[styles.iconBadge,{backgroundColor:brandHeader.accent}]}><Icon name="search-outline" size={23} color={brandHeader.background}/></View>
       <View style={{flex:1,minWidth:0}}><Text style={[styles.searchTitle,{textAlign:rtl?'right':'left'}]}>{t('لوين بدك تروح؟','Where to?')}</Text>{!!draft.destination&&<Text style={{color:'#d6e6f5',textAlign:rtl?'right':'left'}} numberOfLines={1}>{draft.destination}</Text>}</View>
       <Icon name={rtl?'chevron-back':'chevron-forward'} size={20} color="#d6e6f5"/>
      </Pressable>
-     {(pendingRequest||rideState.active||draft.destinationPoint)&&<Button icon="arrow-forward-outline" title={pendingRequest?t('التحقق من طلب التاكسي','Check taxi request'):rideState.active?t('متابعة رحلتي الحالية','View my current ride'):t('متابعة إلى نقطة الانطلاق','Continue to the pickup point')} onPress={openPickup}/>}
+     {bookingBlocked&&<View accessibilityLiveRegion="polite" style={styles.accountStatus}>
+      {!auth.problem&&<ActivityIndicator size="small" color={colors.purple}/>}
+      <View style={{flex:1}}><Label muted>{auth.problem?t('تعذر تحديث الجلسة أو صلاحيات الحساب. تحقق من الاتصال وأعد المحاولة.','Could not check the session or account access. Check internet and try again.'):t('جارٍ التحقق من صلاحيات الحساب…','Checking account access…')}</Label></View>
+      {!!auth.problem&&<Button secondary title={t('إعادة المحاولة','Try again')} onPress={()=>void auth.retry()}/>}
+     </View>}
+     {!bookingBlocked&&(pendingRequest||rideState.active||draft.destinationPoint)&&<Button icon="arrow-forward-outline" title={pendingRequest?t('التحقق من طلب التاكسي','Check taxi request'):rideState.active?t('متابعة رحلتي الحالية','View my current ride'):t('متابعة إلى نقطة الانطلاق','Continue to the pickup point')} onPress={openPickup}/>}
      <View style={[row,styles.shortcuts]}>
-      <Shortcut icon="bookmark-outline" title={t('العناوين المحفوظة','Saved addresses')} onPress={()=>router.push({pathname:'/location',params:{view:'saved'}})}/>
+      <Shortcut mint icon="bookmark-outline" title={t('العناوين المحفوظة','Saved addresses')} onPress={()=>router.push({pathname:'/location',params:{view:'saved'}})}/>
       <Shortcut icon="time-outline" title={t('الرحلات الأخيرة','Recent rides')} onPress={()=>router.push({pathname:'/cloud',params:{mode:'history'}})}/>
      </View>
     </View>
@@ -85,16 +91,15 @@ export default function Booking(){
   </View>
  </SafeAreaView>;
 }
-function Shortcut({icon,title,onPress}:{icon:IconName;title:string;onPress:()=>void}){
+function Shortcut({icon,title,onPress,mint=false}:{icon:IconName;title:string;onPress:()=>void;mint?:boolean}){
  const {colors}=useTheme();
  return <Pressable accessibilityRole="button" accessibilityLabel={title} onPress={onPress} style={({pressed})=>[styles.shortcut,{backgroundColor:pressed?colors.selected:colors.surface,borderColor:colors.line}]}>
-  <View style={[styles.iconBadge,{backgroundColor:colors.soft}]}><Icon name={icon} size={21} color={colors.brandAccent}/></View>
+  <View style={[styles.iconBadge,{backgroundColor:mint?colors.brandTint:colors.soft}]}><Icon name={icon} size={21} color={mint?colors.brandAccent:colors.purple}/></View>
   <Text style={[styles.shortcutTitle,{color:colors.ink}]}>{title}</Text>
  </Pressable>;
 }
 
 const styles=StyleSheet.create({
- loading:{flex:1,justifyContent:'center',alignItems:'center'},
  frame:{flex:1,width:'100%',maxWidth:1000,alignSelf:'center'},
  scroll:{paddingBottom:28,paddingTop:10},
  mapFrame:{marginHorizontal:12,borderRadius:22,borderWidth:1,overflow:'hidden'},
@@ -103,8 +108,9 @@ const styles=StyleSheet.create({
  locate:{position:'absolute',bottom:12,left:16,width:48,height:48,borderRadius:24,borderWidth:1,alignItems:'center',justifyContent:'center',elevation:3,boxShadow:'0px 2px 10px #00000018'},
  search:{minHeight:66,paddingHorizontal:14,paddingVertical:10,borderRadius:20,alignItems:'center',gap:12},
  searchTitle:{color:'#fff',fontSize:19,fontWeight:'700',lineHeight:27},
+ accountStatus:{flexDirection:'row',alignItems:'center',flexWrap:'wrap',gap:8},
  shortcuts:{gap:10,alignItems:'stretch'},
- shortcut:{flexBasis:0,flexGrow:1,minWidth:0,minHeight:90,padding:10,borderWidth:1,borderRadius:18,alignItems:'center',justifyContent:'center',gap:5},
+ shortcut:{flexBasis:0,flexGrow:1,minWidth:0,minHeight:90,padding:10,borderWidth:1,borderRadius:18,alignItems:'center',justifyContent:'center',gap:5,boxShadow:'0px 3px 10px #08264818'},
  shortcutTitle:{fontSize:14,lineHeight:20,fontWeight:'600',textAlign:'center'},
  iconBadge:{width:36,height:36,borderRadius:12,alignItems:'center',justifyContent:'center'},
 });

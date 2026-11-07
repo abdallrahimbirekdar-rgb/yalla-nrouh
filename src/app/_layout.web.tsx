@@ -10,7 +10,7 @@ import {StatusBar} from 'expo-status-bar';
 import {AppProvider,useApp} from '../context';
 import {BrandLogo} from '../brand-logo';
 import {AccountButton,AppMenu,Button,Label,useText} from '../ui';
-import {useTheme} from '../theme';
+import {brandHeader,useTheme} from '../theme';
 
 function DriverRoute(){
  const auth=useAuth();
@@ -42,15 +42,14 @@ class PageErrorBoundary extends React.Component<{children:React.ReactNode;messag
 
 // Outside Stack: the approved brand stays visible while website routes change.
 function PersistentSiteHeader(){
- const {colors}=useTheme();
  const auth=useAuth();
  const {state}=useApp();
- return <View style={{backgroundColor:colors.surface,borderBottomColor:colors.line,borderBottomWidth:1,paddingHorizontal:12,paddingVertical:6}}>
+ return <View style={{backgroundColor:brandHeader.background,borderBottomColor:brandHeader.accent,borderBottomWidth:2,paddingHorizontal:12,paddingVertical:6}}>
   <View style={{width:'100%',maxWidth:1000,alignSelf:'center',minHeight:62,flexDirection:state.language==='ar'?'row-reverse':'row',alignItems:'center',justifyContent:'space-between',gap:8}}>
-   <BrandLogo/>
+   <BrandLogo inverse/>
    <View style={{flexDirection:'row',alignItems:'center',gap:8,flexShrink:0}}>
     <AccountButton/>
-    <AppMenu onSettings={auth.driver?()=>router.push({pathname:'/settings',params:{mode:'driver'}}):undefined}/>
+    <AppMenu inverse onSettings={auth.driver?()=>router.push({pathname:'/settings',params:{mode:'driver'}}):undefined}/>
    </View>
   </View>
  </View>;
@@ -61,7 +60,7 @@ function Screens(){
  const t=useText();
  const {colors,dark}=useTheme();
  useEffect(()=>{document.documentElement.lang=state.language},[state.language]);
- if(!ready)return <View style={{flex:1,backgroundColor:colors.background,justifyContent:'center',padding:24,gap:16}}>{loadError?<><Label>{t('تعذر استعادة البيانات المحفوظة.','Could not restore saved data.')}</Label><Button title={t('إعادة المحاولة','Try again')} onPress={retry}/></>:<ActivityIndicator color={colors.purple}/>}</View>;
+ if(!ready)return <><View style={{flex:1,backgroundColor:colors.background,justifyContent:'center',padding:24,gap:16}}>{loadError?<><Label>{t('تعذر استعادة البيانات المحفوظة.','Could not restore saved data.')}</Label><Button title={t('إعادة المحاولة','Try again')} onPress={retry}/></>:<ActivityIndicator color={colors.purple}/>}</View>{loadError&&<SiteShellSync/>}</>;
  return <>
   {recoveryNotice&&<View accessibilityRole="alert" style={{padding:12,backgroundColor:colors.background}}><Label>{t('تم فتح التطبيق بإعدادات آمنة. احتفظنا بنسخة احتياطية من البيانات القديمة التي تعذرت قراءتها.','The app opened with safe settings. A backup of unreadable old data was kept.')}</Label></View>}
   <StatusBar style={dark?'light':'dark'}/>
@@ -81,6 +80,6 @@ function Screens(){
  </>;
 }
 export default function Layout(){
- useFonts({Cairo_400Regular:require('@expo-google-fonts/cairo/400Regular/Cairo_400Regular.ttf'),Cairo_600SemiBold:require('@expo-google-fonts/cairo/600SemiBold/Cairo_600SemiBold.ttf'),Cairo_700Bold:require('@expo-google-fonts/cairo/700Bold/Cairo_700Bold.ttf'),...Ionicons.font});
+ useFonts(Ionicons.font);
  return <AppProvider><AuthProvider><Screens/></AuthProvider></AppProvider>;
 }
