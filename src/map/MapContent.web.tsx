@@ -54,8 +54,8 @@ export default function MapContent({point,destinationPoint,taxiPoint,passengerPo
   if(!ready||!map.current||!api.current||!line.current)return;
   const path=route?.map(position)??[];line.current.setPath(path);
   const hasDestination=destinationLat!==undefined&&destinationLng!==undefined;
-  const destination=hasDestination
-   ?{lat:destinationLat,lng:destinationLng}:path.length>1?path[path.length-1]:null;
+  // An approach-only route must not create a B marker at the pickup.
+  const destination=hasDestination?{lat:destinationLat,lng:destinationLng}:null;
   if(destination){
    if(marker.current)marker.current.content=endpointBadge(hasDestination||state.language!=='ar'?'A':'أ','#102a43');
    if(!endMarker.current)endMarker.current=new api.current.marker.AdvancedMarkerElement({
