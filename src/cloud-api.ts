@@ -1,3 +1,4 @@
+import type {CancellationActor,CancellationReason} from './ride-cancellation';
 import {readRideState,receiveRideState} from './cloud-ride-state.ts';
 import type {TripDraft} from './domain.ts';
 import {validTariff,type Tariff} from './meter.ts';
@@ -151,6 +152,8 @@ export async function cloudRequestRide(token:string,draft:TripDraft,requestId:st
   if(typeof id!=='string'||!id)throw new CloudError(500,'bad_response');
   return id;
 }
+export const cloudCancelRideWithReason=(token:string,id:string,actor:CancellationActor,reason:CancellationReason)=>
+ rpc<boolean>('cancel_ride_with_reason',token,{p_ride_id:id,p_actor:actor,p_reason:reason});
 export const cloudCancelRide=(token:string,id:string)=>rpc<boolean>('cancel_ride',token,{p_ride_id:id});
 export const cloudReleaseRide=(token:string,id:string)=>rpc<boolean>('release_ride',token,{p_ride_id:id});
 export const cloudRegisterDriver=(token:string,region:number,category:string)=>rpc<boolean>('register_driver',token,{p_region:region,p_category:category});

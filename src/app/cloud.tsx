@@ -1,10 +1,11 @@
+import RideCancellation,{type CancellationReason} from '../ride-cancellation';
 import React,{useCallback,useEffect,useMemo,useRef,useState} from 'react';
 import {AppState,Pressable,View} from 'react-native';
 import {router,useLocalSearchParams} from 'expo-router';
 import {useApp} from '../context';
 import {useAuth} from '../auth';
 import {authErrorMessage} from '../auth-errors';
-import {cloudCurrentToken,cloudDriverDispatchPing,cloudMutationUncertain,cloudMyRides,cloudDriverInbox,cloudOpenRides,cloudDeclineDriverOffer,cloudAcceptRide,cloudAdvanceRide,cloudReleaseRide,cloudCancelRide,cloudRegisterDriver,cloudSetDriverOnline,type CloudRide,type CloudDriver,type DriverHistoryKind,type RidePreview} from '../cloud-api';
+import {cloudCurrentToken,cloudDriverDispatchPing,cloudMutationUncertain,cloudMyRides,cloudDriverInbox,cloudOpenRides,cloudDeclineDriverOffer,cloudAcceptRide,cloudAdvanceRide,cloudReleaseRide,cloudCancelRideWithReason,cloudRegisterDriver,cloudSetDriverOnline,type CloudRide,type CloudDriver,type DriverHistoryKind,type RidePreview} from '../cloud-api';
 import {navigationPosition} from '../navigation-position';
 import RideOptions from '../ride-options';
 import {isCoordinate} from '../geo';
@@ -26,6 +27,8 @@ export default function Rides(){
  const auth=useAuth();const userId=auth.session?.user.id;const {state,draft,setDraft,foreground,connection}=useApp();const t=useText();const {colors}=useTheme();const params=useLocalSearchParams<{mode?:string;ride?:string;shareUnavailable?:string}>();const driverMode=auth.driver||params.mode==='driver';const historyMode=!driverMode&&params.mode==='history';
  const passengerTitle=historyMode?t('الرحلات السابقة','Past rides'):t('رحلتي الحالية','Current ride');
  const [offerLimit,setOfferLimit]=useState(3);
+ const [cancelId,setCancelId]=useState<string|null>(null);
+ const closeCancellation=useCallback(()=>setCancelId(null),[]);
  const [workTarget,setWorkTarget]=useState<boolean|null>(null);
  const [focusedOffer,setFocusedOffer]=useState<string|null>(null);
  const [historyKind,setHistoryKind]=useState<DriverHistoryKind|null>(null);
@@ -33,7 +36,7 @@ export default function Rides(){
  const closeHistory=useCallback(()=>setHistoryKind(null),[]);
  useEffect(()=>{
   setHistoryKind(null);setFocusedOffer(null);setOfferLimit(3);
-  setDeclined(null);
+  setDeclined(null);setCancelId(null);
  },[userId]);
  const [rides,setRides]=useState<CloudRide[]>([]),[driver,setDriver]=useState<CloudDriver|null>(null),[offers,setOffers]=useState<RidePreview[]>([]),[busy,setBusy]=useState(false),[loading,setLoading]=useState(true),[notice,setNotice]=useState(''),[inboxProblem,setInboxProblem]=useState(false);
  const [offerClock,setOfferClock]=useState(()=>performance.now());
@@ -299,8 +302,16 @@ export default function Rides(){
 
  const passengerRides=mine.filter(ride=>historyMode?!live(ride):ride.id===(currentPassengerRide?.id??params.ride));
  const searchingRide=!driverMode&&!historyMode&&currentPassengerRide?.status==='requested'?currentPassengerRide:undefined;
- function cancelRequest(ride:CloudRide){
-  void run(async token=>{if(!await cloudCancelRide(token,ride.id))throw Error('not_allowed')},t('تم إلغاء الطلب.','Request cancelled.'));
+ const cancellationRide=cancelId&&(driverMode?currentDriverRide:currentPassengerRide);
+ function openCancellation(ride:CloudRide){
+  setNotice('');setCancelId(ride.id);
+ }
+ function confirmCancellation(reason:CancellationReason){
+  if(!cancellationRide||cancellationRide.id!==cancelId)return;
+  void run(async token=>{
+   if(!await cloudCancelRideWithReason(token,cancellationRide.id,driverMode?'driver':'passenger',reason))throw Error('not_allowed');
+   closeCancellation();
+  },t('تم إلغاء الطلب.','Request cancelled.'));
  }
  function reuseDestination(ride:CloudRide){
   if(currentPassengerRide){router.replace('/cloud');return}
@@ -356,7 +367,7 @@ export default function Rides(){
     <Button secondary icon="repeat-outline" title={t('استخدام الوجهة مرة أخرى','Use this destination again')} onPress={()=>reuseDestination(ride)} disabled={!!currentPassengerRide}/>
    </>}
    {live(ride)&&<>
-    {ride.status!=='riding'&&ride.id!==searchingRide?.id&&<Button secondary title={t('إلغاء الطلب','Cancel request')} disabled={busy} onPress={()=>cancelRequest(ride)}/>}
+    {ride.status!=='riding'&&ride.id!==searchingRide?.id&&<Button secondary tone="danger" title={t('إلغاء الرحلة','Cancel ride','Fahrt stornieren')} disabled={busy} onPress={()=>openCancellation(ride)}/>}
    </>}
   </Panel>
  </React.Fragment>;
@@ -422,15 +433,22 @@ export default function Rides(){
    <Label>{t('الوضع العادي','Normal view')}</Label>
   </Pressable>
  </View>:undefined;
- const footer=currentDriverRide?<RideFooter>{driverRideAction(currentDriverRide)}</RideFooter>
+ const footer=currentDriverRide?<RideFooter>
+  {driverRideAction(currentDriverRide)}
+  {currentDriverRide.status!=='riding'&&<Button secondary tone="danger" title={t('إلغاء الرحلة','Cancel ride','Fahrt stornieren')}
+   disabled={busy} onPress={()=>openCancellation(currentDriverRide)}/>}
+ </RideFooter>
   :driverMode&&userId?<View style={{backgroundColor:colors.background,borderTopWidth:1,borderColor:colors.line,paddingHorizontal:12,paddingVertical:7}}><DriverHistoryBar onOpen={setHistoryKind}/></View>:searchingRide?<RideFooter>
   <RideSearchTimer key={searchingRide.id} startedAt={searchingRide.updated_at??searchingRide.created_at} onExpired={()=>void refresh().catch(()=>{})}/>
   {!!notice&&<View accessibilityRole="alert"><Label>{notice}</Label></View>}
-  <Button secondary title={t('إلغاء الطلب','Cancel request')} disabled={busy} onPress={()=>cancelRequest(searchingRide)}/>
+  <Button secondary title={t('إلغاء الطلب','Cancel request')} disabled={busy} onPress={()=>openCancellation(searchingRide)}/>
  </RideFooter>:!driverMode&&!historyMode&&params.ride&&loading?<RideFooter>
   <Label>{t('جارٍ تحميل حالة الطلب…','Loading request status…')}</Label>
  </RideFooter>:undefined;
  return <Page title={title} titleIcon={titleIcon} compact={driverMode||!historyMode} showBrand={driverMode} onSettings={driverMode?openDriverSettings:undefined} header={splitHeader} footer={footer}>
+  {cancellationRide&&cancellationRide.id===cancelId&&cancellationRide.status!=='riding'&&<RideCancellation key={cancelId}
+   actor={driverMode?'driver':'passenger'} arrived={cancellationRide.status==='arrived'} busy={busy} error={notice}
+   onClose={closeCancellation} onConfirm={confirmCancellation}/>}
   {driverMode&&historyKind&&userId&&<DriverHistory key={userId} kind={historyKind} owner={userId} onSelect={setHistoryKind} onClose={closeHistory}/>}
   {driverMode&&driver?.approved&&!currentDriverRide&&<DriverShift
    online={driver.online} region={driver.region} category={driver.category} target={workTarget}
