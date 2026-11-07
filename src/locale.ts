@@ -10,5 +10,5 @@ export const languages = [
 export function translate(language:Language,ar:string,en:string,de?:string):string{
  if(language==='ar')return ar;
  if(language==='en')return en;
- return de??(Object.hasOwn(german,en)?german[en]:en);
+ return de??(Object.prototype.hasOwnProperty.call(german,en)?german[en]:en);
 }

@@ -6,13 +6,13 @@ const lightAccent='#1c527d';
 const darkAccent='#92c6ed';
 export const lightColors={
  ink:'#082648',muted:'#4c6680',soft:'#e4eef8',line:'#c4d5e7',white:'#fff',
- brandAction:'#082648',brandAccent:'#9f4028',brandTint:'#fff0e9',
+ brandAction:'#082648',brandAccent:'#086779',brandTint:'#e2f6f8',
  error:'#bb4343',background:'#edf3fb',surface:'#ffffff',selected:'#d6e6f5',
  green:lightAccent,purple:lightAccent,cyan:lightAccent,rose:lightAccent,gold:lightAccent,
 };
 export const darkColors={
  ink:'#f0f6ff',muted:'#b9cfe5',soft:'#112d4d',line:'#355674',white:'#fff',
- brandAction:'#193c60',brandAccent:'#ffaf92',brandTint:'#502d31',
+ brandAction:'#193c60',brandAccent:'#7bdde4',brandTint:'#173f53',
  error:'#ff9e9e',background:'#081b35',surface:'#102b4b',selected:'#1a3b5b',
  green:darkAccent,purple:darkAccent,cyan:darkAccent,rose:darkAccent,gold:darkAccent,
 };
