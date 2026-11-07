@@ -79,7 +79,7 @@ Native GPS requests share bounded jobs through `position-jobs.ts`; include that 
 
 
 ## Keep cached website documents usable
-Do not delete earlier hashed web bundles during publication. The Pages workflow retains published files and restores recent asset history with `scripts/retain-web-assets.cjs`; current HTML must always win. Keep `startup-recovery.html` as a bounded startup/retry fallback and do not block web rendering on font downloads. This prevents old cached HTML from becoming a blank WebView after updates.
+Retain the last 12 published HTML versions' hashed web bundles and their required assets using `scripts/retain-web-assets.cjs`, so recently cached HTML keeps loading. Do not use unbounded `keep_files: true` in the Pages publish workflow: accumulated old bundles can exceed the Pages sync deadline. Current HTML and newly exported assets must always win. Keep `startup-recovery.html` as a bounded startup/retry fallback and do not block web rendering on font downloads. This prevents old cached HTML from becoming a blank WebView after updates.
 
 
 ## Isolated Android host (0.9.1)
