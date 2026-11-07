@@ -12,6 +12,7 @@ import android.os.Looper
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
 import android.view.WindowManager
+import android.widget.Toast
 import expo.modules.kotlin.Promise
 import expo.modules.kotlin.functions.Queues
 import expo.modules.kotlin.modules.Module
@@ -21,6 +22,11 @@ import java.util.UUID
 
 class DriverNavigationModule : Module() {
   private data class Prompt(val text: String, val language: String, val result: Promise)
+  private data class OsmAndRequest(
+    val target: String, val navigation: Intent? = null, val ride: String? = null,
+    val token: String? = null, val arabic: Boolean = false
+  )
+  private var osmAndRequest: OsmAndRequest? = null
   private val main = Handler(Looper.getMainLooper())
   private var speech: TextToSpeech? = null
   private var initialized = false
@@ -71,18 +77,32 @@ class DriverNavigationModule : Module() {
 
     AsyncFunction("requestOsmAndMapAccess") {
       val activity = appContext.currentActivity ?: return@AsyncFunction false
-      for (target in OSMAND_PACKAGES) {
-        val request = Intent("net.osmand.aidl.REQUEST_PERMISSIONS").setPackage(target)
-          .putExtra("groups", arrayOf("map"))
-        try {
-          @Suppress("DEPRECATION")
-          activity.startActivityForResult(request, 4312)
-          return@AsyncFunction true
-        } catch (_: Exception) { /* Older OsmAnd releases may not expose the permission screen. */ }
-        if (activity.packageManager.getLaunchIntentForPackage(target) != null) break
-      }
-      false
+      val target = OSMAND_PACKAGES.firstOrNull {
+        activity.packageManager.getLaunchIntentForPackage(it) != null
+      } ?: return@AsyncFunction false
+      requestOsmAndConsent(activity, OsmAndRequest(target))
     }.runOnQueue(Queues.MAIN)
+
+    OnActivityResult { activity, result ->
+      val request = osmAndRequest
+      if (result.requestCode == OSMAND_PERMISSION && request != null) {
+        val allowed = result.resultCode == Activity.RESULT_OK &&
+          result.data?.getStringArrayExtra("granted_groups")?.contains("map") == true
+        osmAndPreferences(activity).edit().putBoolean(request.target, allowed).apply()
+        // Android can deliver the result before onResume. Let the activity resume
+        // before starting the foreground service and opening navigation.
+        main.post {
+          if (osmAndRequest !== request) return@post
+          osmAndRequest = null
+          val navigation = request.navigation ?: return@post
+          if (activity.isFinishing || activity.isDestroyed) return@post
+          if (!launchOsmAnd(activity, navigation, request, allowed)) {
+            val text = if (request.arabic) "تعذّر فتح OsmAnd. أعد المحاولة." else "Could not open OsmAnd. Try again."
+            Toast.makeText(activity, text, Toast.LENGTH_LONG).show()
+          }
+        }
+      }
+    }
 
     AsyncFunction("openRideMaps") { latitude: Double, longitude: Double, adjacent: Boolean, provider: String,
       ride: String?, accessToken: String?, arabic: Boolean ->
@@ -104,16 +124,21 @@ class DriverNavigationModule : Module() {
       }
       if (adjacent) intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_LAUNCH_ADJACENT)
       if (provider == "osmand") {
+        if (osmAndRequest != null) return@AsyncFunction true
         for (target in OSMAND_PACKAGES) {
-          val targetIntent = intent.setPackage(target)
+          val targetIntent = Intent(intent).setPackage(target)
           if (targetIntent.resolveActivity(activity.packageManager) == null) continue
-          startPassenger(activity, ride, accessToken, target, arabic)
-          try {
-            activity.startActivity(targetIntent)
-            return@AsyncFunction true
-          } catch (_: Exception) {
-            stopPassenger(activity)
-          }
+          val request = OsmAndRequest(target, targetIntent, ride, accessToken, arabic)
+          val tracking = ride != null && accessToken != null
+          val preferences = osmAndPreferences(activity)
+          val permissionIntent = osmAndPermissionIntent(target)
+          val supportsConsent = permissionIntent.resolveActivity(activity.packageManager) != null
+          if (tracking && supportsConsent && !preferences.contains(target) &&
+            requestOsmAndConsent(activity, request)) return@AsyncFunction true
+          // Older OsmAnd versions may already allow this app. The service
+          // checks access before it reads any passenger positions.
+          val showMarker = tracking && (!supportsConsent || preferences.getBoolean(target, false))
+          if (launchOsmAnd(activity, targetIntent, request, showMarker)) return@AsyncFunction true
         }
         return@AsyncFunction false
       }
@@ -198,6 +223,37 @@ class DriverNavigationModule : Module() {
     }
   }
 
+  private fun osmAndPreferences(context: Context) =
+    context.getSharedPreferences("osmand-map-consent", Context.MODE_PRIVATE)
+
+  private fun osmAndPermissionIntent(target: String) =
+    Intent("net.osmand.aidl.REQUEST_PERMISSIONS").setPackage(target).putExtra("groups", arrayOf("map"))
+
+  private fun requestOsmAndConsent(activity: Activity, request: OsmAndRequest): Boolean {
+    if (osmAndRequest != null) return false
+    osmAndRequest = request
+    return try {
+      @Suppress("DEPRECATION")
+      activity.startActivityForResult(osmAndPermissionIntent(request.target), OSMAND_PERMISSION)
+      true
+    } catch (_: Exception) {
+      osmAndRequest = null
+      false
+    }
+  }
+
+  private fun launchOsmAnd(activity: Activity, intent: Intent, request: OsmAndRequest, showMarker: Boolean): Boolean {
+    if (showMarker) startPassenger(activity, request.ride, request.token, request.target, request.arabic)
+    else stopPassenger(activity)
+    return try {
+      activity.startActivity(intent)
+      true
+    } catch (_: Exception) {
+      stopPassenger(activity)
+      false
+    }
+  }
+
   private fun startPassenger(activity: Activity, ride: String?, token: String?, target: String, arabic: Boolean) {
     if (ride == null || token == null || Build.VERSION.SDK_INT < 26) {
       stopPassenger(activity)
@@ -213,11 +269,13 @@ class DriverNavigationModule : Module() {
   }
 
   private fun stopPassenger(context: Context) {
+    osmAndRequest = null
     OsmAndPassengerService.pending = null
     context.stopService(Intent(context, OsmAndPassengerService::class.java))
   }
 
   companion object {
+    private const val OSMAND_PERMISSION = 4312
     private val OSMAND_PACKAGES = listOf("net.osmand", "net.osmand.plus")
   }
 

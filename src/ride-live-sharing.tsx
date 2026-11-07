@@ -119,10 +119,10 @@ export function OsmAndHelp(){
    onPress={()=>{setStoreError(false);void Linking.openURL('https://play.google.com/store/apps/details?id=net.osmand').catch(()=>setStoreError(true));}}/>
   {storeError&&<Label muted>{t('تعذّر فتح المتجر. ابحث عن OsmAnd في Google Play.','Could not open the store. Search Google Play for OsmAnd.')}</Label>}
   {osmandPassengerSupported()&&<>
-   <Label>{t('لعرض علامة الزبون داخل OsmAnd، اسمح لـ«يلّا نروح» بإظهار عناصر على الخريطة عند ظهور طلب الإذن.','To see the customer marker in OsmAnd, allow Yalla Nrouh to display map items when prompted.')}</Label>
-   <Button secondary icon="person-outline" title={t('السماح بعرض علامة الزبون','Allow the customer marker')}
+   <Label>{t('عند فتح ملاحة OsmAnd للذهاب إلى الزبون لأول مرة، تظهر نافذة الموافقة تلقائيًا في الإصدارات التي تدعمها. اضغط «سماح» مرة واحدة.','When you first open OsmAnd to drive to a customer, supported versions show a permission prompt automatically. Tap Allow once.')}</Label>
+   <Button secondary icon="person-outline" title={t('إعادة طلب إذن عرض العلامة','Request marker permission again')}
     onPress={()=>{setPermissionHint(false);void nativeRequest('osmand-map-access').then(({ok})=>setPermissionHint(!ok));}}/>
-   {permissionHint&&<Label muted>{t('إذا لم تظهر نافذة الإذن، جرّب الملاحة أولًا. إذا لم تظهر العلامة، حدّث OsmAnd أو راجع التطبيقات المتصلة في إعداداته.','If no prompt opens, try navigation first. If the marker is missing, update OsmAnd or check connected apps in its settings.')}</Label>}
+   {permissionHint&&<Label muted>{t('تعذّر فتح نافذة الموافقة. إصدارات OsmAnd الأقدم تفتح الملاحة، لكن عرض العلامة قد لا يكون متاحًا فيها.','Could not open the permission prompt. Older OsmAnd versions still open navigation, but the marker may be unavailable.')}</Label>}
   </>}
  </HelpTip>;
 }

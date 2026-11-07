@@ -33,6 +33,11 @@ internal class OsmAndPassengerLayer(
   private var shown: Marker? = null
   private val icons = mutableMapOf<Boolean, Uri>()
 
+  fun prepare(api: IOsmAndAidlInterface): Boolean {
+    clear(api)
+    return addLayer(api, emptyList())
+  }
+
   fun render(api: IOsmAndAidlInterface, point: Point?, now: Long): Boolean {
     val age = point?.let { (now - it.measuredAt).coerceAtLeast(0L) }
     val marker = if (point != null && age != null && age < 180_000L) Marker(point, age >= 30_000L) else null
@@ -50,14 +55,8 @@ internal class OsmAndPassengerLayer(
     val updated = shown != null && api.updateMapPoint(UpdateMapPointParams(LAYER_ID, mapPoint, false))
     if (!updated) {
       // Recreate after a process reconnect or if OsmAnd removed the old layer.
-      val layer = AMapLayer(LAYER_ID, title, 5.5f, listOf(mapPoint)).apply {
-        setImagePoints(true)
-        setCirclePointZoomBounds(0, 5)
-        setSmallPointZoomBounds(6, 12)
-        setBigPointZoomBounds(13, 24)
-      }
       api.removeMapLayer(RemoveMapLayerParams(LAYER_ID))
-      if (!api.addMapLayer(AddMapLayerParams(layer))) {
+      if (!addLayer(api, listOf(mapPoint))) {
         shown = null
         return false
       }
@@ -65,6 +64,16 @@ internal class OsmAndPassengerLayer(
     shown = marker
     api.refreshMap()
     return true
+  }
+
+  private fun addLayer(api: IOsmAndAidlInterface, points: List<AMapPoint>): Boolean {
+    val layer = AMapLayer(LAYER_ID, title, 5.5f, points).apply {
+      setImagePoints(true)
+      setCirclePointZoomBounds(0, 5)
+      setSmallPointZoomBounds(6, 12)
+      setBigPointZoomBounds(13, 24)
+    }
+    return api.addMapLayer(AddMapLayerParams(layer))
   }
 
   fun clear(api: IOsmAndAidlInterface?) {

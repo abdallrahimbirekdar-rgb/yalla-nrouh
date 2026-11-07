@@ -50,6 +50,7 @@ class OsmAndPassengerService : Service() {
   private var point: OsmAndPassengerLayer.Point? = null
   private var expires = 0L
   private var failures = 0
+  private var polling = false
   private val bindingTimeout = Runnable { if (api == null) stopSelf() }
   private val poll = Runnable { readPosition() }
   private val redraw = object : Runnable {
@@ -92,9 +93,17 @@ class OsmAndPassengerService : Service() {
         override fun onServiceConnected(name: ComponentName, binder: IBinder) {
           if (session !== next) return
           main.removeCallbacks(bindingTimeout)
-          api = IOsmAndAidlInterface.Stub.asInterface(binder)
-          layer?.clear(api)
+          val connected = IOsmAndAidlInterface.Stub.asInterface(binder)
+          api = connected
+          if (runCatching { layer?.prepare(connected) }.getOrNull() != true) {
+            unavailable(next)
+            return
+          }
           draw()
+          if (!polling) {
+            polling = true
+            main.post(poll)
+          }
         }
         override fun onServiceDisconnected(name: ComponentName) {
           if (session !== next) return
@@ -112,7 +121,6 @@ class OsmAndPassengerService : Service() {
       if (bindService(service, listener, Context.BIND_AUTO_CREATE)) {
         connection = listener
         main.postDelayed(bindingTimeout, 15_000)
-        main.post(poll)
         main.post(redraw)
       } else stopSelf()
     } catch (_: Exception) {
@@ -137,6 +145,10 @@ class OsmAndPassengerService : Service() {
 
   private fun readPosition() {
     val request = session ?: return
+    if (api == null) {
+      main.postDelayed(poll, POLL_MS)
+      return
+    }
     network.execute {
       val result = load(request)
       main.post {
@@ -202,18 +214,21 @@ class OsmAndPassengerService : Service() {
     val connected = api ?: return
     val current = session ?: return
     val result = runCatching { layer?.render(connected, point, System.currentTimeMillis()) }
-    if (result.getOrNull() == false) {
-      val hint = if (current.arabic) "من خيارات يلّا نروح، فعّل إذن عرض العلامة في OsmAnd."
-        else "In Yalla Nrouh, allow displaying the marker in OsmAnd."
-      Toast.makeText(this, hint, Toast.LENGTH_LONG).show()
-      stopSelf()
-    }
+    if (result.getOrNull() == false) unavailable(current)
+  }
+
+  private fun unavailable(current: Session) {
+    val hint = if (current.arabic) "عرض علامة الزبون غير متاح في OsmAnd. الملاحة مستمرة."
+      else "The customer marker is unavailable in OsmAnd. Navigation will continue."
+    Toast.makeText(this, hint, Toast.LENGTH_LONG).show()
+    stopSelf()
   }
 
   private fun releaseLayer() {
     session = null
     point = null
     failures = 0
+    polling = false
     main.removeCallbacks(bindingTimeout)
     main.removeCallbacks(poll)
     main.removeCallbacks(redraw)
