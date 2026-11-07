@@ -1,4 +1,4 @@
-import React,{useEffect,useMemo,useState} from 'react';
+import React,{useEffect,useState} from 'react';
 import {ActivityIndicator,Platform,View} from 'react-native';
 import {cloudCurrentToken,cloudRideDriverVehicleDetails,rideSearchLimitMs,type DriverVehicleDetails} from './cloud-api';
 import {categories} from './domain';
@@ -144,12 +144,11 @@ export function PassengerTaxiMap({rideId,pickup,destination,route,status,categor
    ?t('الوصول خلال نحو '+format.format(eta.minutes)+' دقيقة','Arriving in about '+format.format(eta.minutes)+' min')
    :eta.pending?t('جارٍ حساب وقت الوصول…','Estimating arrival…')
     :t('وقت الوصول غير متاح الآن. تابع السيارة على الخريطة.','Arrival time is unavailable. Follow the taxi on the map.');
- const lat=taxi?.latitude,lng=taxi?.longitude;
- const camera=useMemo(()=>riding&&lat!==undefined&&lng!==undefined
-  ?{point:{latitude:lat,longitude:lng},revision:0,isLocation:false,zoom:16}:undefined,[riding,lat,lng]);
+ // Keep both journey endpoints and the taxi on the same map even after pickup.
+ // A fixed camera on the moving taxi would hide A/B and the route.
  const number=format.format(age);
  return <>
-  <PassengerMap point={pickup} destinationPoint={destination} route={route} taxiPoint={taxi} cameraTarget={camera}/>
+  <PassengerMap point={pickup} destinationPoint={destination} route={route} taxiPoint={taxi}/>
   <View style={{backgroundColor:colors.selected,borderRadius:12,paddingHorizontal:12,paddingVertical:8,gap:3}}>
    <View style={{flexDirection:state.language==='ar'?'row-reverse':'row',alignItems:'center',gap:8}}>
     <Icon name="car-outline" color={colors.purple}/>
