@@ -98,14 +98,14 @@ export async function cloudMyRides(token:string):Promise<CloudRide[]>{
   receiveRideState(owner,rides);return rides;
 }
 export type DriverHistoryKind='completed'|'cancelled'|'released';
-export type DriverHistoryEntry={id:string|number;ride_id?:string;region:number;category:string;pickup?:string;destination?:string;updated_at?:string;released_at?:string};
+export type DriverHistoryEntry={id:string|number;ride_id?:string;region:number;category:string;pickup?:string;pickup_lat?:number;pickup_lng?:number;destination?:string;updated_at?:string;released_at?:string};
 export const driverHistoryPageSize=20;
 export function cloudDriverHistory(token:string,owner:string,kind:DriverHistoryKind,offset:number){
  requireToken(token);
  const page='&driver_id=eq.'+encodeURIComponent(owner)+'&limit='+driverHistoryPageSize+'&offset='+offset;
  const path=kind==='released'
   ? '/rest/v1/driver_ride_releases?select=id,ride_id,region,category,released_at&order=released_at.desc,id.desc'
-  : '/rest/v1/rides?select=id,region,category,pickup,destination,updated_at&status=eq.'+kind+'&order=updated_at.desc,id.desc';
+  : '/rest/v1/rides?select=id,region,category,pickup,pickup_lat,pickup_lng,destination,updated_at&status=eq.'+kind+'&order=updated_at.desc,id.desc';
  return call<DriverHistoryEntry[]>(path+page,'GET',token);
 }
 export async function cloudMyDriver(token:string):Promise<CloudDriver|null>{

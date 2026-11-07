@@ -1,9 +1,11 @@
-import React,{useEffect,useState} from 'react';
+import React,{useEffect,useRef,useState} from 'react';
 import {ActivityIndicator,Modal,Platform,Pressable,ScrollView,Text,View} from 'react-native';
 import {SafeAreaView} from 'react-native-safe-area-context';
 import {cloudCurrentToken,cloudDriverHistory,driverHistoryPageSize,type DriverHistoryEntry,type DriverHistoryKind} from './cloud-api';
 import {useApp} from './context';
 import {categories,regions} from './domain';
+import {formatCoordinate,isCoordinate} from './geo';
+import {createPickupAddressLookup} from './map/pickup-address';
 import {Button,Icon,Label,Panel,useText,useTheme} from './ui';
 
 const sections=[
@@ -65,10 +67,20 @@ export function DriverHistory({kind,owner,onSelect,onClose}:{kind:DriverHistoryK
  </Modal>;
 }
 
+function pickupAddressInfo(item:DriverHistoryEntry){
+ const label=item.pickup?.trim();
+ if(label&&!['موقعي الحالي','my current location','نقطة الالتقاء على الخريطة','meeting point on the map'].includes(label.toLowerCase()))return {label};
+ const point={latitude:item.pickup_lat,longitude:item.pickup_lng};
+ return isCoordinate(point)?{point}:null;
+}
+
 function DriverHistoryList({kind,owner}:{kind:DriverHistoryKind;owner:string}){
  const {state}=useApp();const {colors}=useTheme();const t=useText();
  const [entries,setEntries]=useState<DriverHistoryEntry[]>([]),[offset,setOffset]=useState(0),[attempt,setAttempt]=useState(0);
  const [loading,setLoading]=useState(true),[problem,setProblem]=useState(false),[more,setMore]=useState(false);
+ const [resolved,setResolved]=useState<Record<string,string|null>>({});
+ const known=useRef<Record<string,string|null>>({});
+ const language=state.language;
  const section=sections.find(item=>item.kind===kind)!;
  const rtl=state.language==='ar';
  useEffect(()=>{
@@ -81,11 +93,35 @@ function DriverHistoryList({kind,owner}:{kind:DriverHistoryKind;owner:string}){
   }).catch(()=>{if(active)setProblem(true)}).finally(()=>{if(active)setLoading(false)});
   return()=>{active=false};
  },[owner,kind,offset,attempt]);
+ useEffect(()=>{
+  if(Platform.OS!=='web')return;
+  let active=true;
+  const findAddresses=async()=>{
+   const points=entries.flatMap(item=>{const point=pickupAddressInfo(item)?.point;return point?[point]:[]});
+   if(!points.some(point=>!(language+formatCoordinate(point) in known.current)))return;
+   const lookup=await createPickupAddressLookup(language);
+   for(const point of points){
+    if(!active)return;
+    const key=language+formatCoordinate(point);
+    if(key in known.current)continue;
+    const address=await lookup(point);
+    if(!active)return;
+    known.current[key]=address;
+    setResolved(previous=>({...previous,[key]:address}));
+   }
+  };
+  void findAddresses().catch(()=>{/* The saved pickup coordinates remain visible. */});
+  return()=>{active=false};
+ },[entries,language]);
  return <ScrollView style={{flex:1}} contentContainerStyle={{width:'100%',maxWidth:640,alignSelf:'center',padding:14,gap:10}}>
   {kind==='released'&&<Label muted>{t('طلبات قبلتها وأُعيدت للبحث عن سائق آخر قبل إتمام الرحلة.','Requests you accepted that returned to the search for another driver before completion.')}</Label>}
   {entries.map(item=>{
    const timestamp=item.released_at??item.updated_at;
    const date=timestamp?new Date(timestamp):null;
+   const pickup=pickupAddressInfo(item);
+   const coords=pickup?.point?formatCoordinate(pickup.point):null;
+   const resolvedAddress=coords?resolved[language+coords]:null;
+   const pickupAddress=pickup?.label??resolvedAddress??(coords?t('الإحداثيات','Coordinates')+' · '+coords:item.pickup?t('العنوان غير متاح','Address unavailable'):null);
    return <Panel key={item.id} outlined>
     <View style={{flexDirection:rtl?'row-reverse':'row',alignItems:'center',justifyContent:'space-between',gap:8,flexWrap:'wrap'}}>
      <View style={{flexDirection:rtl?'row-reverse':'row',alignItems:'center',gap:5,paddingHorizontal:8,borderRadius:12,backgroundColor:colors.surface}}>
@@ -94,7 +130,7 @@ function DriverHistoryList({kind,owner}:{kind:DriverHistoryKind;owner:string}){
      </View>
      {date&&Number.isFinite(date.getTime())&&<Label muted>{date.toLocaleString(state.language)}</Label>}
     </View>
-    {item.pickup&&<HistoryStop label={t('الانطلاق','Pickup')} address={item.pickup} icon="ellipse-outline"/>}
+    {pickupAddress&&<HistoryStop label={t('الانطلاق','Pickup')} address={pickupAddress} icon="ellipse-outline" attribution={resolvedAddress?'Google Maps':undefined}/>}
     {item.destination&&<HistoryStop label={t('الوجهة','Destination')} address={item.destination} icon="location-outline"/>}
     {kind==='released'&&<Label>{regions[item.region]?.[rtl?0:1]} · {categories.find(c=>c.id===item.category)?.[state.language]??item.category}</Label>}
     <View style={{borderTopWidth:1,borderColor:colors.line,paddingTop:5}}>
@@ -109,12 +145,12 @@ function DriverHistoryList({kind,owner}:{kind:DriverHistoryKind;owner:string}){
  </ScrollView>;
 }
 
-function HistoryStop({label,address,icon}:{label:string;address:string;icon:'ellipse-outline'|'location-outline'}){
+function HistoryStop({label,address,icon,attribution}:{label:string;address:string;icon:'ellipse-outline'|'location-outline';attribution?:string}){
  const {state}=useApp();const {colors}=useTheme();
  return <View style={{flexDirection:state.language==='ar'?'row-reverse':'row',alignItems:'center',gap:9}}>
   <View style={{width:30,height:30,borderRadius:10,backgroundColor:colors.surface,alignItems:'center',justifyContent:'center'}}>
    <Icon name={icon} size={16} color={colors.muted}/>
   </View>
-  <View style={{flex:1,minWidth:0}}><Label muted>{label}</Label><Label>{address}</Label></View>
+  <View style={{flex:1,minWidth:0}}><Label muted>{label}</Label><Label>{address}</Label>{attribution&&<Label muted>{attribution}</Label>}</View>
  </View>;
 }
