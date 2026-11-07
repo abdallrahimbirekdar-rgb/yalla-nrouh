@@ -15,8 +15,5 @@ android {
 }
 
 dependencies {
-  // classes.jar from the official net.osmand:android-aidl-lib:5.4 AAR.
-  // SHA-256: c5c30ec411526c55fedcf876005127671d730e4c3247783631f2e42ed2f5d6f3
-  implementation files("libs/osmand-aidl-5.4.jar")
   implementation 'com.google.android.gms:play-services-location:21.0.1'
 }

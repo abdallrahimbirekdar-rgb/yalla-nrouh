@@ -1,19 +1,10 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
   <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
   <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
-  <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
   <application>
-    <service android:name="com.yallanrouh.navigation.OsmAndPassengerService" android:exported="false"
-      android:foregroundServiceType="dataSync" android:stopWithTask="true" />
-    <provider android:name="com.yallanrouh.navigation.OsmAndIconProvider"
-      android:authorities="${applicationId}.osmand-icons" android:exported="false" android:grantUriPermissions="true">
-      <meta-data android:name="android.support.FILE_PROVIDER_PATHS" android:resource="@xml/osmand_passenger_icons" />
-    </provider>
     <service android:name="com.yallanrouh.navigation.RideSharingService" android:exported="false" android:foregroundServiceType="location" />
   </application>
   <queries>
-    <package android:name="net.osmand" />
-    <package android:name="net.osmand.plus" />
     <intent>
       <action android:name="android.intent.action.TTS_SERVICE" />
     </intent>
