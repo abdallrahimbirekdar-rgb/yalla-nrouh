@@ -1,6 +1,7 @@
 import {useCallback,useEffect,useMemo,useRef,useState} from 'react';
 import {Linking,Pressable,useWindowDimensions,View} from 'react-native';
 import {cloudGetToken} from './cloud-api';
+import type {NavigationProvider} from './driver-navigation-preference';
 import {authClient} from './auth-client';
 import {isCoordinate,type Coordinate} from './geo';
 import {distanceMeters} from './navigation-progress';
@@ -110,7 +111,6 @@ export function stopOsmAndPassenger(){
 }
 
 const navigationMessage={google:'ride-maps',osmand:'ride-osmand'} as const;
-export type NavigationProvider=keyof typeof navigationMessage;
 export async function openRideMaps(point:Coordinate,adjacent:boolean,nativeAvailable:boolean,provider:NavigationProvider,waitingRideId?:string):Promise<boolean>{
  if(provider==='osmand'&&!osmandPassengerSupported())return false;
  const accessToken=provider==='osmand'&&waitingRideId?cloudGetToken():null;
@@ -182,7 +182,7 @@ export function pickupChange(row:Record<string,unknown>|null){
  return isCoordinate(point)?{point,id:row.proposal_id,approved:row.approved===true}:null;
 }
 
-export function CustomerTracking({rideId,pickup,foreground,compact}:{rideId:string;pickup:Coordinate;foreground:boolean;compact?:boolean}){
+export function CustomerTracking({rideId,pickup,foreground,compact,duringTrip=false}:{rideId:string;pickup:Coordinate;foreground:boolean;compact?:boolean;duringTrip?:boolean}){
  const t=useText();
  const {colors}=useTheme();
  const {height}=useWindowDimensions();
@@ -212,8 +212,8 @@ export function CustomerTracking({rideId,pickup,foreground,compact}:{rideId:stri
  const measured=typeof row?.measured_at==='string'?Date.parse(row.measured_at):NaN;
  const age=Math.max(0,Math.floor((now-measured)/1000));
  const passenger=isCoordinate(point)&&age<180?point:undefined;
- const distance=passenger?Math.round(distanceMeters(pickup,passenger)):null;
- const focus=showPickup||!passenger?pickup:passenger;
+ const distance=passenger&&!duringTrip?Math.round(distanceMeters(pickup,passenger)):null;
+ const focus=(!duringTrip&&showPickup)||!passenger?pickup:passenger;
  const {latitude:focusLat,longitude:focusLng}=focus;
  const cameraTarget=useMemo(()=>({
   point:{latitude:focusLat,longitude:focusLng},revision:cameraRevision,isLocation:false,zoom:19,
@@ -223,12 +223,13 @@ export function CustomerTracking({rideId,pickup,foreground,compact}:{rideId:stri
   if(distance>=100)setAway(true);
   else if(distance<=65)setAway(false);
  },[distance,age]);
- const title=passenger&&!showPickup
+ const title=passenger&&(duringTrip||!showPickup)
   ?age<30?t('موقع الزبون الآن','Customer location now'):t('آخر موقع للزبون','Last customer location')
   :t('نقطة الالتقاء الأصلية','Original meeting point');
  const status=passenger
   ?age<30?t(`تحديث قبل ${age} ث`,`Updated ${age}s ago`):t('موقع الزبون قديم','Customer location is stale')
   :t('موقع الزبون غير متاح الآن','Customer location unavailable');
+ if(duringTrip&&!passenger)return null;
  const switchTitle=showPickup?t('عرض الزبون','Show customer'):t('عرض نقطة الالتقاء','Show meeting point');
  return <View style={{backgroundColor:colors.background,borderColor:colors.line,borderWidth:1,borderRadius:14,overflow:'hidden'}}>
   <View style={{paddingHorizontal:10,paddingVertical:5}}><Label>{title}</Label></View>
@@ -237,12 +238,12 @@ export function CustomerTracking({rideId,pickup,foreground,compact}:{rideId:stri
   </View>
   <View style={{paddingHorizontal:10,paddingVertical:5}}>
    <Label muted>{status}{distance!==null&&t(` · ${distance} م عن نقطة الالتقاء الأصلية`,` · ${distance} m from original meeting point`)}</Label>
-   {passenger&&age<30&&away&&<Label>{t('الزبون ابتعد عن نقطة الالتقاء.','The customer moved away from the meeting point.')}</Label>}
+   {!duringTrip&&passenger&&age<30&&away&&<Label>{t('الزبون ابتعد عن نقطة الالتقاء.','The customer moved away from the meeting point.')}</Label>}
    <View style={{flexDirection:'row',flexWrap:'wrap',justifyContent:'space-between',columnGap:8}}>
     <Pressable accessibilityRole="button" onPress={()=>setCameraRevision(value=>value+1)} style={{minHeight:44,flexDirection:'row',alignItems:'center',gap:5}}>
      <Icon name="locate-outline" size={17} color={colors.purple}/><Label>{t('إعادة التوسيط','Recenter map')}</Label>
     </Pressable>
-    {passenger&&<Pressable accessibilityRole="button" onPress={()=>{setShowPickup(value=>!value);setCameraRevision(value=>value+1)}} style={{minHeight:44,justifyContent:'center'}}>
+    {!duringTrip&&passenger&&<Pressable accessibilityRole="button" onPress={()=>{setShowPickup(value=>!value);setCameraRevision(value=>value+1)}} style={{minHeight:44,justifyContent:'center'}}>
      <Label>{switchTitle}</Label>
     </Pressable>}
    </View>

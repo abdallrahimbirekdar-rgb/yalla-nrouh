@@ -1,5 +1,5 @@
 import {useCallback,useEffect,useRef,useState} from 'react';
-import type {DriverRoutePlan} from './valhalla-route';
+import type {RoutePlan} from './routing';
 
 type Language='ar'|'en';
 type SpeechWindow=Window&{__YALLA_DRIVER_VOICE_SETUP__?:boolean;__YALLA_NATIVE_ACTIVE__?:boolean;ReactNativeWebView?:{postMessage:(message:string)=>void}};
@@ -79,7 +79,7 @@ export function requestDriverSpeech(text:string,language:Language):Promise<Voice
  });
 }
 
-export function useDriverSpeech(plan:DriverRoutePlan|null,turn:Turn|null,canGuide:boolean,language:Language){
+export function useDriverSpeech(plan:RoutePlan|null,turn:Turn|null,canGuide:boolean,language:Language){
  const [available,setAvailable]=useState(false);
  const [enabled,setEnabled]=useState(()=>{
   try{return host()?.localStorage.getItem(preference)==='on'}catch{return false}
@@ -89,7 +89,7 @@ export function useDriverSpeech(plan:DriverRoutePlan|null,turn:Turn|null,canGuid
  const [visible,setVisible]=useState(true);
  const operation=useRef(0),switching=useRef(false);
  const stop=useCallback(()=>{operation.current++;switching.current=false;stopSpeech()},[]);
- const spoken=useRef<{route:DriverRoutePlan|null;index:number}>({route:null,index:-1});
+ const spoken=useRef<{route:RoutePlan|null;index:number}>({route:null,index:-1});
  useEffect(()=>{
   const web=host();if(!web)return;
   let nativeActive=web.__YALLA_NATIVE_ACTIVE__!==false;

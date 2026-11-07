@@ -1,4 +1,3 @@
-import {isValhallaPilotDriver} from '../valhalla-route';
 import React,{useCallback,useEffect,useMemo,useRef,useState} from 'react';
 import {AppState,Pressable,View} from 'react-native';
 import {router,useLocalSearchParams} from 'expo-router';
@@ -14,12 +13,13 @@ import {PassengerFare,PassengerStops,RideFooter} from '../passenger-trip-summary
 import DriverOffer from '../driver-offer';
 import type {RoutePlan} from '../routing';
 import DriverNavigation from '../driver-navigation';
+import {navigationProviders,useDriverNavigationPreference} from '../driver-navigation-preference';
 import {DriverQueueEmpty,DriverQueueHeader,DriverShift} from '../driver-dashboard';
 import {DriverHistory,DriverHistoryBar} from '../driver-history';
 import {useDriverOfferSound} from '../use-driver-offer-sound';
 import {useCurrentPosition} from '../use-current-position';
 import {PassengerTaxiMap,RideSearchTimer,useShareTaxiPosition} from '../taxi-tracking';
-import {CustomerTracking,OsmAndHelp,openRideMaps,osmandPassengerSupported,pickupChange,stopOsmAndPassenger,useRideRow,useRideSharing,type NavigationProvider} from '../ride-live-sharing';
+import {CustomerTracking,openRideMaps,osmandPassengerSupported,pickupChange,stopOsmAndPassenger,useRideRow,useRideSharing} from '../ride-live-sharing';
 import {authClient} from '../auth-client';
 import {useRideRecovery} from '../use-ride-recovery';
 import {claimDriverSharingAttempt,readDriverSharingConsent,saveDriverSharingConsent} from '../driver-sharing-consent';
@@ -27,10 +27,8 @@ import {createRefreshQueue} from '../refresh-queue';
 import {Button,HelpTip,Icon,Label,Page,Panel,useText,useTheme} from '../ui';
 const live=(r:CloudRide)=>!['completed','cancelled'].includes(r.status);
 export default function Rides(){
- const auth=useAuth();const userId=auth.session?.user.id;const {state,draft,setDraft,foreground,connection}=useApp();const t=useText();const {colors}=useTheme();const params=useLocalSearchParams<{mode?:string;ride?:string}>();const driverMode=auth.driver||params.mode==='driver';const historyMode=!driverMode&&params.mode==='history';
+ const auth=useAuth();const userId=auth.session?.user.id;const {state,draft,setDraft,foreground,connection}=useApp();const t=useText();const {colors}=useTheme();const params=useLocalSearchParams<{mode?:string;ride?:string;shareUnavailable?:string}>();const driverMode=auth.driver||params.mode==='driver';const historyMode=!driverMode&&params.mode==='history';
  const passengerTitle=historyMode?t('الرحلات السابقة','Past rides'):t('رحلتي الحالية','Current ride');
- const [pilotOwner,setPilotOwner]=useState<string|null>(null);
- const [pilotRide,setPilotRide]=useState<string|null>(null);
  const [offerLimit,setOfferLimit]=useState(3);
  const [workTarget,setWorkTarget]=useState<boolean|null>(null);
  const [focusedOffer,setFocusedOffer]=useState<string|null>(null);
@@ -89,14 +87,6 @@ export default function Rides(){
  },[userId,driverMode,queue]);
  useEffect(()=>{setRides([]);setOffers([]);setDriver(null);setInboxProblem(false);setLoading(true);if(!userId){setLoading(false);return}let active=true;void refresh().catch(()=>{if(active){setNotice(state.language==='ar'?'تعذر تحميل الرحلات. تحقق من الاتصال وأعد المحاولة.':'Could not load rides. Check internet and retry.');setLoading(false)}});return()=>{active=false}},[refresh,userId,state.language]);
  const currentDriverRide=driverMode?rides.find(r=>r.driver_id===userId&&live(r)):undefined;
- useEffect(()=>{
-  let active=true;
-  if(userId&&driverMode&&driver?.approved){
-   void isValhallaPilotDriver(userId).then(allowed=>{if(active&&allowed)setPilotOwner(userId)}).catch(()=>{});
-  }else setPilotOwner(null);
-  return()=>{active=false};
- },[userId,driverMode,driver?.approved]);
- useEffect(()=>{if(pilotRide!==currentDriverRide?.id)setPilotRide(null)},[pilotRide,currentDriverRide?.id]);
  const gps=useCurrentPosition(driverMode&&Boolean(currentDriverRide||driver?.approved&&driver.online)&&state.preferences.permissionsIntroSeen);
  useEffect(()=>{
   if(!driverMode||!driver?.approved||!driver.online||currentDriverRide||!foreground||connection==='offline')return;
@@ -171,14 +161,7 @@ export default function Rides(){
   setCompactRide(rideId);
   try{if(rideId)localStorage.setItem('yn-driver-split-ride',rideId);else localStorage.removeItem('yn-driver-split-ride')}catch{/* The view still switches. */}
  }
- const [navigationProvider,setNavigationProvider]=useState<NavigationProvider>(()=>{
-  const androidHost=typeof window!=='undefined'&&'ReactNativeWebView' in window;
-  try{
-   const saved=localStorage.getItem('yn-driver-navigation');
-   if(saved==='google'||saved==='osmand')return saved;
-  }catch{/* Use the default when storage is unavailable. */}
-  return androidHost?'osmand':'google';
- });
+ const navigationProvider=useDriverNavigationPreference();
  const osmandWaiting=!!currentDriverRide&&['accepted','arrived'].includes(currentDriverRide.status)&&!currentDriverRide.pickup_confirmed_at;
  useEffect(()=>{
   if(!osmandWaiting||navigationProvider!=='osmand')stopOsmAndPassenger();
@@ -255,12 +238,13 @@ export default function Rides(){
   {ride&&sharing.problem&&<Label muted>{t('تعذّرت المشاركة. تحقق من الاتصال وإذن الموقع الدقيق والإشعارات، ثم حاول مجددًا.','Could not share. Check your connection, precise location and notification permissions, then try again.')}</Label>}
  </View>;
  const sharePassenger=(ride:CloudRide)=>sharing.capability&&trackingBackend&&<View style={{gap:6}}>
-  <Label muted>{t('بموافقتك يرى السائق المعيّن موقعك أثناء انتظار السيارة، حتى لو كان التطبيق في الخلفية.','With your consent, the assigned driver can see your location while you wait, including in the background.')}</Label>
+  <Label muted>{t('بموافقتك يرى السائق المعيّن موقعك أثناء الانتظار والرحلة، حتى لو كان التطبيق في الخلفية.','With your consent, the assigned driver can see your location while you wait and ride, including in the background.')}</Label>
   <Button secondary icon="locate-outline" title={sharing.activeRide===ride.id?t('إيقاف مشاركة موقعي','Stop sharing my location'):t('أوافق على مشاركة موقعي','I agree to share my location')}
-   disabled={sharing.busy} onPress={()=>sharing.activeRide===ride.id?void sharing.stop(ride.id):void sharing.start(ride.id,'passenger')}/>
+   disabled={sharing.busy} onPress={()=>{router.setParams({shareUnavailable:undefined});void (sharing.activeRide===ride.id?sharing.stop(ride.id):sharing.start(ride.id,'passenger'))}}/>
   <HelpTip title={t('متى تُشارك إحداثياتي؟','When is my location shared?')}>
-   <Label>{t('يمكنك إيقاف المشاركة من هنا أو من إشعار أندرويد. تتوقف تلقائيًا عند انتهاء المرحلة التي تحتاج إلى موقعك.','You can stop sharing here or from the Android notification. Sharing stops automatically when your location is no longer needed for that part of the ride.')}</Label>
+   <Label>{t('يمكنك إيقاف المشاركة من هنا أو من إشعار أندرويد. تتوقف تلقائيًا عند انتهاء البحث أو اكتمال الرحلة أو إلغائها.','You can stop sharing here or from the Android notification. Sharing stops automatically when the search ends, or the ride is completed or cancelled.')}</Label>
   </HelpTip>
+  {params.ride===ride.id&&params.shareUnavailable==='1'&&!sharing.busy&&!sharing.activeRide&&<Label muted>{t('تم تسجيل طلبك. إذا أردت مشاركة موقعك، تحقّق من أذونات الموقع والإشعارات ثم اضغط زر المشاركة أعلاه.','Your request was sent. To share your location, check location and notification permissions, then use the sharing button above.')}</Label>}
   {sharing.problem&&<Label muted>{t('تعذّر تغيير المشاركة. تحقق من الاتصال وإذن الموقع الدقيق والإشعارات.','Could not change sharing. Check your connection, precise location and notification permissions.')}</Label>}
  </View>;
  async function proposePickup(ride:CloudRide){
@@ -276,21 +260,8 @@ export default function Rides(){
   }catch{setNotice(t('تعذّر اقتراح موقعك الحالي. تحقق من GPS والاتصال.','Could not propose your current location. Check GPS and internet.'))}
   finally{clearTimeout(timer);setProposing(false)}
  }
- const providers={google:'Google Maps',osmand:'OsmAnd'} as const;
- const navigationOptions=<View style={{gap:4}}>
- <View style={{flexDirection:'row',flexWrap:'wrap',gap:6}}>
-  {(['osmand','google'] as const).map(provider=><View key={provider} style={{flexGrow:1}}>
-   <Button secondary={navigationProvider!==provider} title={providers[provider]} onPress={()=>{
-    setNavigationProvider(provider);
-    try{localStorage.setItem('yn-driver-navigation',provider)}catch{/* Use the selection for this session. */}
-   }}/>
-  </View>)}
- </View>
- <OsmAndHelp/>
- <HelpTip title={t('كيف يعمل تقسيم الشاشة؟','How does split screen work?')}>
-  <Label>{t('إذا فتحت الملاحة وحدها، افتح «التطبيقات الأخيرة»، اضغط أيقونة «يلّا نروح» واختر «فتح في عرض تقسيم الشاشة»، ثم اختر تطبيق الملاحة. إذا لم يظهر الخيار، استخدم الوضع العادي.','If navigation opens on its own, open Recents, tap the Yalla Nrouh icon, choose split screen and select your navigation app. If the option is missing, use normal mode.')}</Label>
- </HelpTip>
- </View>;
+ const openDriverSettings=()=>router.push({pathname:'/settings',params:{mode:'driver'}});
+ const navigationSettings=<Button secondary icon="options-outline" title={t('إعدادات الملاحة','Navigation settings')} onPress={openDriverSettings}/>;
  function showExternal(ride:CloudRide,point:{latitude:number;longitude:number},adjacent:boolean){
   setSplitRide(adjacent?ride.id:null);
   setNotice('');
@@ -380,7 +351,7 @@ export default function Rides(){
    {ride.id!==searchingRide?.id&&<View style={{alignSelf:'flex-start',borderRadius:20,paddingHorizontal:12,paddingVertical:4,backgroundColor:colors.selected}}><Label muted>{ride.search_expired_at?t('انتهى البحث بدون سائق','Search expired without a driver'):status(ride.status)}</Label></View>}
    {typeof ride.estimated_fare==='number'&&<PassengerFare fare={ride.estimated_fare}/>}
    <PassengerStops pickup={ride.pickup} destination={ride.destination} category={ride.category}/>
-   {['requested','accepted','arrived'].includes(ride.status)&&!ride.pickup_confirmed_at&&sharePassenger(ride)}
+   {live(ride)&&sharePassenger(ride)}
    {trackingBackend&&ride.status==='accepted'&&<>
     {proposal?.approved?<Label>{t('وافق السائق على نقطة الالتقاء الجديدة.','The driver approved the new meeting point.')}</Label>
      :<Button secondary title={t('اقتراح موقعي الحالي كنقطة التقاء','Suggest my current location as the meeting point')} disabled={proposing} onPress={()=>void proposePickup(ride)}/>}
@@ -420,7 +391,7 @@ export default function Rides(){
      :t('اطلب من الزبون تأكيد الركوب من هاتفه.','Ask the customer to confirm pickup on their phone.')}</Label>}
    </View>
    {!!notice&&<View accessibilityRole="alert"><Label>{notice}</Label></View>}
-   {tracking&&<CustomerTracking key={ride.id+':'+ride.driver_id} rideId={ride.id} pickup={pickup} foreground={foreground} compact={split}/>}
+   <CustomerTracking key={ride.id+':'+ride.driver_id} rideId={ride.id} pickup={pickup} foreground={foreground} compact={split} duringTrip={!tracking}/>
    {split&&tracking&&<Label muted>{address}</Label>}
    {pickingUp&&proposal&&!proposal.approved&&<Panel outlined>
     <Label>{t('الزبون اقترح نقطة التقاء جديدة.','The customer suggested a new meeting point.')}</Label>
@@ -432,7 +403,7 @@ export default function Rides(){
    </Panel>}
    {pickingUp&&proposal?.approved&&<Label muted>{t('افتح الملاحة مجددًا للتوجّه إلى نقطة الالتقاء الجديدة.','Reopen navigation to go to the new meeting point.')}</Label>}
    {!atPickup&&<View style={{gap:6}}>
-    <Label muted>{t('تطبيق الملاحة المختار','Selected navigation app')} · {providers[navigationProvider]}</Label>
+    <Label muted>{t('تطبيق الملاحة المختار','Selected navigation app')} · {navigationProviders[navigationProvider]}</Label>
     {split?navButton(true,t('فتح الملاحة بجانب الرحلة','Open navigation beside the ride')):<View style={{flexDirection:'row',flexWrap:'wrap',gap:6}}>
      <View style={{flexGrow:1}}>{fullScreen}</View>
      <View style={{flexGrow:1}}>{navButton(true,t('ملاحة بتقسيم الشاشة','Split-screen navigation'))}</View>
@@ -445,7 +416,7 @@ export default function Rides(){
     {driverSharingControl(ride)}
    </HelpTip>
    <HelpTip title={t('تغيير تطبيق الملاحة وخيارات الرحلة','Change navigation app and ride options')}>
-    {navigationOptions}
+    {navigationSettings}
     {split&&!atPickup&&fullScreen}
     {ride.status!=='riding'&&<Button secondary title={t('إعادة الطلب للبحث عن سائق','Release request to other drivers')} disabled={busy} onPress={()=>void run(async token=>{if(!await cloudReleaseRide(token,ride.id))throw Error('not_allowed')})}/>}
     <Button secondary icon="refresh-outline" title={t('تحديث حالة الرحلة','Refresh ride status')} disabled={busy} onPress={()=>void run(async()=>{})}/>
@@ -454,9 +425,6 @@ export default function Rides(){
    {!split&&!atPickup&&<DriverNavigation key={ride.id+'-'+ride.status}
     title={t('الملاحة داخل يلّا نروح','Navigation in Yalla Nrouh')} targetLabel={address}
     action={driverRideAction(ride)} externalNavigation={fullScreen}
-    pilotAvailable={pilotOwner===userId&&!!driver?.approved}
-    pilotActive={pilotOwner===userId&&!!driver?.approved&&pilotRide===ride.id}
-    onPilotToggle={()=>setPilotRide(pilotRide===ride.id?null:ride.id)}
     devicePosition={gps.camera?.point}
     routeOrigin={ride.status==='riding'?pickup:undefined}
     initialPlan={acceptedPlans?.rideId===ride.id&&!(pickingUp&&proposal?.approved)?(pickingUp?acceptedPlans.pickup:acceptedPlans.trip):null}
@@ -480,7 +448,7 @@ export default function Rides(){
  </RideFooter>:!driverMode&&!historyMode&&params.ride&&loading?<RideFooter>
   <Label>{t('جارٍ تحميل حالة الطلب…','Loading request status…')}</Label>
  </RideFooter>:undefined;
- return <Page title={driverMode?t('وضع السائق','Driver mode'):passengerTitle} compact={driverMode||!historyMode} showBrand={driverMode} header={splitHeader} footer={footer}>
+ return <Page title={driverMode?t('وضع السائق','Driver mode'):passengerTitle} compact={driverMode||!historyMode} showBrand={driverMode} onSettings={driverMode?openDriverSettings:undefined} header={splitHeader} footer={footer}>
   {driverMode&&historyKind&&userId&&<DriverHistory key={userId} kind={historyKind} owner={userId} onSelect={setHistoryKind} onClose={closeHistory}/>}
   {driverMode&&driver?.approved&&!currentDriverRide&&<DriverShift
    online={driver.online} region={driver.region} category={driver.category} target={workTarget}
@@ -515,7 +483,7 @@ export default function Rides(){
       {driver?<><Label>{t('طلبك بانتظار مراجعة الإدارة','Your application is waiting for review')}</Label><Label muted>{t('يمكنك تحديث الصفحة بعد اعتماد الحساب.','Refresh after your account is approved.')}</Label></>
        :<><Label>{t('التسجيل كسائق','Register as a driver')}</Label><RideOptions driver/><Button title={t('إرسال طلب اعتماد سائق','Apply for driver approval')} disabled={busy} onPress={()=>void run(async token=>{await cloudRegisterDriver(token,draft.region,draft.category)},t('تم إرسال الطلب إلى الإدارة.','Application sent to admin.'))}/></>}
      </Panel>)}
-   {driver?.approved&&!currentDriverRide&&<OsmAndHelp/>}
+   {!currentDriverRide&&navigationSettings}
    {!currentDriverRide&&(!driver?.approved||!driver.online&&!!notice)&&<Button secondary icon="refresh-outline" title={t('تحديث الحالة','Refresh status')} disabled={busy} onPress={()=>void run(async()=>{})}/>}
   </>:<>
    {passengerRides.map(renderRide)}

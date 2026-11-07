@@ -8,8 +8,6 @@ import {router} from 'expo-router';
 import {positionDeadline} from './position-deadline';
 import {createRoutingClient,type RoutePlan} from './routing';
 import {routeScheduler} from './route-scheduler';
-import {getValhallaRoute,type DriverRoutePlan} from './valhalla-route';
-import DriverPilotMap from './map/DriverPilotMap';
 import {useDriverSpeech} from './driver-speech';
 import {distanceMeters,navigationProgress} from './navigation-progress';
 import type {Coordinate} from './geo';
@@ -18,18 +16,18 @@ import {googleDirections} from './google-links';
 import MapCanvas from './map/MapCanvas';
 import {Button,Label,Panel,useText,useTheme} from './ui';
 const formatDistance=(meters:number,ar:boolean)=>meters<1000?Math.round(meters/10)*10+' '+(ar?'م':'m'):(meters/1000).toFixed(1)+' '+(ar?'كم':'km');
-export default function DriverNavigation({to,title,targetLabel,action,externalNavigation,initialPlan,routeOrigin,devicePosition,pilotAvailable,pilotActive,onPilotToggle}:{to:Coordinate;title:string;targetLabel:string;action:React.ReactNode;externalNavigation?:React.ReactNode;initialPlan?:RoutePlan|null;routeOrigin?:Coordinate;devicePosition?:Coordinate;pilotAvailable?:boolean;pilotActive?:boolean;onPilotToggle?:()=>void}){
+export default function DriverNavigation({to,title,targetLabel,action,externalNavigation,initialPlan,routeOrigin,devicePosition}:{to:Coordinate;title:string;targetLabel:string;action:React.ReactNode;externalNavigation?:React.ReactNode;initialPlan?:RoutePlan|null;routeOrigin?:Coordinate;devicePosition?:Coordinate}){
  const {state,connection}=useApp();const t=useText();const {colors}=useTheme();const ar=state.language==='ar';
- const [plan,setPlan]=useState<DriverRoutePlan|null>(null),[gpsLost,setGpsLost]=useState(true),[accuracy,setAccuracy]=useState<number|null>(null),[position,setPosition]=useState<Coordinate|null>(devicePosition??null),[error,setError]=useState(''),[routeError,setRouteError]=useState(''),[busy,setBusy]=useState(false),[busyStage,setBusyStage]=useState<'location'|'route'>('location'),[elapsed,setElapsed]=useState(0),[enabled,setEnabled]=useState(true),[follow,setFollow]=useState(true),[expanded,setExpanded]=useState(false),[attempt,setAttempt]=useState(0),[revision,setRevision]=useState(0);
+ const [plan,setPlan]=useState<RoutePlan|null>(null),[gpsLost,setGpsLost]=useState(true),[accuracy,setAccuracy]=useState<number|null>(null),[position,setPosition]=useState<Coordinate|null>(devicePosition??null),[error,setError]=useState(''),[routeError,setRouteError]=useState(''),[busy,setBusy]=useState(false),[busyStage,setBusyStage]=useState<'location'|'route'>('location'),[elapsed,setElapsed]=useState(0),[enabled,setEnabled]=useState(true),[follow,setFollow]=useState(true),[expanded,setExpanded]=useState(false),[attempt,setAttempt]=useState(0),[revision,setRevision]=useState(0);
  const shared=useRef(devicePosition);shared.current=devicePosition;
- const lastFix=useRef<Fix|null>(null),latest=useRef<DriverRoutePlan|null>(null);
+ const lastFix=useRef<Fix|null>(null),latest=useRef<RoutePlan|null>(null);
  const lat=to.latitude,lng=to.longitude,originLat=routeOrigin?.latitude,originLng=routeOrigin?.longitude;
  const target=useRef('');const [lastFixAt,setLastFixAt]=useState<number|null>(null);
  useEffect(()=>{
   const known=shared.current;
   const start=originLat!==undefined&&originLng!==undefined?{latitude:originLat,longitude:originLng}:undefined;
   const destination={latitude:lat,longitude:lng};
-  const key=[lat,lng,state.language,pilotActive].join('|');
+  const key=[lat,lng,state.language].join('|');
   if(target.current!==key){target.current=key;latest.current=null;setPlan(null)}
   if(!enabled){setBusy(false);setGpsLost(true);return}
   setError('');setRouteError('');
@@ -55,30 +53,26 @@ export default function DriverNavigation({to,title,targetLabel,action,externalNa
    void updateRoute(fix,accurate);
   }
   async function updateRoute(point:Coordinate,accurate=false){
-   if(!alive||!visible||routeRequest||pilotActive&&!accurate&&!!latest.current||(Platform.OS==='web'&&navigator.onLine===false))return;
+   if(!alive||!visible||routeRequest||(Platform.OS==='web'&&navigator.onLine===false))return;
    const existing=latest.current;
-   if(!pilotActive&&!existing&&initialPlan&&distanceMeters(destination,initialPlan.to)<=10&&distanceMeters(point,initialPlan.from)<=150){
+   if(!existing&&initialPlan&&distanceMeters(destination,initialPlan.to)<=10&&distanceMeters(point,initialPlan.from)<=150){
     latest.current=initialPlan;setPlan(initialPlan);
     if(!forceRoute)return;
    }
    if(accurate&&existing){
     const progress=navigationProgress(existing,point);
-    offRouteCount=progress.offRouteMeters>(pilotActive?50:100)?offRouteCount+1:0;
+    offRouteCount=progress.offRouteMeters>100?offRouteCount+1:0;
    }
-   if(Date.now()<nextRouteAt||!forceRoute&&latest.current&&(offRouteCount<2||reroutes>=(pilotActive?3:2)))return;
+   if(Date.now()<nextRouteAt||!forceRoute&&latest.current&&(offRouteCount<2||reroutes>=2))return;
    forceRoute=false;
    const controller=new AbortController();routeRequest=controller;
    if(latest.current)reroutes++;
    setRouteError('');setBusyStage('route');setBusy(true);
    try{
-    let next:DriverRoutePlan;
-    if(pilotActive)next=await getValhallaRoute(point,destination,state.language,controller.signal);
-    else{
-     const token=await cloudCurrentToken();
-     const client=createRoutingClient(process.env.EXPO_PUBLIC_GOOGLE_ROUTES_PROXY||'https://gokosprcqpdvqgahvquk.supabase.co/functions/v1/fare-route');
-     next=await routeScheduler.run(()=>client.route(point,destination,controller.signal,state.language,token),controller.signal);
-    }
-    if(alive&&!controller.signal.aborted){latest.current=next;setPlan(next);offRouteCount=0;nextRouteAt=Date.now()+(pilotActive?(accurate?15000:2000):60000)}
+    const token=await cloudCurrentToken();
+    const client=createRoutingClient(process.env.EXPO_PUBLIC_GOOGLE_ROUTES_PROXY||'https://gokosprcqpdvqgahvquk.supabase.co/functions/v1/fare-route');
+    const next=await routeScheduler.run(()=>client.route(point,destination,controller.signal,state.language,token),controller.signal);
+    if(alive&&!controller.signal.aborted){latest.current=next;setPlan(next);offRouteCount=0;nextRouteAt=Date.now()+60000}
    }catch(error){
     if(alive&&!controller.signal.aborted){
      const cause=error as {code?:string;kind?:string};
@@ -182,7 +176,7 @@ export default function DriverNavigation({to,title,targetLabel,action,externalNa
   if(first)void updateRoute(first,measured===first&&navigationGuidanceReady(measured));
   startLocation(attempt>0);
   return()=>{alive=false;pause();if(Platform.OS==='web'){document.removeEventListener('visibilitychange',resume);window.removeEventListener('yalla:native-visibility',native);window.removeEventListener('yalla:native-bootstrap',bootstrap);window.removeEventListener('online',resume)}};
- },[lat,lng,originLat,originLng,state.language,enabled,attempt,initialPlan,pilotActive]);
+ },[lat,lng,originLat,originLng,state.language,enabled,attempt,initialPlan]);
  useEffect(()=>{
   if(gpsLost||lastFixAt===null)return;
   const expiry=setTimeout(()=>setGpsLost(true),Math.max(0,lastFixAt+15000-Date.now()));
@@ -190,10 +184,9 @@ export default function DriverNavigation({to,title,targetLabel,action,externalNa
  },[gpsLost,lastFixAt]);
  useEffect(()=>{setElapsed(0);if(!busy)return;const started=Date.now();const timer=setInterval(()=>setElapsed(Math.floor((Date.now()-started)/1000)),1000);return()=>clearInterval(timer)},[busy,busyStage]);
  useEffect(()=>{if(!expanded||Platform.OS!=='web')return;const back=(event:Event)=>{event.preventDefault();setExpanded(false)};window.addEventListener('yalla:native-back',back);return()=>window.removeEventListener('yalla:native-back',back)},[expanded]);
- const activePlan=plan?.provider===(pilotActive?'Valhalla':'Google Maps')?plan:null;
+ const activePlan=plan;
  const progress=activePlan&&position?navigationProgress(activePlan,position):null;
- const offRoute=progress&&progress.offRouteMeters>(pilotActive?50:100);
- const pilotPosition=progress&&!gpsLost&&progress.offRouteMeters<=18?progress.snapped:position;
+ const offRoute=progress&&progress.offRouteMeters>100;
  const arrived=!gpsLost&&!!position&&distanceMeters(position,to)<=35;
  const stale=lastFixAt!==null&&Date.now()-lastFixAt>=15000;
  const speech=useDriverSpeech(activePlan,progress,enabled&&!stale&&!gpsLost&&!offRoute&&!arrived,state.language);
@@ -210,25 +203,15 @@ export default function DriverNavigation({to,title,targetLabel,action,externalNa
     :t('تعذّر بدء تشغيل الصوت. جرّب مجددًا أو راجع إعدادات تحويل النص إلى كلام.','Voice could not start. Try again or check text-to-speech settings.')}</Label>
   {speech.openVoiceSetup&&speech.problem!=='unsupported'&&<Button secondary title={t('إعدادات صوت النطق','Set up speech voice')} onPress={speech.openVoiceSetup}/>}
  </View>;
- const livePosition=enabled&&lastFixAt!==null&&!stale;
  const gpsMessage=error==='permission'?t('اسمح بالموقع أثناء استخدام التطبيق.','Allow location while using the app.'):error==='services'?t('فعّل خدمة الموقع في الهاتف.','Turn on phone location.'):error==='accuracy'||error==='timeout'||error==='position'?t('لم يصل تحديث جديد للموقع. يمكنك فتح خرائط Google أو تحديث الموقع من هنا.','No new location update arrived. You can open Google Maps or retry here.'):'';
- const routeMessage=pilotActive&&routeError!=='navigation'&&routeError?t('تعذّر حساب طريق Valhalla التجريبي. يمكنك الرجوع إلى الملاحة الحالية أو فتح خرائط Google.','The Valhalla pilot route could not load. Switch back or open Google Maps.'):routeError==='no_route'?t('لم تعثر Google على طريق قيادة إلى الوجهة.','Google found no driving route.'):routeError==='busy'?t('خدمة الطرق مشغولة. سنعيد المحاولة.','The route service is busy. We will retry.'):routeError==='login_required'||routeError==='unauthorized'?t('تعذر التحقق من حساب السائق لحساب الطريق.','Could not verify the driver account for routing.'):routeError==='navigation'?t('تعذر فتح خرائط Google.','Could not open Google Maps.'):routeError?t('تعذر تحميل مسار القيادة من Google.','Could not load the driving route from Google.'):'';
+ const routeMessage=routeError==='no_route'?t('لم تعثر Google على طريق قيادة إلى الوجهة.','Google found no driving route.'):routeError==='busy'?t('خدمة الطرق مشغولة. سنعيد المحاولة.','The route service is busy. We will retry.'):routeError==='login_required'||routeError==='unauthorized'?t('تعذر التحقق من حساب السائق لحساب الطريق.','Could not verify the driver account for routing.'):routeError==='navigation'?t('تعذر فتح خرائط Google.','Could not open Google Maps.'):routeError?t('تعذر تحميل مسار القيادة من Google.','Could not load the driving route from Google.'):'';
  const openGoogle=()=>{void Linking.openURL(googleDirections(to,undefined,true)).catch(()=>setRouteError('navigation'))};
  const googleButton=externalNavigation??<Button secondary icon="navigate-outline" title={t('ملاحة خارجية بملء الشاشة','Full-screen external navigation')} onPress={openGoogle}/>;
- const pilotToggle=pilotAvailable&&onPilotToggle&&Platform.OS==='web'&&<Button secondary icon="map-outline"
-  title={pilotActive?t('العودة إلى الملاحة الحالية','Return to current navigation'):t('تجربة MapLibre وValhalla','Try MapLibre and Valhalla')}
-  onPress={onPilotToggle}/>;
- const pilotDisclosure=pilotAvailable&&!pilotActive&&<Label muted>{t('اختبار خاص. عند تشغيله تُرسل إحداثيات المسار إلى خادم Valhalla التجريبي.','Private pilot. Enabling it sends route coordinates to the Valhalla demo server.')}</Label>;
- const mapContent=(height:number)=>pilotActive
-  ?<DriverPilotMap point={pilotPosition} destination={to} route={activePlan?.points} follow={follow&&livePosition} fresh={livePosition}/>
-  :<MapCanvas compact readOnly minMapHeight={height} point={activePlan?.from??routeOrigin??to} route={activePlan?.points} cameraTarget={position?{point:position,revision,isLocation:true,zoom:17,overview:!follow}:undefined} onChange={()=>{}}/>;
+ const mapContent=(height:number)=><MapCanvas compact readOnly minMapHeight={height} point={activePlan?.from??routeOrigin??to} route={activePlan?.points} cameraTarget={position?{point:position,revision,isLocation:true,zoom:17,overview:!follow}:undefined} onChange={()=>{}}/>;
  const map=(height:number)=><View style={{height,borderRadius:16,overflow:'hidden'}}>{mapContent(height)}</View>;
  const retry=<Button secondary title={t('تحديث الموقع والطريق','Update location and route')} onPress={()=>{setEnabled(true);setAttempt(value=>value+1)}}/>;
- const preview=pilotActive&&gpsLost&&activePlan&&<Label muted>{t('هذا المسار من آخر موقع متاح أو من نقطة الانطلاق. تستأنف تعليمات الانعطاف عند وصول موقع حديث ودقيق.','Route preview from the last available position or pickup. Turn guidance resumes with a fresh, accurate position.')}</Label>;
- const instruction=<View style={{padding:14,borderRadius:14,backgroundColor:colors.selected,gap:6}}><Label display>{gpsLost?(!enabled?t('المتابعة متوقفة مؤقتًا','Navigation is paused'):stale?t('توقّف تحديث موقع السيارة','Car location has stopped updating'):position?t('بانتظار موقع أدق','Waiting for better GPS'):t('جارٍ قراءة موقع الهاتف','Reading phone location')):arrived?t('اقتربت من نقطة الوصول','You are near the destination'):routeError&&!activePlan?t('تعذر حساب الطريق','Could not find the route'):offRoute?t('أنت خارج المسار المعروض','You are off the shown route'):pilotActive&&progress?.nextInstruction?t('بعد ','In ')+formatDistance(progress.nextTurnMeters,ar)+' · '+progress.nextInstruction:progress?.instruction||t('نجهّز الطريق إلى وجهتك…','Finding the route to your destination…')}</Label>{!pilotActive&&progress?.nextInstruction&&!gpsLost&&!offRoute&&!arrived&&<Label>{t('بعد ','In ')}{formatDistance(progress.nextTurnMeters,ar)}: {progress.nextInstruction}</Label>}{progress&&!gpsLost&&!offRoute&&!arrived&&<Label large>{formatDistance(progress.remainingMeters,ar)} · {Math.max(1,Math.ceil(progress.remainingSeconds/60))} {t('دقيقة تقريبًا','min, estimated')}</Label>}</View>;
- return <Panel outlined><Label large>{title}</Label>{instruction}{voiceButton}{voiceNotice}{googleButton}{pilotToggle}
-  {pilotDisclosure}
-  {preview}
+ const instruction=<View style={{padding:14,borderRadius:14,backgroundColor:colors.selected,gap:6}}><Label display>{gpsLost?(!enabled?t('المتابعة متوقفة مؤقتًا','Navigation is paused'):stale?t('توقّف تحديث موقع السيارة','Car location has stopped updating'):position?t('بانتظار موقع أدق','Waiting for better GPS'):t('جارٍ قراءة موقع الهاتف','Reading phone location')):arrived?t('اقتربت من نقطة الوصول','You are near the destination'):routeError&&!activePlan?t('تعذر حساب الطريق','Could not find the route'):offRoute?t('أنت خارج المسار المعروض','You are off the shown route'):progress?.instruction||t('نجهّز الطريق إلى وجهتك…','Finding the route to your destination…')}</Label>{progress?.nextInstruction&&!gpsLost&&!offRoute&&!arrived&&<Label>{t('بعد ','In ')}{formatDistance(progress.nextTurnMeters,ar)}: {progress.nextInstruction}</Label>}{progress&&!gpsLost&&!offRoute&&!arrived&&<Label large>{formatDistance(progress.remainingMeters,ar)} · {Math.max(1,Math.ceil(progress.remainingSeconds/60))} {t('دقيقة تقريبًا','min, estimated')}</Label>}</View>;
+ return <Panel outlined><Label large>{title}</Label>{instruction}{voiceButton}{voiceNotice}{googleButton}
   {connection==='offline'&&<Label muted>{activePlan?t('الاتصال منقطع. نعرض آخر مسار متاح.','Offline. Showing the last available route.'):t('الاتصال منقطع. سيُستأنف حساب الطريق عند عودته.','Offline. Route lookup resumes when you reconnect.')}</Label>}
   {lastFixAt!==null&&<Label muted>{t('آخر تحديث للموقع: ','Location last updated: ')}{new Date(lastFixAt).toLocaleTimeString(ar?'ar':'en')}</Label>}
   <Label>{targetLabel}</Label>
@@ -243,7 +226,7 @@ export default function DriverNavigation({to,title,targetLabel,action,externalNa
   </View>}
   {offRoute&&<Label muted>{t('نعيد حساب الطريق عند توفر موقع دقيق. يمكنك طلب التحديث يدويًا.','The route updates with an accurate location. You can also update it now.')}</Label>}
   <View style={{gap:8}}><Button icon="expand-outline" title={t('تكبير الملاحة داخل التطبيق','Full-screen navigation')} onPress={()=>setExpanded(true)}/><Button secondary icon="locate" title={follow?t('عرض المسار كاملًا','Show the full route'):t('متابعة موقعي','Follow my location')} onPress={()=>setFollow(value=>!value)}/>{retry}<Button secondary title={enabled?t('إيقاف المتابعة مؤقتًا','Pause navigation'):t('استئناف الملاحة','Resume navigation')} onPress={()=>setEnabled(value=>!value)}/></View>
-  <Label muted>{pilotActive?'MapLibre · Valhalla · FOSSGIS':'Google Maps'} · {t('المتابعة أثناء فتح التطبيق','Navigation while the app is open')}</Label>
-  <Modal visible={expanded} animationType="none" onRequestClose={()=>setExpanded(false)}><View style={{flex:1,padding:16,paddingTop:32,backgroundColor:colors.background,gap:12}}>{instruction}{action}{voiceButton}{voiceNotice}{googleButton}{pilotToggle}{pilotDisclosure}{preview}<View style={{flex:1,minHeight:200}}>{mapContent(200)}</View>{!!(routeMessage||gpsMessage)&&<Label muted>{routeMessage||gpsMessage}</Label>}{gpsLost&&retry}<Button secondary title={follow?t('عرض المسار كاملًا','Show the full route'):t('متابعة موقعي','Follow my location')} onPress={()=>setFollow(value=>!value)}/><Button title={t('العودة إلى الطلب','Back to the ride')} onPress={()=>setExpanded(false)}/></View></Modal>
+  <Label muted>Google Maps · {t('المتابعة أثناء فتح التطبيق','Navigation while the app is open')}</Label>
+  <Modal visible={expanded} animationType="none" onRequestClose={()=>setExpanded(false)}><View style={{flex:1,padding:16,paddingTop:32,backgroundColor:colors.background,gap:12}}>{instruction}{action}{voiceButton}{voiceNotice}{googleButton}<View style={{flex:1,minHeight:200}}>{mapContent(200)}</View>{!!(routeMessage||gpsMessage)&&<Label muted>{routeMessage||gpsMessage}</Label>}{gpsLost&&retry}<Button secondary title={follow?t('عرض المسار كاملًا','Show the full route'):t('متابعة موقعي','Follow my location')} onPress={()=>setFollow(value=>!value)}/><Button title={t('العودة إلى الطلب','Back to the ride')} onPress={()=>setExpanded(false)}/></View></Modal>
  </Panel>;
 }

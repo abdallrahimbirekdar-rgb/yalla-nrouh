@@ -1,7 +1,9 @@
 import PermissionsPanel from '../permissions-panel';
 import React,{useState} from 'react';
 import {Platform} from 'react-native';
-import {router} from 'expo-router';
+import {router,useLocalSearchParams} from 'expo-router';
+import {useAuth} from '../auth';
+import DriverNavigationSettings from '../driver-navigation-settings';
 import {useApp} from '../context';
 import {enableLocalAlerts} from '../alerts';
 import {Button,Label,Page,Panel,useText} from '../ui';
@@ -14,5 +16,15 @@ export function SettingsContent(){const alertsAvailable=Platform.OS!=='web'||typ
  <Panel><Label>{t('الاتصال وحفظ البيانات','Connection and saved data')}</Label><Label>{connection==='offline'?t('الجهاز دون اتصال','No connection'):connection==='online'?t('يتوفر اتصال بالإنترنت','Internet connection is available'):t('لم يُتحقق من وصول الإنترنت','Internet access has not been checked')}</Label><Label muted>{t('تُحفظ مسودة نقاط الرحلة على هذا الجهاز. تحتاج الحسابات والطلبات وحساب الطريق إلى الإنترنت. لا يُرسل طلب رحلة إلا بعد تأكيده.','Your draft points stay on this device. Accounts, requests and routes need internet. A ride request is sent only after you confirm it.')}</Label><Button secondary title={t('حالة الخدمات','Service status')} onPress={()=>router.push('/services')}/></Panel>
  </>;
 }
-export default function Settings(){const t=useText();return <Page title={t('الإعدادات','Settings')}><SettingsContent/></Page>}
+export default function Settings(){
+ const t=useText();
+ const auth=useAuth();
+ const {mode}=useLocalSearchParams<{mode?:string}>();
+ const driverMode=!!auth.session&&(auth.driver||mode==='driver');
+ return <Page title={driverMode?t('إعدادات السائق','Driver settings'):t('الإعدادات','Settings')}
+  backTo={driverMode?{pathname:'/cloud',params:{mode:'driver'}}:'/'}>
+  {driverMode&&<DriverNavigationSettings/>}
+  <SettingsContent/>
+ </Page>;
+}
 

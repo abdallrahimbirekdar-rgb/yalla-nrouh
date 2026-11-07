@@ -1,14 +1,14 @@
 import type {Coordinate} from './geo.ts';
-import type {DriverRoutePlan} from './valhalla-route.ts';
+import type {RoutePlan} from './routing.ts';
 const radians=(value:number)=>value*Math.PI/180;
 export function distanceMeters(a:Coordinate,b:Coordinate):number{
  const dLat=radians(b.latitude-a.latitude),dLng=radians(b.longitude-a.longitude);
  const h=Math.sin(dLat/2)**2+Math.cos(radians(a.latitude))*Math.cos(radians(b.latitude))*Math.sin(dLng/2)**2;
  return 6371000*2*Math.atan2(Math.sqrt(Math.min(1,h)),Math.sqrt(Math.max(0,1-h)));
 }
-export function navigationProgress(plan:DriverRoutePlan,position:Coordinate){
- const points=plan.points;const shapeMeters=[0];
- let total=0,best=Infinity,along=0,snapped=position;
+export function navigationProgress(plan:RoutePlan,position:Coordinate){
+ const points=plan.points;
+ let total=0,best=Infinity,along=0;
  for(let i=1;i<points.length;i++){
   const a=points[i-1],b=points[i];const scale=Math.cos(radians((a.latitude+b.latitude+position.latitude)/3));
   const ax=(a.longitude-position.longitude)*scale,ay=a.latitude-position.latitude;
@@ -16,20 +16,11 @@ export function navigationProgress(plan:DriverRoutePlan,position:Coordinate){
   const fraction=square?Math.max(0,Math.min(1,-(ax*dx+ay*dy)/square)):0;
   const projected={latitude:a.latitude+(b.latitude-a.latitude)*fraction,longitude:a.longitude+(b.longitude-a.longitude)*fraction};
   const gap=distanceMeters(position,projected),length=distanceMeters(a,b);
-  if(gap<best){best=gap;along=total+length*fraction;snapped=projected}
-  total+=length;shapeMeters.push(total);
+  if(gap<best){best=gap;along=total+length*fraction}
+  total+=length;
  }
  const ratio=total?Math.max(0,Math.min(1,along/total)):0;
  const traveled=ratio*plan.meters,remainingMeters=Math.max(0,plan.meters-traveled);
- if(plan.provider==='Valhalla'){
-  const nextStepIndex=plan.steps.findIndex(step=>shapeMeters[step.shapeIndex]>along+2);
-  const next=plan.steps[nextStepIndex];
-  return {remainingMeters,remainingSeconds:Math.max(0,plan.seconds*(1-ratio)),offRouteMeters:best,
-   instruction:next?.instruction??plan.steps.at(-1)?.instruction??'',
-   nextInstruction:next?.instruction??'',nextStepIndex,
-   nextTurnMeters:next?shapeMeters[next.shapeIndex]-along:0,
-   arrived:distanceMeters(position,plan.to)<=35,snapped};
- }
  const stepTotal=plan.steps.reduce((sum,step)=>sum+step.meters,0);
  const stepPosition=ratio*stepTotal;let index=0,edge=0;
  while(index<plan.steps.length-1&&edge+plan.steps[index].meters<=stepPosition){edge+=plan.steps[index].meters;index++}
@@ -37,5 +28,5 @@ export function navigationProgress(plan:DriverRoutePlan,position:Coordinate){
  return {remainingMeters,remainingSeconds:Math.max(0,plan.seconds*(1-ratio)),offRouteMeters:best,
   instruction:step?.instruction??'',nextInstruction:plan.steps[index+1]?.instruction??'',nextStepIndex:index+1,
   nextTurnMeters:Math.max(0,edge+(step?.meters??0)-stepPosition),
-  arrived:distanceMeters(position,plan.to)<=35,snapped};
+  arrived:distanceMeters(position,plan.to)<=35};
 }

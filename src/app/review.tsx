@@ -1,4 +1,5 @@
-import React,{useEffect,useState} from 'react';
+import React,{useEffect,useRef,useState} from 'react';
+import {Switch,View} from 'react-native';
 import {router} from 'expo-router';
 import {useApp} from '../context';
 import {useAuth} from '../auth';
@@ -15,9 +16,15 @@ import {PassengerStops,RideFooter} from '../passenger-trip-summary';
 import type {FareQuote} from '../routing';
 import RoutePanel from '../route-panel';
 import RideOptions from '../ride-options';
+import {useRideSharing} from '../ride-live-sharing';
 import {Button,Label,Page,Panel,useText} from '../ui';
 export default function Review(){
  const {draft,state,setDraft,foreground,connection}=useApp();const auth=useAuth();const owner=auth.session?.user.id;const t=useText();const [quoteAttempt,setQuoteAttempt]=useState(0);const [busy,setBusy]=useState(false),[error,setError]=useState(''),[quoted,setQuoted]=useState<{key:string;quote:FareQuote}|null>(null),[pickupReady,setPickupReady]=useState(false),[locationAttempt,setLocationAttempt]=useState(0);const quoteKey=[draft.pickupPoint?.latitude,draft.pickupPoint?.longitude,draft.destinationPoint?.latitude,draft.destinationPoint?.longitude,owner,quoteAttempt].join('|');const manualPickup=draft.pickupMode==='manual';const invalid=validateDraft(draft)||!draft.pickupPoint||!draft.destinationPoint;
+ const sharing=useRideSharing(owner);
+ const [sharingOwner,setSharingOwner]=useState<string>();
+ const shareOnRequest=!!owner&&sharingOwner===owner;
+ const mounted=useRef(false);
+ useEffect(()=>{mounted.current=true;return()=>{mounted.current=false}},[]);
  useEffect(()=>{
   setPickupReady(false);setQuoted(null);setError('');
   if(manualPickup)return;
@@ -30,11 +37,17 @@ export default function Review(){
   }).catch(error=>{if(active)setError(pickupPositionMessage(error,state.language==='ar'))});
   return()=>{active=false;controller.abort()};
  },[setDraft,state.language,locationAttempt,manualPickup]);
- function openRide(rideId:string){
+ async function openRide(rideId:string){
+  let shared=false;
+  if(shareOnRequest&&foreground&&sharing.capability){
+   setBusy(true);
+   shared=await sharing.start(rideId,'passenger');
+  }
+  if(!mounted.current||readRideState().owner!==owner)return;
   setDraft(previous=>({...previous,pickup:'',destination:'',pickupPoint:undefined,pickupMode:undefined,destinationPoint:undefined}));
-  router.replace({pathname:'/cloud',params:{ride:rideId}});
+  router.replace({pathname:'/cloud',params:{ride:rideId,...(shareOnRequest&&!shared?{shareUnavailable:'1'}:{})}});
  }
- const recovery=useRideRecovery('request',owner,foreground,busy,ride=>openRide(ride.id));
+ const recovery=useRideRecovery('request',owner,foreground,busy,ride=>{void openRide(ride.id)});
  async function confirm(){
   if(busy||connection==='offline'||!owner||invalid||(!manualPickup&&!pickupReady)||quoted?.key!==quoteKey||recovery.checking)return;
   setBusy(true);setError('');
@@ -55,7 +68,7 @@ export default function Review(){
    const requestId=recovery.id??newRideRequestId();
    recovery.remember(requestId);submitted=true;
    const rideId=await cloudRequestRide(token,requestDraft,requestId,quoted.quote.id);
-   if(readRideState().owner===owner){recovery.clear();openRide(rideId)}
+   if(readRideState().owner===owner){recovery.clear();await openRide(rideId)}
   }catch(e){
    if(readRideState().owner!==owner)return;
    if(submitted&&cloudMutationUncertain(e))return;
@@ -99,6 +112,15 @@ export default function Review(){
     <Button icon="log-in-outline" title={t('تسجيل الدخول والمتابعة','Sign in and continue')} onPress={()=>router.push({pathname:'/account',params:{next:'review'}})}/>
    </Panel>}
    <RideOptions/>
+   {owner&&sharing.capability&&<Panel outlined>
+    <View style={{flexDirection:state.language==='ar'?'row-reverse':'row',alignItems:'center',gap:10}}>
+     <View style={{flex:1}}><Label>{t('مشاركة موقعي مع السائق','Share my location with the driver')}</Label></View>
+     <Switch value={shareOnRequest} disabled={busy||recovery.checking}
+      accessibilityLabel={t('مشاركة موقعي مع السائق','Share my location with the driver')}
+      onValueChange={enabled=>setSharingOwner(enabled?owner:undefined)}/>
+    </View>
+    <Label muted>{t('تبدأ المشاركة بعد تسجيل الطلب وتستمر في الخلفية أثناء الانتظار والرحلة. يراه السائق المعيّن فقط. يمكنك إيقافها من الرحلة أو الإشعار.','Sharing starts after your request is confirmed and continues in the background while you wait and ride. Only your assigned driver can see it. Stop it from the ride or notification.')}</Label>
+   </Panel>}
    <Label muted>{t('الأجرة تقديرية. يتأكد توفر السيارة بعد قبول سائق للطلب.','The fare is an estimate. A car is confirmed when a driver accepts.')}</Label>
   </>}
   {!!error&&(manualPickup||pickupReady)&&<Panel><Label>{error}</Label><Button secondary title={t('فتح رحلاتي','Open My rides')} onPress={()=>router.push('/cloud')}/></Panel>}

@@ -73,7 +73,7 @@ export function AppMenu({onSettings}:{onSettings?:()=>void}={}){
  <Label muted>{t('نسخة اختبار • الدفع نقدًا','Test version • Pay in cash')}</Label>
  </ScrollView></View></View></Modal></>;
 }
-export function Page({title,children,hero,footer,header,compact=false,simpleHeader=false,showBrand=false,viewportHeight,backTo='/'}:{title:string;children:React.ReactNode;hero?:React.ReactNode;footer?:React.ReactNode;header?:React.ReactNode;compact?:boolean;simpleHeader?:boolean;showBrand?:boolean;viewportHeight?:number;backTo?:Href}){
+export function Page({title,children,hero,footer,header,compact=false,simpleHeader=false,showBrand=false,viewportHeight,onSettings,backTo='/'}:{title:string;children:React.ReactNode;hero?:React.ReactNode;footer?:React.ReactNode;header?:React.ReactNode;compact?:boolean;simpleHeader?:boolean;showBrand?:boolean;viewportHeight?:number;onSettings?:()=>void;backTo?:Href}){
  const auth=useAuth();const {ready,loadError,retry,state}=useApp();const {colors}=useTheme();const t=useText();const themed=themedStyles(colors);
  const arabic=state.language==='ar';
  const driverHeader=compact&&auth.driver&&!simpleHeader;
@@ -83,7 +83,7 @@ export function Page({title,children,hero,footer,header,compact=false,simpleHead
    <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={[styles.page,compact&&styles.compactPage]}>
     {header??<View style={{flexDirection:driverHeader||showBrand?'row-reverse':arabic?'row-reverse':'row',alignItems:'center',justifyContent:'space-between',gap:8}}>
      {driverHeader||showBrand?<BrandLogo driver/>:back}
-     {simpleHeader?<View style={{flex:1}}><Label large>{title}</Label></View>:<View style={{flexDirection:'row',gap:8,alignItems:'center'}}><AccountButton/><AppMenu/></View>}
+     {simpleHeader?<View style={{flex:1}}><Label large>{title}</Label></View>:<View style={{flexDirection:'row',gap:8,alignItems:'center'}}><AccountButton/><AppMenu onSettings={onSettings}/></View>}
     </View>}
     {hero??(!header&&!simpleHeader&&!driverHeader?<Label large>{title}</Label>:null)}
     {!ready?<Panel>{loadError?<><Label>{t('تعذر تحميل البيانات المحفوظة.','Could not load saved data.')}</Label><Button title={t('إعادة المحاولة','Try again')} onPress={retry}/></>:<ActivityIndicator color={colors.purple}/>}</Panel>:<><DeviceStatus/>{children}</>}
