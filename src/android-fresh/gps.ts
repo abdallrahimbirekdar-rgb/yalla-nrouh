@@ -35,6 +35,27 @@ export function awaitFreshFix<T>(
  });
 }
 
+export async function firstUsableMapFix<T>(
+ subscribe:(accuracy:'high'|'balanced',signal:AbortSignal)=>Promise<T>,
+ signal:AbortSignal,
+):Promise<T>{
+ if(signal.aborted)throw new Error('GPS_CANCELLED');
+ const controller=new AbortController();
+ const cancel=()=>controller.abort();
+ signal.addEventListener('abort',cancel,{once:true});
+ try{
+  return await Promise.any([subscribe('high',controller.signal),subscribe('balanced',controller.signal)]);
+ }catch(error){
+  if(signal.aborted)throw new Error('GPS_CANCELLED');
+  if(error instanceof AggregateError&&error.errors.some(cause=>cause instanceof Error&&cause.message==='GPS_TIMEOUT'))
+   throw new Error('GPS_TIMEOUT');
+  throw new Error('GPS_UNAVAILABLE');
+ }finally{
+  signal.removeEventListener('abort',cancel);
+  cancel();
+ }
+}
+
 // A map, route panel and startup can ask together. Share the provider, but
 // cancelling one consumer must never cancel a fix another consumer still needs.
 export class GpsTaskPool<T>{

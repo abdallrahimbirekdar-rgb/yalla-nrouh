@@ -8,7 +8,7 @@ import {requireOptionalNativeModule} from 'expo-modules-core';
 import {localAlertsGranted,readLocalAlerts,requestLocalAlerts,notifyLocal} from '../alerts';
 import Storage from 'expo-sqlite/kv-store';
 import {setupPermission} from './permission-setup';
-import {acceptableFix,awaitFreshFix,deadlineOr,GpsTaskPool} from './gps';
+import {acceptableFix,awaitFreshFix,deadlineOr,firstUsableMapFix,GpsTaskPool} from './gps';
 import {SITE,websiteEntryUrl,bootstrapScript,diagnosticScript,eventScript,autoFixScript,externalTarget,positionScript,readWebMessage,trustedSite,trustedWebMessage,
  type WebMessage,type PositionResponse} from './bridge';
 
@@ -43,24 +43,30 @@ class ForegroundLocation {
   if(!await Location.hasServicesEnabledAsync())throw new Error('services');
   if(signal.aborted)throw new Error('GPS_CANCELLED');
   const accuracy=track?50:250;
-  if(!track){
-   // A genuinely recent fix opens the map immediately. Fresh GPS still follows.
-   const last=await deadlineOr(
-    Location.getLastKnownPositionAsync({maxAge:20000,requiredAccuracy:accuracy}).catch(()=>null),
-    900,null,
-   );
-   if(acceptableFix(last,accuracy,20000)&&last&&!signal.aborted)preview(last);
-  }
-  const subscribe=(mode:Location.Accuracy)=>
+  const subscribe=(mode:Location.Accuracy,watchSignal:AbortSignal)=>
    awaitFreshFix<Location.LocationObject>(
     (next,error)=>Location.watchPositionAsync({
       accuracy:mode,timeInterval:1000,distanceInterval:0,
       mayShowUserSettingsDialog:false,
     },next,error),
     fix=>acceptableFix(fix,accuracy,30000),
-    20000,signal,
+    20000,watchSignal,
    );
-  return subscribe(Location.Accuracy.High);
+  if(track)return subscribe(Location.Accuracy.High,signal);
+
+  let finished=false;
+  // Check the recent cache while both providers acquire a fresh map fix.
+  void deadlineOr(
+   Location.getLastKnownPositionAsync({maxAge:20000,requiredAccuracy:accuracy}).catch(()=>null),
+   900,null,
+  ).then(last=>{
+   if(last&&!finished&&!signal.aborted&&acceptableFix(last,accuracy,20000))preview(last);
+  });
+  try{
+   return await firstUsableMapFix((mode,watchSignal)=>subscribe(
+    mode==='high'?Location.Accuracy.High:Location.Accuracy.Balanced,watchSignal,
+   ),signal);
+  }finally{finished=true}
  }
 }
 type Run={controller:AbortController;id:string};
@@ -229,10 +235,9 @@ export default function FreshAndroid(){
    const point={latitude:fix.coords.latitude,longitude:fix.coords.longitude};
    // The startup fix is independent of website -> native postMessage.
    // Save it on window before firing the event, so late website mounts recover it.
-   if(message.id==='auto-location')inject(autoFixScript(point,fix.timestamp));
-   respond({id:message.id,point,
-    fix:typeof fix.coords.accuracy==='number'?
-     {accuracy:fix.coords.accuracy,time:fix.timestamp}:undefined});
+   const accuracy=fix.coords.accuracy??undefined;
+   if(message.id==='auto-location')inject(autoFixScript(point,fix.timestamp,accuracy));
+   respond({id:message.id,point,fix:accuracy===undefined?undefined:{accuracy,time:fix.timestamp}});
   };
   void syncPermission('locating');
   try{

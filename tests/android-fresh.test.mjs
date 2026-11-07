@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {acceptableFix,awaitFreshFix,deadlineOr} from '../src/android-fresh/gps.ts';
+import {acceptableFix,awaitFreshFix,deadlineOr,firstUsableMapFix} from '../src/android-fresh/gps.ts';
 import {readWebMessage,trustedSite,trustedWebMessage,positionScript,bootstrapScript,autoFixScript,websiteEntryUrl} from '../src/android-fresh/bridge.ts';
 test('trusted website only; no JavaScript URL injection',()=>{
  assert.equal(trustedSite('https://abdallrahimbirekdar-rgb.github.io/yalla-nrouh/'),true);
@@ -50,6 +50,7 @@ test('native bootstrap and position events serialize as data',()=>{
  assert.match(bootstrapScript('x',true),/YALLA_DRIVER_LOCATION_STREAM__/);
  assert.match(bootstrapScript('x',true,true,true),/YALLA_DRIVER_VOICE_SETUP__=true/);
  assert.match(autoFixScript({latitude:51.5,longitude:7.2},Date.now()),/YALLA_NATIVE_AUTOFIX__/);
+ assert.match(autoFixScript({latitude:51.5,longitude:7.2},1794069000000,75),/"time":1794069000000,"accuracy":75/);
  assert.doesNotMatch(positionScript({id:'x',point:null,error:'timeout'}),/eval\s*\(/);
 });
 test('freshness, accuracy, and coordinate bounds are enforced',()=>{
@@ -90,6 +91,26 @@ test('aborted requests cannot contaminate later requests',async()=>{
 test('a stalled cache read has a deterministic short fallback',async()=>{
  const task=new Promise(()=>{});
  assert.equal(await deadlineOr(task,5,null),null);
+});
+
+test('a usable balanced fix can open the map while high accuracy is still waiting',async()=>{
+ const callbacks=new Map(),removed=[];
+ const task=firstUsableMapFix((mode,signal)=>awaitFreshFix(
+  async next=>{callbacks.set(mode,next);return {remove:()=>removed.push(mode)}},
+  accuracy=>accuracy<=250,1000,signal,
+ ),new AbortController().signal);
+ await Promise.resolve();
+ callbacks.get('balanced')(600);
+ callbacks.get('balanced')(75);
+ assert.equal(await task,75);
+ assert.deepEqual(removed.sort(),['balanced','high']);
+});
+
+test('the map can still use a high accuracy fix when balanced is unavailable',async()=>{
+ const fix=await firstUsableMapFix(mode=>mode==='balanced'
+  ?Promise.reject(new Error('GPS_UNAVAILABLE')):Promise.resolve(24),
+ new AbortController().signal);
+ assert.equal(fix,24);
 });
 
 test('concurrent map requests share GPS and cancelling one does not stop another',async()=>{

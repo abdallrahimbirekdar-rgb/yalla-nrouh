@@ -98,8 +98,8 @@ export function bootstrapScript(id:string,granted:boolean,driverSpeech=false,dri
   +eventScript('yalla:native-location-permission',{granted});
 }
 export type PositionPoint={latitude:number;longitude:number};
-export function autoFixScript(point:PositionPoint,time:number):string{
- const payload={point,time};
+export function autoFixScript(point:PositionPoint,time:number,accuracy?:number):string{
+ const payload={point,time,accuracy};
  return 'window.__YALLA_NATIVE_AUTOFIX__='+js(payload)+';'
   +eventScript('yalla:native-autofix',payload);
 }

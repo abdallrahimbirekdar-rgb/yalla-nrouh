@@ -2,7 +2,7 @@ import {isCoordinate,type Coordinate} from './geo.ts';
 import {announceWebPosition,getWebPosition,recentMeasuredWebPosition,refineWebPosition,webLocationGranted} from './web-position.ts';
 import {PositionError} from './current-position.ts';
 import type {Fix} from './meter.ts';
-export type SiteWindow=Window&{ReactNativeWebView?:{postMessage:(message:string)=>void};__YALLA_NATIVE_LOCATION_GRANTED__?:boolean;__YALLA_NATIVE_AUTOFIX__?:{point:Coordinate;time:number}};
+export type SiteWindow=Window&{ReactNativeWebView?:{postMessage:(message:string)=>void};__YALLA_NATIVE_LOCATION_GRANTED__?:boolean;__YALLA_NATIVE_AUTOFIX__?:{point:Coordinate;time:number;accuracy?:number}};
 // The website owns its local data. Never block a launch or save while trying
 // to import older APK data; the owner chose to start without that migration.
 // Keep the native handshake only for optional foreground location status.
@@ -18,10 +18,14 @@ function listenNativePosition(host:SiteWindow){
  // Native can obtain GPS even if the webpage -> Android message never arrives.
  // Keep a recent result available when React mounts after the native event.
  const auto=(value:unknown)=>{
-  const details=value as {point?:unknown;time?:unknown}|null;
-  if(details&&isCoordinate(details.point)&&typeof details.time==='number'
-     &&Date.now()-details.time>=-3000&&Date.now()-details.time<30000)
-   announceWebPosition(details.point);
+  const details=value as {point?:unknown;time?:unknown;accuracy?:unknown}|null;
+  if(!details||!isCoordinate(details.point)||typeof details.time!=='number')return;
+  const age=Date.now()-details.time;
+  if(!Number.isFinite(age)||age< -3000||age>=30000)return;
+  const {accuracy,point,time}=details;
+  if(accuracy===undefined)announceWebPosition(point); // Older installed APKs omit accuracy.
+  else if(typeof accuracy==='number'&&Number.isFinite(accuracy)&&accuracy>=0&&accuracy<=250)
+   announceWebPosition(point,{accuracy,time});
  };
  host.addEventListener('yalla:native-autofix',event=>auto((event as CustomEvent).detail));
  if(host.__YALLA_NATIVE_AUTOFIX__)auto(host.__YALLA_NATIVE_AUTOFIX__);
