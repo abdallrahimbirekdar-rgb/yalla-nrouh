@@ -11,7 +11,7 @@ function endpointBadge(letter:string,background:string){
  Object.assign(badge.style,{background,color:'white',border:'2px solid white',borderRadius:'50%',width:'28px',height:'28px',display:'grid',placeItems:'center',fontWeight:'bold'});
  return badge;
 }
-export default function MapContent({point,destinationPoint,taxiPoint,passengerPoint,onChange,compact=false,route,readOnly=false,lean=false,loadTimeoutMs=25000,cameraTarget,initialCenter,minMapHeight=260}:{point:Coordinate|null;destinationPoint?:Coordinate;taxiPoint?:Coordinate;passengerPoint?:Coordinate;onChange:(point:Coordinate)=>void;compact?:boolean;route?:Coordinate[];readOnly?:boolean;lean?:boolean;loadTimeoutMs?:number;cameraTarget?:CameraTarget;initialCenter?:Coordinate;minMapHeight?:number}){
+export default function MapContent({point,destinationPoint,taxiPoint,passengerPoint,onChange,compact=false,route,readOnly=false,lean=false,loadTimeoutMs=25000,cameraTarget,initialCenter,minMapHeight=compact?260:340}:{point:Coordinate|null;destinationPoint?:Coordinate;taxiPoint?:Coordinate;passengerPoint?:Coordinate;onChange:(point:Coordinate)=>void;compact?:boolean;route?:Coordinate[];readOnly?:boolean;lean?:boolean;loadTimeoutMs?:number;cameraTarget?:CameraTarget;initialCenter?:Coordinate;minMapHeight?:number}){
  const {state}=useApp();const t=useText();const {colors,dark}=useTheme();const host=useRef<HTMLDivElement>(null);
  const map=useRef<GoogleMap|null>(null),api=useRef<GoogleMaps|null>(null),marker=useRef<GoogleMarker|null>(null),line=useRef<GoogleLine|null>(null);
  const userMarker=useRef<GoogleMarker|null>(null),endMarker=useRef<GoogleMarker|null>(null),taxiMarker=useRef<GoogleMarker|null>(null);
@@ -114,7 +114,7 @@ export default function MapContent({point,destinationPoint,taxiPoint,passengerPo
  },[point,taxiPoint,passengerPoint,hasCameraTarget,ready,state.language,destinationLat,destinationLng,route,t]);
  useEffect(()=>{map.current?.setOptions({tilt:0,heading:0,headingInteractionEnabled:!lean,tiltInteractionEnabled:false})},[lean,ready]);
  return <View style={compact?{flex:1,minHeight:minMapHeight}:{gap:10}}>
-  {React.createElement('div',{ref:host,role:'region','aria-label':readOnly&&destinationPoint?t('خريطة الرحلة','Ride map'):t('خريطة Google لاختيار الموقع','Google map to choose a location'),style:{height:compact?'100%':340,minHeight:compact?minMapHeight:340,width:'100%',borderRadius:compact?0:16,overflow:'hidden',background:colors.surface}})}
+  {React.createElement('div',{ref:host,role:'region','aria-label':readOnly&&destinationPoint?t('خريطة الرحلة','Ride map'):t('خريطة Google لاختيار الموقع','Google map to choose a location'),style:{height:compact?'100%':minMapHeight,minHeight:minMapHeight,width:'100%',borderRadius:compact?0:16,overflow:'hidden',background:colors.surface}})}
   {(!key||error||!ready)&&<View style={{position:'absolute',left:readOnly&&compact?6:16,right:readOnly&&compact?6:16,top:readOnly&&compact?4:compact?70:30,padding:readOnly&&compact?6:18,borderRadius:14,gap:12,backgroundColor:colors.background}}>
    {!key||error?<Label>{readOnly?t('الخريطة غير متاحة الآن.','The map is unavailable right now.'):t('خريطة Google غير متاحة حاليًا. يمكنك إدخال العنوان يدويًا والمحاولة لاحقًا.','Google Maps is not available right now. You can enter an address by hand and try later.')}</Label>:<><ActivityIndicator color={colors.purple}/><Label>{t('جارٍ تحميل خريطة Google…','Loading Google Maps…')}</Label></>}
    {key&&error&&<Button secondary title={t('إعادة المحاولة','Try again')} onPress={()=>setAttempt(value=>value+1)}/>}

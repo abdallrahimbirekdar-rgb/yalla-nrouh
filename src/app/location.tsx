@@ -7,6 +7,7 @@ import {PositionError} from '../current-position';
 import {recentWebPosition} from '../web-position';
 import {type CameraTarget,useCurrentPosition} from '../use-current-position';
 import MapCanvas from '../map/MapCanvas';
+import {usePassengerMapHeight} from '../passenger-trip-summary';
 import {googlePlaceAutocomplete,searchGooglePlaces} from '../map/search-places';
 import type {PlaceSuggestion} from '../map/place-autocomplete';
 import {useAuth} from '../auth';
@@ -25,6 +26,7 @@ export default function LocationRoute(){
 function LocationPicker({pickup,focus,savedView,edit,fromReview}:{pickup:boolean;focus:boolean;savedView:boolean;edit?:string;fromReview:boolean}){
  const {draft,setDraft,state,ready}=useApp();const auth=useAuth();const t=useText();const {colors}=useTheme();
  const rideState=useRideState();
+ const mapHeight=usePassengerMapHeight();
  const editing=savedView&&!!edit, managing=savedView&&!edit;
  const gps=useCurrentPosition(ready&&pickup&&draft.pickupMode!=='manual');
  const original=savedView?undefined:pickup?draft.pickupPoint:draft.destinationPoint;
@@ -313,7 +315,7 @@ function LocationPicker({pickup,focus,savedView,edit,fromReview}:{pickup:boolean
     onPress={()=>{Keyboard.dismiss();setMapOpen(value=>!value)}}/></View>
    {!editing&&<View style={{flex:1}}><Button secondary icon="bookmark-outline" title={savedOpen?t('إخفاء العناوين','Hide saved addresses'):t('العناوين المحفوظة','Saved addresses')} onPress={()=>{Keyboard.dismiss();setSavedOpen(value=>!value)}}/></View>}
   </View>
-  {mapOpen&&<MapCanvas point={point??oldPlace?.coordinate??null} initialCenter={initialCenter.current} cameraTarget={selectionCamera??gps.camera} onChange={next=>{if(!confirming&&!busy&&!saving)choose(next)}}/>}
+  {mapOpen&&<MapCanvas minMapHeight={mapHeight} point={point??oldPlace?.coordinate??null} initialCenter={initialCenter.current} cameraTarget={selectionCamera??gps.camera} onChange={next=>{if(!confirming&&!busy&&!saving)choose(next)}}/>}
   {!editing&&<View style={{gap:8}}>
    {savedOpen&&(token?<Panel>{savedList}{point&&(!pickup||pickupMode==='manual')&&<Button secondary icon="bookmark-outline" title={t('حفظ النقطة المحددة كعنوان','Save selected point as an address')} onPress={()=>void savePlace()} disabled={!loaded||saving||confirming}/>}</Panel>:signIn)}
   </View>}

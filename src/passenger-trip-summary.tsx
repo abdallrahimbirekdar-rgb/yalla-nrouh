@@ -12,10 +12,14 @@ export function RideFooter({children}:{children:React.ReactNode}){
  </View>;
 }
 
+export function usePassengerMapHeight(){
+ const {height}=useWindowDimensions();
+ return Math.min(252,Math.max(176,Math.round(height*.32)));
+}
+
 export function PassengerMap(props:Omit<React.ComponentProps<typeof MapCanvas>,'compact'|'readOnly'|'onChange'|'minMapHeight'>){
- const {height:screenHeight}=useWindowDimensions();
+ const height=usePassengerMapHeight();
  const {colors}=useTheme();
- const height=Math.min(500,Math.max(270,Math.round(screenHeight*0.59)));
  return <View style={{height,borderRadius:16,overflow:'hidden',backgroundColor:colors.surface}}>
   <MapCanvas {...props} compact readOnly minMapHeight={height} onChange={()=>{}}/>
  </View>;

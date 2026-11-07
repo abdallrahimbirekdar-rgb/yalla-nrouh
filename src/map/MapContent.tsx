@@ -6,7 +6,7 @@ import {type Coordinate} from '../geo';
 import type {CameraTarget} from '../use-current-position';
 import {Button,Label,useText,useTheme} from '../ui';
 
-export default function MapContent({point,destinationPoint,taxiPoint,passengerPoint,onChange,compact=false,route,readOnly=false,lean=false,loadTimeoutMs=25000,cameraTarget,initialCenter}:{point:Coordinate|null;destinationPoint?:Coordinate;taxiPoint?:Coordinate;passengerPoint?:Coordinate;onChange:(point:Coordinate)=>void;compact?:boolean;route?:Coordinate[];readOnly?:boolean;lean?:boolean;loadTimeoutMs?:number;cameraTarget?:CameraTarget;initialCenter?:Coordinate}){
+export default function MapContent({point,destinationPoint,taxiPoint,passengerPoint,onChange,compact=false,route,readOnly=false,lean=false,loadTimeoutMs=25000,cameraTarget,initialCenter,minMapHeight}:{point:Coordinate|null;destinationPoint?:Coordinate;taxiPoint?:Coordinate;passengerPoint?:Coordinate;onChange:(point:Coordinate)=>void;compact?:boolean;route?:Coordinate[];readOnly?:boolean;lean?:boolean;loadTimeoutMs?:number;cameraTarget?:CameraTarget;initialCenter?:Coordinate;minMapHeight?:number}){
  const t=useText();const {colors,dark}=useTheme();const ref=useRef<MapView>(null);
  const [ready,setReady]=useState(false),[tilesLoaded,setTilesLoaded]=useState(false);
  const [slow,setSlow]=useState(false),[attempt,setAttempt]=useState(0);
@@ -22,8 +22,8 @@ export default function MapContent({point,destinationPoint,taxiPoint,passengerPo
    if(overview&&overview.length>1)ref.current?.fitToCoordinates(overview,{edgePadding:{top:30,left:30,right:30,bottom:30},animated:false});
  },[route,ready,cameraTarget,destinationPoint,point,taxiPoint]);
  useEffect(()=>{if(ready&&cameraTarget)ref.current?.setCamera({center:cameraTarget.point,zoom:cameraTarget.zoom??19})},[ready,cameraTarget]);
- if(!configured)return <View style={{flex:compact?1:undefined,minHeight:260,padding:24,justifyContent:'center',backgroundColor:colors.surface}}><Label>{t('خريطة Google غير متاحة حاليًا. يمكنك إدخال العنوان يدويًا.','Google Maps is not available right now. You can enter an address by hand.')}</Label></View>;
- return <View style={{height:compact?'100%':340,borderRadius:compact?0:16,overflow:'hidden',backgroundColor:colors.surface}}>
+ if(!configured)return <View style={{flex:compact?1:undefined,minHeight:minMapHeight??260,padding:24,justifyContent:'center',backgroundColor:colors.surface}}><Label>{t('خريطة Google غير متاحة حاليًا. يمكنك إدخال العنوان يدويًا.','Google Maps is not available right now. You can enter an address by hand.')}</Label></View>;
+ return <View style={{height:compact?'100%':(minMapHeight??340),borderRadius:compact?0:16,overflow:'hidden',backgroundColor:colors.surface}}>
   <MapView
     key={attempt}
     ref={ref}

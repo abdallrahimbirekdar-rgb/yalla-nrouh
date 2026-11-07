@@ -9,6 +9,7 @@ import {useApp} from '../context';
 import {useAuth} from '../auth';
 import {useCurrentPosition} from '../use-current-position';
 import MapCanvas from '../map/MapCanvas';
+import {usePassengerMapHeight} from '../passenger-trip-summary';
 import {brandHeader} from '../theme';
 import {Button,DeviceStatus,Icon,Label,type IconName,useText,useTheme} from '../ui';
 
@@ -23,6 +24,7 @@ export default function Booking(){
  const t=useText();
  const {colors}=useTheme();
  const isFocused=useIsFocused();
+ const mapHeight=usePassengerMapHeight();
  const gps=useCurrentPosition(isFocused&&ready&&state.preferences.permissionsIntroSeen);
  const rtl=state.language==='ar';
  const row={flexDirection:rtl?'row-reverse' as const:'row' as const};
@@ -65,7 +67,7 @@ export default function Booking(){
   <View style={styles.frame}>
    <ScrollView contentContainerStyle={styles.scroll}>
     <View style={[styles.mapFrame,{backgroundColor:colors.surface,borderColor:colors.line}]}>
-     <MapCanvas compact readOnly minMapHeight={300} cameraTarget={gps.camera} point={gps.camera?.point??null} onChange={()=>{}}/>
+     <MapCanvas compact readOnly minMapHeight={mapHeight} cameraTarget={gps.camera} point={gps.camera?.point??null} onChange={()=>{}}/>
      {(gps.busy||gps.failure)&&<View pointerEvents="none" style={[styles.status,{backgroundColor:colors.background}]}><Label muted>{status}</Label></View>}
      <Pressable accessibilityRole="button" accessibilityLabel={t('موقعي الحالي','My current location')} onPress={()=>void gps.locate()} disabled={gps.busy} style={[styles.locate,{backgroundColor:colors.background,borderColor:colors.line}]}>{gps.busy?<ActivityIndicator color={colors.purple}/>:<Icon name="locate" color={colors.purple}/>}</Pressable>
     </View>

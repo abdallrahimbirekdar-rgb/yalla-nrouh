@@ -26,7 +26,7 @@ export default function MapCanvas(props:{point:Coordinate|null;destinationPoint?
    <Label muted>{t('اضغط زر الموقع لإعادة المحاولة. لن نعرض دمشق كموقعك الحالي.','Tap the location button to retry. Damascus is not your location.')}</Label>
   </View>;
  // Keep an existing map and selected point through connection changes.
- if(!mounted)return <View style={{flex:props.compact?1:undefined,minHeight:props.compact?(props.minMapHeight??260):200,justifyContent:'center',alignItems:'center',padding:24,gap:14,backgroundColor:colors.surface}}>
+ if(!mounted)return <View style={{flex:props.compact?1:undefined,minHeight:props.minMapHeight??(props.compact?260:200),justifyContent:'center',alignItems:'center',padding:24,gap:14,backgroundColor:colors.surface}}>
   <Icon name={network==='offline'?'cloud-offline-outline':'map-outline'} size={36} color={colors.purple}/>
   <Label>{network==='offline'?t('ستظهر الخريطة تلقائيًا عند عودة الإنترنت','The map will open when internet returns'):t('جارٍ تحميل الخريطة تلقائيًا…','Loading your map…')}</Label>
   {network!=='offline'&&<ActivityIndicator color={colors.purple}/>}
