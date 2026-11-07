@@ -38,7 +38,7 @@ function LocationPicker({pickup,focus,savedView,edit,fromReview}:{pickup:boolean
  const [autocomplete]=useState(googlePlaceAutocomplete),near=useRef(initialCenter.current);
  near.current=gps.camera?.point??draft.pickupPoint??initialCenter.current;
  const [query,setQuery]=useState(''),[results,setResults]=useState<Place[]>([]),[saved,setSaved]=useState<SavedPlace[]>([]);
- const [searchFocused,setSearchFocused]=useState(false);
+ const [searchFocused,setSearchFocused]=useState(false),[changing,setChanging]=useState(false);
  const [keyboardHeight,setKeyboardHeight]=useState<number>();
  const searchActive=searchFocused||!!query.trim();
  useEffect(()=>{
@@ -98,6 +98,12 @@ function LocationPicker({pickup,focus,savedView,edit,fromReview}:{pickup:boolean
   if(value.trim().length<3)autocomplete.reset();
   setQuery(value);setBusy(false);setSuggesting(false);setResults([]);setSuggestions([]);setSuggestionError('');setMessage('');
  }
+ function finishSearch(){
+  changeQuery('');
+  setChanging(false);
+  setSearchFocused(false);
+  Keyboard.dismiss();
+ }
  function choose(next:Coordinate,nextLabel?:string,moveCamera=false){
   if(confirming||saving)return;
   positionRequest.current?.abort();
@@ -105,13 +111,16 @@ function LocationPicker({pickup,focus,savedView,edit,fromReview}:{pickup:boolean
   setLocating(false);
   if(pickup){gps.chooseManually();setPickupMode('manual')}
   setPoint(next);setLabel(nextLabel??(pickup?t('نقطة الالتقاء على الخريطة','Meeting point on the map'):t('نقطة على الخريطة','Point on the map')));
-  changeQuery('');
-  if(moveCamera){setSelectionCamera({point:next,revision:Date.now(),isLocation:false});Keyboard.dismiss()}
-  setMessage('');
+  finishSearch();
+  if(moveCamera){
+   setSelectionCamera({point:next,revision:Date.now(),isLocation:false});
+   setMapOpen(false);
+   setSavedOpen(false);
+  }
  }
  async function selectCurrent(){
   if(positionRequest.current||confirming)return;
-  changeQuery('');Keyboard.dismiss();
+  finishSearch();
   gps.chooseManually();
   const controller=new AbortController();
   positionRequest.current=controller;
@@ -122,6 +131,7 @@ function LocationPicker({pickup,focus,savedView,edit,fromReview}:{pickup:boolean
     setPickupMode('current');
     setPoint(next);setLabel(t('موقعي الحالي','My current location'));
     setSelectionCamera({point:next,revision:Date.now()});
+    setMapOpen(false);setSavedOpen(false);
    }
   }catch(error){
    if(alive.current&&positionRequest.current===controller)setMessage(pickupPositionMessage(error,state.language));
@@ -239,13 +249,16 @@ function LocationPicker({pickup,focus,savedView,edit,fromReview}:{pickup:boolean
  const oldPlace=editing&&slot?saved.find(place=>place.id===slot):undefined;
  const title=editing?(slot?t('عنوان ','Address: ')+addressSlotLabel(slot,t):t('إضافة عنوان','Add an address')):pickup?t('نقطة الانطلاق','Pickup point'):t('نقطة الوصول','Destination point');
  const typing=!!query.trim();
+ const showSearch=editing||!point||changing||searchActive;
+ const rtl=state.language==='ar';
+ const row={flexDirection:rtl?'row-reverse' as const:'row' as const};
  const clearSearch=t('مسح البحث','Clear search');
  return <Page compact simpleHeader viewportHeight={keyboardHeight} backTo={backTo} title={title}>
-  <View nativeID={searchActive?'ride-address-search-active':undefined}>
+  {showSearch&&<View nativeID={searchActive?'ride-address-search-active':undefined}>
   <Panel outlined>
    <View style={{flexDirection:state.language==='ar'?'row-reverse':'row',alignItems:'flex-end',gap:8}}>
     <View style={{flex:1}}>
-     <Field autoFocus={focus} label={pickup?t('من وين بدك تنطلق؟','Where should we pick you up?'):editing?t('ابحث عن العنوان','Find an address'):t('لوين بدك تروح؟','Where to?')} value={query}
+     <Field autoFocus={changing||focus&&!point} label={pickup?t('من وين بدك تنطلق؟','Where should we pick you up?'):editing?t('ابحث عن العنوان','Find an address'):t('لوين بدك تروح؟','Where to?')} value={query}
       editable={!confirming&&!saving} onFocus={()=>setSearchFocused(true)} onBlur={()=>setSearchFocused(false)} onChangeText={changeQuery} autoCorrect={false} autoComplete="off"
       maxLength={200} placeholder={t('اسم المكان أو الشارع أو الحي','Place, street or district')}
       returnKeyType="search" onSubmitEditing={()=>void search()}/>
@@ -265,19 +278,31 @@ function LocationPicker({pickup,focus,savedView,edit,fromReview}:{pickup:boolean
    {!!suggestionError&&<Button secondary icon="map-outline" title={t('اختيار على الخريطة','Choose on map')} onPress={()=>{changeQuery('');Keyboard.dismiss();setMapOpen(true)}}/>}
    {typing&&!suggesting&&!results.length&&query.trim().length>=3&&<Button secondary icon="search" title={t('عرض نتائج أكثر','Show more results')} onPress={()=>void search()} disabled={confirming||busy}/>}
    {busy&&<ActivityIndicator accessibilityLabel={t('جارٍ تحديد العنوان…','Finding the address…')}/>}
+   {!editing&&point&&(changing||searchActive)&&<Button secondary title={t('إلغاء تغيير المكان','Keep selected location','Ausgewählten Ort behalten')}
+    onPress={finishSearch} disabled={confirming||saving}/>}
    {typing&&notice}
-  </Panel></View>
+  </Panel></View>}
   {!typing&&<>
   {pickup&&(pickupMode==='manual'||!point||locating)&&<Button secondary icon="locate" title={locating?t('جارٍ تحديد موقعك…','Finding your location…'):t('استخدام موقعي الحالي','Use my current location')} onPress={()=>void selectCurrent()} disabled={confirming||busy||locating}/>}
   {pickup&&!message&&!locating&&!point&&gps.failure&&<Label muted>{pickupPositionMessage(new PositionError(gps.failure),state.language)}</Label>}
   {oldPlace&&!point&&!typing&&<Label muted>{t('العنوان المحفوظ حاليًا: ','Current saved address: ')}{oldPlace.label}</Label>}
-  {point?<Panel>
+  {point&&(editing||!showSearch)?<Panel>
    {editing?<Field label={t('اسم العنوان','Address name')} value={label} onChangeText={setLabel} maxLength={200} editable={!confirming&&!busy&&!saving}/>:<>
-    <Label muted>{pickup?t('نقطة الانطلاق المختارة','Selected pickup'):t('الوجهة المختارة','Selected destination')}</Label>
-    <Label>{pickup&&pickupMode==='current'?t('موقعي الحالي','My current location'):label}</Label>
+    <View style={[row,{alignItems:'center',gap:8}]}>
+     <View style={{width:36,height:36,borderRadius:12,backgroundColor:colors.brandTint,alignItems:'center',justifyContent:'center'}}>
+      <Icon name="checkmark-circle-outline" size={23} color={colors.brandAccent}/>
+     </View>
+     <View style={{flex:1}}><Label muted>{pickup?t('تم تحديد نقطة الانطلاق','Pickup selected','Abholort ausgewählt'):t('تم تحديد الوجهة','Destination selected','Ziel ausgewählt')}</Label></View>
+     <Pressable accessibilityRole="button" accessibilityLabel={pickup?t('تعديل نقطة الانطلاق','Change pickup point'):t('تعديل الوجهة','Change destination')}
+      disabled={confirming||busy||locating} onPress={()=>{setChanging(true);setMapOpen(false);setSavedOpen(false)}}
+      style={{minHeight:44,paddingHorizontal:10,justifyContent:'center',borderRadius:12,backgroundColor:colors.soft}}>
+      <Label>{t('تغيير','Change','Ändern')}</Label>
+     </Pressable>
+    </View>
+    <Label large>{pickup&&pickupMode==='current'?t('موقعي الحالي','My current location'):label||formatCoordinate(point)}</Label>
    </>}
-   <Button icon="checkmark-circle-outline"
-    title={editing?t('حفظ العنوان','Save address'):pickup?t('تأكيد الانطلاق وعرض الأجرة','Confirm pickup and view fare'):fromReview&&draft.pickupPoint?t('تأكيد الوجهة وعرض الأجرة','Confirm destination and view fare'):t('تأكيد الوجهة واختيار الانطلاق','Confirm destination and choose pickup')}
+   <Button icon={editing?'checkmark-circle-outline':rtl?'arrow-back-outline':'arrow-forward-outline'}
+    title={editing?t('حفظ العنوان','Save address'):pickup||fromReview&&draft.pickupPoint?t('عرض الأجرة','View fare','Fahrpreis ansehen'):t('التالي: اختيار نقطة الانطلاق','Next: Choose pickup','Weiter: Abholort wählen')}
     onPress={()=>void (editing?savePlace():confirm())}
     disabled={confirming||busy||saving||locating||!point||(editing&&!loaded)}/>
    {confirming&&<ActivityIndicator accessibilityLabel={t('جارٍ تأكيد نقطة الانطلاق…','Confirming pickup…')}/>}
