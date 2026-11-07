@@ -305,7 +305,7 @@ export default function Rides(){
    else if(result==='pin')setNotice(t('فتحت نقطة الوجهة في MAPS.ME. اضغط عليها واختر «الطريق إلى هنا».','The destination opened in MAPS.ME. Tap it and choose Route To.'));
    else setNotice(navigationProvider==='google'
     ?t('تعذّر فتح خرائط Google. يمكنك إعادة المحاولة من شاشة الرحلة.','Could not open Google Maps. You can retry from the ride screen.')
-    :t('تعذّر فتح MAPS.ME. تأكد من تثبيته على هاتف السائق.','Could not open MAPS.ME. Make sure it is installed on the driver’s phone.'));
+    :t('تعذّر إرسال الوجهة إلى MAPS.ME. يمكنك إعادة المحاولة من شاشة الرحلة.','Could not send the destination to MAPS.ME. You can retry from the ride screen.'));
   };
   void open();
  }

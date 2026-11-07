@@ -2,7 +2,7 @@
   "expo": {
     "name": "يلا نروح",
     "slug": "yalla-nrouh",
-    "version": "1.1.5",
+    "version": "1.1.6",
     "orientation": "portrait",
     "icon": "./assets/app-icon-approved.png",
     "userInterfaceStyle": "automatic",
@@ -22,7 +22,7 @@
         "monochromeImage": "./assets/monochrome-approved.png"
       },
       "package": "com.yallanrouh.demo",
-      "versionCode": 34,
+      "versionCode": 35,
       "blockedPermissions": [
         "android.permission.ACCESS_BACKGROUND_LOCATION",
         "android.permission.READ_SMS",

@@ -1,5 +1,7 @@
 package com.yallanrouh.navigation
 
+import android.app.Activity
+import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.net.Uri
 import androidx.core.content.ContextCompat
@@ -86,7 +88,13 @@ class DriverNavigationModule : Module() {
       val activity = appContext.currentActivity ?: return@AsyncFunction "unavailable"
       if (latitude !in -90.0..90.0 || longitude !in -180.0..180.0) return@AsyncFunction "unavailable"
       val point = "$latitude,$longitude"
-      val route = if (originLatitude != null && originLatitude in -90.0..90.0 &&
+      val packageName = "com.mapswithme.maps.pro"
+      // With no explicit start point, MAPS.ME builds the route from its current location.
+      val routeIntent = Intent("$packageName.action.BUILD_ROUTE")
+        .putExtra("lat_to", latitude.toFloat())
+        .putExtra("lon_to", longitude.toFloat())
+        .putExtra("router", "vehicle")
+      val routeLink = if (originLatitude != null && originLatitude in -90.0..90.0 &&
         originLongitude != null && originLongitude in -180.0..180.0) {
         Uri.parse("https://dlink.maps.me/route").buildUpon()
           .appendQueryParameter("sll", "$originLatitude,$originLongitude")
@@ -96,20 +104,28 @@ class DriverNavigationModule : Module() {
           .appendQueryParameter("type", "vehicle")
           .build()
       } else null
-      val pin = Uri.parse("mapsme://map").buildUpon()
+      val pinIntent = Intent("$packageName.action.SHOW_ON_MAP")
+        .putExtra("lat", latitude.toFloat())
+        .putExtra("lon", longitude.toFloat())
+      val pinLink = Uri.parse("mapsme://map").buildUpon()
         .appendQueryParameter("v", "1")
         .appendQueryParameter("ll", point)
         .build()
-      // Keep each link inside the installed MAPS.ME package. If the route
-      // handler is unavailable, show the destination for manual directions.
-      val links = listOfNotNull(route?.let { "route" to it }, "pin" to pin)
-      for ((result, link) in links) {
-        val intent = Intent(Intent.ACTION_VIEW, link).setPackage("com.mapswithme.maps.pro")
-        if (adjacent) intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_LAUNCH_ADJACENT)
-        try {
-          activity.startActivity(intent)
-          return@AsyncFunction result
-        } catch (_: Exception) { /* Try the destination pin if the route link is unsupported. */ }
+      val intents = listOfNotNull(
+        "route" to routeIntent,
+        routeLink?.let { "route" to Intent(Intent.ACTION_VIEW, it) },
+        "pin" to pinIntent,
+        "pin" to Intent(Intent.ACTION_VIEW, pinLink),
+        "pin" to Intent(Intent.ACTION_VIEW, Uri.parse("geo:$point?q=$point"))
+      )
+      for ((result, candidate) in intents) {
+        candidate.setPackage(packageName)
+        if (adjacent) {
+          val besideRide = Intent(candidate)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_LAUNCH_ADJACENT)
+          if (tryOpenMapsMe(activity, besideRide)) return@AsyncFunction result
+        }
+        if (tryOpenMapsMe(activity, candidate)) return@AsyncFunction result
       }
       "unavailable"
     }.runOnQueue(Queues.MAIN)
@@ -177,6 +193,17 @@ class DriverNavigationModule : Module() {
         speech = null
         initialized = false
       }
+    }
+  }
+
+  private fun tryOpenMapsMe(activity: Activity, intent: Intent): Boolean {
+    return try {
+      activity.startActivity(intent)
+      true
+    } catch (_: ActivityNotFoundException) {
+      false
+    } catch (_: SecurityException) {
+      false
     }
   }
 
