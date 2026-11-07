@@ -115,3 +115,18 @@ test('ride sharing and external maps are narrow native operations',()=>{
  assert.equal(readWebMessage(JSON.stringify({...maps,latitude:91})),null);
  assert.equal(readWebMessage(JSON.stringify({...maps,adjacent:'true'})),null);
 });
+
+
+test('only the OsmAnd bridge accepts authenticated passenger display data',()=>{
+ const rideId='00000000-0000-4000-8000-000000000001';
+ const accessToken='header.payload.signature';
+ const location={type:'ride-osmand',id:'maps-1',latitude:33.5,longitude:36.3,adjacent:false};
+ const read=message=>readWebMessage(JSON.stringify(message));
+ assert.deepEqual(read({...location,rideId,accessToken}),{...location,passenger:{rideId,accessToken}});
+ assert.deepEqual(read({...location,rideId,accessToken:'Bearer bad'}),location);
+ assert.deepEqual(read({...location,rideId:'not-a-ride',accessToken}),location);
+ assert.deepEqual(read({...location,rideId,accessToken,type:'ride-maps'}),{...location,type:'ride-maps'});
+ assert.deepEqual(read({type:'osmand-map-access',id:'permission-1'}),{type:'osmand-map-access',id:'permission-1'});
+ assert.deepEqual(read({type:'osmand-passenger-stop'}),{type:'osmand-passenger-stop'});
+ assert.match(bootstrapScript('x',true,false,false,true),/YALLA_OSMAND_PASSENGER__=true/);
+});

@@ -14,7 +14,9 @@ export type WebMessage=
  |{type:'ride-share-start';id:string;rideId:string;secret:string}
  |{type:'ride-share-stop';id:string;rideId:string}
  |{type:'ride-share-status';id:string}
- |{type:'ride-maps'|'ride-yandex'|'ride-osmand';id:string;latitude:number;longitude:number;adjacent:boolean}
+ |{type:'ride-maps'|'ride-yandex'|'ride-osmand';id:string;latitude:number;longitude:number;adjacent:boolean;passenger?:{rideId:string;accessToken:string}}
+ |{type:'osmand-passenger-stop'}
+ |{type:'osmand-map-access';id:string}
  |{type:'location-settings';id:string}
  |{type:'alerts-enable';id:string}
  |{type:'notify';id:string;title:string;body:string}
@@ -22,6 +24,7 @@ export type WebMessage=
  |{type:'refresh'}
  |{type:'back-default'};
 const idOK=(v:unknown):v is string=>typeof v==='string'&&/^[a-z0-9-]{1,80}$/i.test(v);
+const tokenOK=(v:unknown):v is string=>typeof v==='string'&&v.length<=3072&&/^[a-z0-9_-]+\.[a-z0-9_-]+\.[a-z0-9_-]+$/i.test(v);
 const uuid=(v:unknown):v is string=>typeof v==='string'&&/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(v);
 export function trustedSite(value:string):boolean{
  try{const u=new URL(value);return u.origin===SITE_ORIGIN
@@ -59,7 +62,10 @@ export function readWebMessage(raw:string):WebMessage|null{
   if(v.type==='ride-share-status'&&idOK(v.id))return {type:v.type,id:v.id};
   if((v.type==='ride-maps'||v.type==='ride-yandex'||v.type==='ride-osmand')&&idOK(v.id)&&typeof v.latitude==='number'&&Math.abs(v.latitude)<=90
    &&typeof v.longitude==='number'&&Math.abs(v.longitude)<=180&&typeof v.adjacent==='boolean')
-   return {type:v.type,id:v.id,latitude:v.latitude,longitude:v.longitude,adjacent:v.adjacent};
+   return {type:v.type,id:v.id,latitude:v.latitude,longitude:v.longitude,adjacent:v.adjacent,
+    ...(v.type==='ride-osmand'&&uuid(v.rideId)&&tokenOK(v.accessToken)?{passenger:{rideId:v.rideId,accessToken:v.accessToken}}:{})};
+  if(v.type==='osmand-passenger-stop')return {type:v.type};
+  if(v.type==='osmand-map-access'&&idOK(v.id))return {type:v.type,id:v.id};
   if(v.type==='location-settings'&&idOK(v.id))return {type:'location-settings',id:v.id};
   if(v.type==='alerts-enable'&&idOK(v.id))return {type:'alerts-enable',id:v.id};
   if(v.type==='notify'&&idOK(v.id)&&typeof v.title==='string'&&v.title.length<=200&&typeof v.body==='string'&&v.body.length<=1000)
@@ -78,8 +84,9 @@ const js=(value:unknown)=>JSON.stringify(value).replace(/</g,'\\u003c');
 export function eventScript(name:string,detail:unknown):string{
  return 'window.dispatchEvent(new CustomEvent('+js(name)+',{detail:'+js(detail)+'}));true;';
 }
-export function bootstrapScript(id:string,granted:boolean,driverSpeech=false,driverVoiceSetup=false):string{
+export function bootstrapScript(id:string,granted:boolean,driverSpeech=false,driverVoiceSetup=false,osmandPassenger=false):string{
  return 'window.__YALLA_DRIVER_LOCATION_STREAM__=true;window.__YALLA_DRIVER_SPEECH__='+js(driverSpeech)+';window.__YALLA_DRIVER_VOICE_SETUP__='+js(driverVoiceSetup)+';window.__YALLA_NATIVE_LOCATION_GRANTED__='+js(granted)+';'
+  +'window.__YALLA_OSMAND_PASSENGER__='+js(osmandPassenger)+';'
   +eventScript('yalla:native-bootstrap',{id,savedState:null,locationGranted:granted})
   +eventScript('yalla:native-location-permission',{granted});
 }

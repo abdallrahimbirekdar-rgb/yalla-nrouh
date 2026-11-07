@@ -19,7 +19,7 @@ import {DriverHistory,DriverHistoryBar} from '../driver-history';
 import {useDriverOfferSound} from '../use-driver-offer-sound';
 import {useCurrentPosition} from '../use-current-position';
 import {PassengerTaxiMap,RideSearchTimer,useShareTaxiPosition} from '../taxi-tracking';
-import {CustomerTracking,OsmAndHelp,openRideMaps,pickupChange,useRideRow,useRideSharing,type NavigationProvider} from '../ride-live-sharing';
+import {CustomerTracking,OsmAndHelp,openRideMaps,pickupChange,stopOsmAndPassenger,useRideRow,useRideSharing,type NavigationProvider} from '../ride-live-sharing';
 import {authClient} from '../auth-client';
 import {useRideRecovery} from '../use-ride-recovery';
 import {createRefreshQueue} from '../refresh-queue';
@@ -146,6 +146,10 @@ export default function Rides(){
    return saved==='yandex'||saved==='osmand'?saved:'google';
   }catch{return 'google'}
  });
+ const osmandWaiting=!!currentDriverRide&&['accepted','arrived'].includes(currentDriverRide.status)&&!currentDriverRide.pickup_confirmed_at;
+ useEffect(()=>{
+  if(!osmandWaiting||navigationProvider!=='osmand')stopOsmAndPassenger();
+ },[osmandWaiting,navigationProvider,userId]);
  const [proposing,setProposing]=useState(false);
  const [proposed,setProposed]=useState<string|null>(null);
  const activeRide=rides.some(live);const shouldPoll=foreground&&connection!=='offline'&&(activeRide||driverMode&&(!driver||driver.approved&&driver.online));
@@ -246,7 +250,7 @@ export default function Rides(){
  function showExternal(ride:CloudRide,point:{latitude:number;longitude:number},adjacent:boolean){
   setSplitRide(adjacent?ride.id:null);
   setNotice('');
-  void openRideMaps(point,adjacent,sharing.capability===true,navigationProvider).then(ok=>{
+  void openRideMaps(point,adjacent,sharing.capability===true,navigationProvider,ride.status==='accepted'?ride.id:undefined).then(ok=>{
    if(!ok&&alive.current&&identity.current===userId)setNotice(navigationProvider==='google'
     ?t('تعذّر فتح خرائط Google. يمكنك إعادة المحاولة من شاشة الرحلة.','Could not open Google Maps. You can retry from the ride screen.')
     :t('تعذّر فتح '+providers[navigationProvider]+'. تأكد من تثبيته واستخدام أحدث نسخة أندرويد من يلّا نروح.',

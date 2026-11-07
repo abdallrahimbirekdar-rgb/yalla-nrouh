@@ -1,10 +1,12 @@
 package com.yallanrouh.navigation
 
-import android.content.ActivityNotFoundException
+import android.app.Activity
+import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import androidx.core.content.ContextCompat
 import android.media.AudioAttributes
+import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.speech.tts.TextToSpeech
@@ -63,7 +65,27 @@ class DriverNavigationModule : Module() {
 
     AsyncFunction("rideSharingStatus") { RideSharingService.currentRide }.runOnQueue(Queues.MAIN)
 
-    AsyncFunction("openRideMaps") { latitude: Double, longitude: Double, adjacent: Boolean, provider: String ->
+    AsyncFunction("stopOsmAndPassenger") {
+      appContext.reactContext?.let(::stopPassenger)
+    }.runOnQueue(Queues.MAIN)
+
+    AsyncFunction("requestOsmAndMapAccess") {
+      val activity = appContext.currentActivity ?: return@AsyncFunction false
+      for (target in OSMAND_PACKAGES) {
+        val request = Intent("net.osmand.aidl.REQUEST_PERMISSIONS").setPackage(target)
+          .putExtra("groups", arrayOf("map"))
+        try {
+          @Suppress("DEPRECATION")
+          activity.startActivityForResult(request, 4312)
+          return@AsyncFunction true
+        } catch (_: Exception) { /* Older OsmAnd releases may not expose the permission screen. */ }
+        if (activity.packageManager.getLaunchIntentForPackage(target) != null) break
+      }
+      false
+    }.runOnQueue(Queues.MAIN)
+
+    AsyncFunction("openRideMaps") { latitude: Double, longitude: Double, adjacent: Boolean, provider: String,
+      ride: String?, accessToken: String?, arabic: Boolean ->
       val activity = appContext.currentActivity ?: return@AsyncFunction false
       if (latitude !in -90.0..90.0 || longitude !in -180.0..180.0) return@AsyncFunction false
       val point = "$latitude,$longitude"
@@ -77,20 +99,29 @@ class DriverNavigationModule : Module() {
           .appendQueryParameter("profile", "car")
           .appendQueryParameter("force", "true")
           .appendQueryParameter("location_permission", "true")
-          .build()).setPackage("net.osmand")
+          .build())
         else -> return@AsyncFunction false
       }
       if (adjacent) intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_LAUNCH_ADJACENT)
+      if (provider == "osmand") {
+        for (target in OSMAND_PACKAGES) {
+          val targetIntent = intent.setPackage(target)
+          if (targetIntent.resolveActivity(activity.packageManager) == null) continue
+          startPassenger(activity, ride, accessToken, target, arabic)
+          try {
+            activity.startActivity(targetIntent)
+            return@AsyncFunction true
+          } catch (_: Exception) {
+            stopPassenger(activity)
+          }
+        }
+        return@AsyncFunction false
+      }
+      stopPassenger(activity)
       try {
         activity.startActivity(intent)
         true
-      } catch (error: Exception) {
-        if (provider == "osmand" && error is ActivityNotFoundException) {
-          return@AsyncFunction try {
-            activity.startActivity(intent.setPackage("net.osmand.plus"))
-            true
-          } catch (_: Exception) { false }
-        }
+      } catch (_: Exception) {
         if (provider != "google") return@AsyncFunction false
         try {
           activity.startActivity(Intent(Intent.ACTION_VIEW,
@@ -165,6 +196,29 @@ class DriverNavigationModule : Module() {
         initialized = false
       }
     }
+  }
+
+  private fun startPassenger(activity: Activity, ride: String?, token: String?, target: String, arabic: Boolean) {
+    if (ride == null || token == null || Build.VERSION.SDK_INT < 26) {
+      stopPassenger(activity)
+      return
+    }
+    try {
+      UUID.fromString(ride)
+      OsmAndPassengerService.pending = OsmAndPassengerService.Session(ride, token, target, arabic)
+      ContextCompat.startForegroundService(activity, Intent(activity, OsmAndPassengerService::class.java))
+    } catch (_: Exception) {
+      stopPassenger(activity)
+    }
+  }
+
+  private fun stopPassenger(context: Context) {
+    OsmAndPassengerService.pending = null
+    context.stopService(Intent(context, OsmAndPassengerService::class.java))
+  }
+
+  companion object {
+    private val OSMAND_PACKAGES = listOf("net.osmand", "net.osmand.plus")
   }
 
   private fun configure(engine: TextToSpeech): Boolean {

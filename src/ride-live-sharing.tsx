@@ -1,5 +1,6 @@
 import {useEffect,useMemo,useRef,useState} from 'react';
 import {Linking,Pressable,useWindowDimensions,View} from 'react-native';
+import {cloudGetToken} from './cloud-api';
 import {authClient} from './auth-client';
 import {isCoordinate,type Coordinate} from './geo';
 import {distanceMeters} from './navigation-progress';
@@ -86,10 +87,21 @@ export function useRideSharing(){
  return {capability,activeRide,busy,problem,toggle};
 }
 
+const osmandPassengerSupported=()=>typeof window!=='undefined'&&
+ (window as Window&{__YALLA_OSMAND_PASSENGER__?:boolean}).__YALLA_OSMAND_PASSENGER__===true;
+
+export function stopOsmAndPassenger(){
+ if(!osmandPassengerSupported())return;
+ try{bridge()?.postMessage(JSON.stringify({type:'osmand-passenger-stop'}))}catch{/* The native service also checks ride eligibility. */}
+}
+
 const navigationMessage={google:'ride-maps',yandex:'ride-yandex',osmand:'ride-osmand'} as const;
 export type NavigationProvider=keyof typeof navigationMessage;
-export async function openRideMaps(point:Coordinate,adjacent:boolean,nativeAvailable:boolean,provider:NavigationProvider):Promise<boolean>{
- if(nativeAvailable)return (await nativeRequest(navigationMessage[provider],{...point,adjacent})).ok;
+export async function openRideMaps(point:Coordinate,adjacent:boolean,nativeAvailable:boolean,provider:NavigationProvider,waitingRideId?:string):Promise<boolean>{
+ const accessToken=provider==='osmand'&&waitingRideId&&osmandPassengerSupported()?cloudGetToken():null;
+ if(nativeAvailable)return (await nativeRequest(navigationMessage[provider],{
+  ...point,adjacent,...(accessToken?{rideId:waitingRideId,accessToken}:{}),
+ })).ok;
  if(provider!=='google')return false;
  try{await Linking.openURL(googleDirections(point,undefined,true));return true}catch{return false}
 }
@@ -97,7 +109,8 @@ export async function openRideMaps(point:Coordinate,adjacent:boolean,nativeAvail
 export function OsmAndHelp(){
  const t=useText();
  const [storeError,setStoreError]=useState(false);
- return <HelpTip title={t('كيف أُثبّت OsmAnd وأنزّل خريطة سوريا؟','How do I install OsmAnd and download Syria?')}>
+ const [permissionHint,setPermissionHint]=useState(false);
+ return <HelpTip title={t('إعداد OsmAnd وتنزيل خريطة سوريا','Set up OsmAnd and download Syria')}>
   <Label>{t('١. اضغط زر Google Play أدناه وثبّت تطبيق OsmAnd.','1. Open Google Play below and install OsmAnd.')}</Label>
   <Label>{t('٢. افتح OsmAnd ثم القائمة ← الخرائط والموارد ← التنزيلات. ابحث عن «سوريا» أو Syria ونزّل الخريطة القياسية.','2. In OsmAnd, go to Menu → Maps & Resources → Downloads. Search for Syria and download the standard map.')}</Label>
   <Label>{t('٣. ارجع إلى يلّا نروح واختر OsmAnd من خيارات الملاحة في الرحلة.','3. Return to Yalla Nrouh and choose OsmAnd in the ride’s navigation options.')}</Label>
@@ -105,6 +118,12 @@ export function OsmAndHelp(){
   <Button secondary icon="download-outline" title={t('تحميل OsmAnd من Google Play','Get OsmAnd on Google Play')}
    onPress={()=>{setStoreError(false);void Linking.openURL('https://play.google.com/store/apps/details?id=net.osmand').catch(()=>setStoreError(true));}}/>
   {storeError&&<Label muted>{t('تعذّر فتح المتجر. ابحث عن OsmAnd في Google Play.','Could not open the store. Search Google Play for OsmAnd.')}</Label>}
+  {osmandPassengerSupported()&&<>
+   <Label>{t('لعرض علامة الزبون داخل OsmAnd، اسمح لـ«يلّا نروح» بإظهار عناصر على الخريطة عند ظهور طلب الإذن.','To see the customer marker in OsmAnd, allow Yalla Nrouh to display map items when prompted.')}</Label>
+   <Button secondary icon="person-outline" title={t('السماح بعرض علامة الزبون','Allow the customer marker')}
+    onPress={()=>{setPermissionHint(false);void nativeRequest('osmand-map-access').then(({ok})=>setPermissionHint(!ok));}}/>
+   {permissionHint&&<Label muted>{t('إذا لم تظهر نافذة الإذن، جرّب الملاحة أولًا. إذا لم تظهر العلامة، حدّث OsmAnd أو راجع التطبيقات المتصلة في إعداداته.','If no prompt opens, try navigation first. If the marker is missing, update OsmAnd or check connected apps in its settings.')}</Label>}
+  </>}
  </HelpTip>;
 }
 

@@ -37,8 +37,8 @@ class RideSharingService : Service() {
     private const val CHANNEL = "ride-location-sharing"
     private const val STOP = "com.yallanrouh.navigation.STOP_SHARING"
     private const val ID = 4310
-    private const val ROOT = "https://gokosprcqpdvqgahvquk.supabase.co"
-    private const val PUBLIC_KEY = "sb_publishable_0l-T6t_dTDt1OedSTIpLNA_uruCvJ8C"
+    internal const val ROOT = "https://gokosprcqpdvqgahvquk.supabase.co"
+    internal const val PUBLIC_KEY = "sb_publishable_0l-T6t_dTDt1OedSTIpLNA_uruCvJ8C"
   }
 
   private val main = Handler(Looper.getMainLooper())
