@@ -18,7 +18,7 @@ export function useText(){
  return useCallback((ar:string,en:string,de?:string)=>translate(language,ar,en,de),[language]);
 }
 export function Label({children,muted=false,large=false,display=false}:{children:React.ReactNode;muted?:boolean;large?:boolean;display?:boolean}){const {state}=useApp();const {colors}=useTheme();return <Text style={[styles.text,{color:muted?colors.muted:colors.ink,textAlign:state.language==='ar'?'right':'left',writingDirection:state.language==='ar'?'rtl':'ltr',fontWeight:large||display?'700':'400'},muted&&styles.muted,large&&styles.large,display&&styles.display]}>{children}</Text>}
-export function Button({title,onPress,secondary=false,disabled=false,icon,prominent=false,tone}:{title:string;onPress:()=>void;secondary?:boolean;disabled?:boolean;icon?:IconName;prominent?:boolean;tone?:'positive'|'danger'}){
+export function Button({title,onPress,secondary=false,disabled=false,icon,prominent=false,tone}:{title:string;onPress:()=>void;secondary?:boolean;disabled?:boolean;icon?:IconName|React.ReactElement;prominent?:boolean;tone?:'positive'|'danger'}){
  const {state}=useApp();const {colors,dark}=useTheme();
  const fill=tone==='positive'?'#116443':tone==='danger'?'#9a292f':colors.ink;
  const accent=tone==='positive'?(dark?'#85dfb1':fill):tone==='danger'?(dark?'#ffb0b4':fill):colors.ink;
@@ -30,7 +30,7 @@ export function Button({title,onPress,secondary=false,disabled=false,icon,promin
   (pressed||disabled)&&{opacity:0.45},
  ]}>
   <View style={{flexDirection:state.language==='ar'?'row-reverse':'row',alignItems:'center',justifyContent:'center',gap:9}}>
-   {icon&&<Icon name={icon} size={prominent?24:20} color={foreground}/>}
+   {typeof icon==='string'?<Icon name={icon} size={prominent?24:20} color={foreground}/>:icon}
    <Text style={{fontWeight:prominent?'700':'600',fontSize:prominent?18:14,lineHeight:26,color:foreground,textAlign:'center',flexShrink:1}}>{title}</Text>
   </View>
  </Pressable>;
@@ -79,6 +79,20 @@ export function LanguagePicker(){
   </View>
  </View>;
 }
+function DriverModeIcon(){
+ if(Platform.OS!=='web')return <Icon name="car-sport-outline" size={24}/>;
+ return <svg width={36} height={36} viewBox="0 0 32 32" aria-hidden="true" focusable="false">
+  <rect width={32} height={32} rx={10} fill={brandHeader.background}/>
+  <g fill="none" stroke={brandHeader.accent} strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round">
+   <circle cx={13.5} cy={13.5} r={7.5}/>
+   <circle cx={13.5} cy={13.5} r={1.65}/>
+   <path d="M6.2 12.7l5.7.5m3.2 0 5.7-.5M13.5 15.2V21"/>
+  </g>
+  <path d="m22.6 27-2.1-1.5a5 5 0 0 1-1.3-1.5l-2.4-3.8a1.25 1.25 0 0 1 2-1.5l1.6 1.7-1.7-5.2a1.3 1.3 0 0 1 2.45-.82l1.3 3.8.35-.1a1.4 1.4 0 0 1 1.7 1l.2.45.3-.06a1.4 1.4 0 0 1 1.6 1.15l.25 1.9a5.2 5.2 0 0 1-.55 3.15l-.75 1.3Z"
+   fill={brandHeader.ink} stroke={brandHeader.background} strokeWidth={1.15} strokeLinejoin="round"/>
+ </svg>;
+}
+
 export function AppMenu({onSettings,inverse=false}:{onSettings?:()=>void;inverse?:boolean}={}){
  const auth=useAuth();const [open,setOpen]=useState(false);const {colors}=useTheme();const t=useText();
  const shell=Platform.OS==='web'&&typeof window!=='undefined'?(window as Window&{ReactNativeWebView?:{postMessage:(value:string)=>void}}).ReactNativeWebView:undefined;
@@ -89,7 +103,7 @@ export function AppMenu({onSettings,inverse=false}:{onSettings?:()=>void;inverse
  {!auth.driver&&<Button icon="car-outline" title={t('حجز رحلة','Book a ride')} onPress={()=>go('/')}/>}
  <Button secondary icon="person-circle-outline" title={auth.session?(auth.driver?t('حسابي','My account'):t('حسابي وأماكني','My account and places')):t('تسجيل الدخول / حساب جديد','Sign in or create an account')} onPress={()=>go('/account')}/>
  {!auth.driver&&<Button secondary icon="time-outline" title={t('رحلاتي','My rides')} onPress={()=>go('/cloud')}/>}
- <Button secondary icon="car-sport-outline" title={t('وضع السائق','Driver mode')} onPress={()=>{setOpen(false);router.push({pathname:'/cloud',params:{mode:'driver'}})}}/>
+ <Button secondary icon={<DriverModeIcon/>} title={t('وضع السائق','Driver mode')} onPress={()=>{setOpen(false);router.push({pathname:'/cloud',params:{mode:'driver'}})}}/>
  {auth.admin&&<Button secondary icon="shield-checkmark-outline" title={t('لوحة الإدارة','Administration')} onPress={()=>go('/admin')}/>}
  <Button secondary icon="options-outline" title={t('الإعدادات والأذونات','Settings and permissions')} onPress={()=>go('/settings')}/>
  {shell&&<Button secondary icon="refresh-outline" title={t('تحديث العرض','Refresh page')} onPress={()=>{setOpen(false);shell.postMessage(JSON.stringify({type:'refresh'}))}}/>}
