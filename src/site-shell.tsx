@@ -15,7 +15,7 @@ const nativeNavigation=Platform.OS==='android'?requireOptionalNativeModule<{
 }>('YallaDriverNavigation'):null;
 export default function SiteShell(){
  const [language,setLanguage]=useState('ar'),[dark,setDark]=useState(false);
- const t=(ar:string,en:string)=>language==='ar'?ar:en;const colors={background:dark?'#171b20':'#ffffff',purple:'#d67749',ink:dark?'#ffffff':'#202529'};
+ const t=(ar:string,en:string)=>language==='ar'?ar:en;const colors={background:dark?'#081b35':'#edf3fb',purple:'#d67749',ink:dark?'#f0f6ff':'#082648'};
  const web=useRef<WebView>(null);
  const Label=({children,muted:_muted}:{children:React.ReactNode;muted?:boolean})=><Text style={{color:colors.ink,fontSize:16,textAlign:'center'}}>{children}</Text>;
  const Button=({title,onPress,secondary:_secondary}:{title:string;onPress:()=>void;secondary?:boolean})=><Pressable accessibilityRole="button" onPress={onPress} style={{padding:16,backgroundColor:colors.purple,borderRadius:12}}><Text style={{color:'#ffffff',textAlign:'center'}}>{title}</Text></Pressable>;

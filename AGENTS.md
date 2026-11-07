@@ -88,3 +88,6 @@ Do not restore native AppProvider/AuthProvider/storage gates to the Android root
 ## Admin rules guide
 
 The admin guide is a versioned explanation of production behavior. Its first revision is seeded by `backend/admin-rules-guide.sql`. When changing booking, pricing, eligibility, offer expiry, trip stages, GPS sharing, or retry behavior, publish an updated guide revision as part of the same release. Base it on the latest revision so edits made by the owner in Admin are preserved. Use the revision lock and record a concise Arabic change summary. Keep previously published revisions readable. UI copy changes that leave the rules the same do not require a guide revision.
+
+## Navy palette and wordmark spelling (2026-11-07)
+Use logo-matched navy (#082648), pale blue page background (#edf3fb) and complementary blue surfaces for the site and Android host. Dark mode remains navy. The Arabic wordmark is exactly «يلّا نروح»: there must be no shadda on the waw in «نروح». The approved raster artwork already has no shadda over the waw; keep its artwork unchanged, including the coral taxi/road accents.

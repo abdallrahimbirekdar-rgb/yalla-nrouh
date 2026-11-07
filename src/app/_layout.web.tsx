@@ -28,14 +28,14 @@ class PageErrorBoundary extends React.Component<{children:React.ReactNode},{fail
  static getDerivedStateFromError(){return {failed:true};}
  render(){
   if(!this.state.failed)return this.props.children;
-  return <View style={{flex:1,padding:24,justifyContent:'center',gap:16,backgroundColor:'#fffaf5'}}>
-   <Text style={{textAlign:'center',fontSize:19,color:'#102a43'}}>تعذر عرض الصفحة. بيانات حسابك والرحلات المحفوظة لم تُحذف.</Text>
+  return <View style={{flex:1,padding:24,justifyContent:'center',gap:16,backgroundColor:'#edf3fb'}}>
+   <Text style={{textAlign:'center',fontSize:19,color:'#082648'}}>تعذر عرض الصفحة. بيانات حسابك والرحلات المحفوظة لم تُحذف.</Text>
    <Text style={{textAlign:'center',fontSize:14,color:'#54585d'}}>The page could not be shown. Your saved data was not deleted.</Text>
-   <Pressable accessibilityRole="button" onPress={()=>this.setState({failed:false})} style={{backgroundColor:'#102a43',padding:15,borderRadius:12}}>
+   <Pressable accessibilityRole="button" onPress={()=>this.setState({failed:false})} style={{backgroundColor:'#082648',padding:15,borderRadius:12}}>
     <Text style={{textAlign:'center',color:'#ffffff'}}>إعادة المحاولة · Try again</Text>
    </Pressable>
    <Pressable accessibilityRole="button" onPress={()=>{router.replace('/');this.setState({failed:false})}} style={{padding:14}}>
-    <Text style={{textAlign:'center',color:'#102a43'}}>الصفحة الرئيسية · Home</Text>
+    <Text style={{textAlign:'center',color:'#082648'}}>الصفحة الرئيسية · Home</Text>
    </Pressable>
   </View>;
  }

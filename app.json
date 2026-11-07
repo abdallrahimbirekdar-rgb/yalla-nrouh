@@ -2,14 +2,14 @@
   "expo": {
     "name": "يلا نروح",
     "slug": "yalla-nrouh",
-    "version": "1.1.8",
+    "version": "1.1.9",
     "orientation": "portrait",
     "icon": "./assets/app-icon-approved.png",
     "userInterfaceStyle": "automatic",
     "splash": {
       "image": "./assets/logo-approved.png",
       "resizeMode": "contain",
-      "backgroundColor": "#fffaf5"
+      "backgroundColor": "#edf3fb"
     },
     "ios": {
       "supportsTablet": true,
@@ -17,12 +17,12 @@
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#fffaf5",
+        "backgroundColor": "#edf3fb",
         "foregroundImage": "./assets/adaptive-approved.png",
         "monochromeImage": "./assets/monochrome-approved.png"
       },
       "package": "com.yallanrouh.demo",
-      "versionCode": 37,
+      "versionCode": 38,
       "blockedPermissions": [
         "android.permission.ACCESS_BACKGROUND_LOCATION",
         "android.permission.READ_SMS",
@@ -57,6 +57,6 @@
       ]
     ],
     "scheme": "yallanrouh",
-    "backgroundColor": "#ffffff"
+    "backgroundColor": "#edf3fb"
   }
 }

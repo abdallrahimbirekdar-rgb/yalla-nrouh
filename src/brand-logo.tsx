@@ -5,14 +5,14 @@ import {useTheme} from './theme';
 
 /** The live website uses a bilingual lockup with real, shaped Arabic text. */
 export function BrandLogo({menu=false,driver=false}:{menu?:boolean;driver?:boolean}){
- const arabic='يلّا نروّح';
+ const arabic='يلّا نروح';
  const {colors}=useTheme();
  const iconSize=menu?66:driver?62:54;
  const arabicFont=isLoaded('Cairo_700Bold')?'Cairo_700Bold':undefined;
  return <View accessible accessibilityRole="image" accessibilityLabel={arabic+' — Yalla Nrouh'}
   style={{direction:'ltr',flexDirection:'row-reverse',alignItems:'center',justifyContent:'center',gap:8,
    maxWidth:menu?228:192,minWidth:0,flexShrink:1}}>
-  <View style={{width:iconSize,height:iconSize,borderRadius:iconSize/2,backgroundColor:'#102a43',
+  <View style={{width:iconSize,height:iconSize,borderRadius:iconSize/2,backgroundColor:'#082648',
    borderWidth:1,borderColor:colors.line,alignItems:'center',justifyContent:'center',flexShrink:0}}>
    <Image source={require('../assets/brand-web-pin.webp')} resizeMode="contain" accessible={false}
     style={{width:iconSize-6,height:iconSize-6}}/>

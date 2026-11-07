@@ -106,8 +106,8 @@ export default function FreshAndroid(){
  const [colorMode,setColorMode]=useState<'system'|'light'|'dark'>('system');
  const ar=language==='ar';
  const text=useCallback((arText:string,enText:string)=>ar?arText:enText,[ar]);
- const background=colorMode==='dark'?'#171b20':'#fffaf5';
- const foreground=colorMode==='dark'?'#ffffff':'#24262b';
+ const background=colorMode==='dark'?'#081b35':'#edf3fb';
+ const foreground=colorMode==='dark'?'#f0f6ff':'#082648';
  const clearReadyTimer=useCallback(()=>{if(readyTimer.current){clearTimeout(readyTimer.current);readyTimer.current=null}},[]);
  const clearResumeTimer=useCallback(()=>{if(resumeTimer.current){clearTimeout(resumeTimer.current);resumeTimer.current=null}},[]);
  const beginPageLoad=useCallback(()=>{
