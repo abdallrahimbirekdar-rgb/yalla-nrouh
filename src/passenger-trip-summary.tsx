@@ -1,7 +1,8 @@
 import React from 'react';
-import {ActivityIndicator,Pressable,View} from 'react-native';
+import {ActivityIndicator,Pressable,useWindowDimensions,View} from 'react-native';
 import {useApp} from './context';
 import {categories} from './domain';
+import MapCanvas from './map/MapCanvas';
 import {Icon,Label,useText,useTheme} from './ui';
 
 export function RideFooter({children}:{children:React.ReactNode}){
@@ -11,9 +12,23 @@ export function RideFooter({children}:{children:React.ReactNode}){
  </View>;
 }
 
-export function PassengerFare({fare,pending=false}:{fare:number|null;pending?:boolean}){
+export function PassengerMap(props:Omit<React.ComponentProps<typeof MapCanvas>,'compact'|'readOnly'|'onChange'|'minMapHeight'>){
+ const {height:screenHeight}=useWindowDimensions();
+ const {colors}=useTheme();
+ const height=Math.min(500,Math.max(270,Math.round(screenHeight*0.59)));
+ return <View style={{height,borderRadius:16,overflow:'hidden',backgroundColor:colors.surface}}>
+  <MapCanvas {...props} compact readOnly minMapHeight={height} onChange={()=>{}}/>
+ </View>;
+}
+
+export function PassengerFare({fare,pending=false,compact=false}:{fare:number|null;pending?:boolean;compact?:boolean}){
  const t=useText();
  const {colors}=useTheme();
+ const {state}=useApp();
+ if(compact)return <View accessibilityLiveRegion="polite" style={{flexDirection:state.language==='ar'?'row-reverse':'row',justifyContent:'space-between',alignItems:'center',gap:8,flexWrap:'wrap'}}>
+  <Label muted>{t('الأجرة التقديرية','Estimated fare')}</Label>
+  <Label>{fare!==null?fare.toLocaleString('en-US')+' '+t('ل.س','SYP'):pending?t('جارٍ الحساب…','Calculating…'):t('غير متاحة','Unavailable')}</Label>
+ </View>;
  return <View accessibilityLiveRegion="polite" style={{backgroundColor:colors.selected,borderRadius:12,paddingHorizontal:12,paddingVertical:7,alignItems:'center',justifyContent:'center',minHeight:82}}>
   <Label muted>{t('الأجرة التقديرية','Estimated fare')}</Label>
   {fare!==null?<Label display>{fare.toLocaleString('en-US')} {t('ل.س','SYP')}</Label>:pending
@@ -22,7 +37,7 @@ export function PassengerFare({fare,pending=false}:{fare:number|null;pending?:bo
  </View>;
 }
 
-export function PassengerStops({pickup,destination,category,onEditPickup,onEditDestination}:{pickup:string;destination:string;category?:string;onEditPickup?:()=>void;onEditDestination?:()=>void}){
+export function PassengerStops({pickup,destination,category,compact=false,onEditPickup,onEditDestination}:{pickup:string;destination:string;category?:string;compact?:boolean;onEditPickup?:()=>void;onEditDestination?:()=>void}){
  const {state}=useApp();
  const {colors}=useTheme();
  const t=useText();
@@ -34,12 +49,12 @@ export function PassengerStops({pickup,destination,category,onEditPickup,onEditD
  return <View style={{gap:6}}>
   <View style={row}>
    <Icon name="radio-button-on-outline" size={18} color={colors.purple}/>
-   <View style={{flex:1}}><Label muted>{t('الانطلاق','Pickup')}</Label><Label>{pickup}</Label></View>
+   <View style={{flex:1}}>{compact?<Label muted>{t('الانطلاق','Pickup')} · {pickup}</Label>:<><Label muted>{t('الانطلاق','Pickup')}</Label><Label>{pickup}</Label></>}</View>
    {onEditPickup&&edit(t('تعديل نقطة الانطلاق','Change pickup point'),onEditPickup)}
   </View>
   <View style={row}>
    <Icon name="location-outline" size={18} color={colors.purple}/>
-   <View style={{flex:1}}><Label muted>{t('الوجهة','Destination')}</Label><Label>{destination}</Label></View>
+   <View style={{flex:1}}>{compact?<Label muted>{t('الوجهة','Destination')} · {destination}</Label>:<><Label muted>{t('الوجهة','Destination')}</Label><Label>{destination}</Label></>}</View>
    {onEditDestination&&edit(t('تعديل الوجهة','Change destination'),onEditDestination)}
   </View>
   {category&&<Label muted>{categories.find(car=>car.id===category)?.[state.language]} · {t('الدفع نقدًا','Pay in cash')}</Label>}

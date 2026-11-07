@@ -12,14 +12,15 @@ import {pickupPosition,pickupPositionMessage} from '../pickup-position';
 import {PositionError} from '../current-position';
 import {pickupQuoteMatches} from '../pickup-policy';
 import {validateDraft} from '../domain';
-import {PassengerStops,RideFooter} from '../passenger-trip-summary';
-import type {FareQuote} from '../routing';
+import {PassengerMap,PassengerStops,RideFooter} from '../passenger-trip-summary';
+import type {FareQuote,RoutePlan} from '../routing';
+import {rememberPassengerRoute} from '../passenger-ride-route';
 import RoutePanel from '../route-panel';
 import RideOptions from '../ride-options';
 import {useRideSharing} from '../ride-live-sharing';
 import {Button,Label,Page,Panel,useText} from '../ui';
 export default function Review(){
- const {draft,state,setDraft,foreground,connection}=useApp();const auth=useAuth();const owner=auth.session?.user.id;const t=useText();const [quoteAttempt,setQuoteAttempt]=useState(0);const [busy,setBusy]=useState(false),[error,setError]=useState(''),[quoted,setQuoted]=useState<{key:string;quote:FareQuote}|null>(null),[pickupReady,setPickupReady]=useState(false),[locationAttempt,setLocationAttempt]=useState(0);const quoteKey=[draft.pickupPoint?.latitude,draft.pickupPoint?.longitude,draft.destinationPoint?.latitude,draft.destinationPoint?.longitude,owner,quoteAttempt].join('|');const manualPickup=draft.pickupMode==='manual';const invalid=validateDraft(draft)||!draft.pickupPoint||!draft.destinationPoint;
+ const {draft,state,setDraft,foreground,connection}=useApp();const auth=useAuth();const owner=auth.session?.user.id;const t=useText();const [quoteAttempt,setQuoteAttempt]=useState(0);const [busy,setBusy]=useState(false),[error,setError]=useState(''),[quoted,setQuoted]=useState<{key:string;quote:FareQuote;plan:RoutePlan}|null>(null),[pickupReady,setPickupReady]=useState(false),[locationAttempt,setLocationAttempt]=useState(0);const quoteKey=[draft.pickupPoint?.latitude,draft.pickupPoint?.longitude,draft.destinationPoint?.latitude,draft.destinationPoint?.longitude,owner,quoteAttempt].join('|');const manualPickup=draft.pickupMode==='manual';const invalid=validateDraft(draft)||!draft.pickupPoint||!draft.destinationPoint;
  const sharing=useRideSharing(owner);
  const [sharingOwner,setSharingOwner]=useState<string>();
  const shareOnRequest=!!owner&&sharingOwner===owner;
@@ -68,7 +69,11 @@ export default function Review(){
    const requestId=recovery.id??newRideRequestId();
    recovery.remember(requestId);submitted=true;
    const rideId=await cloudRequestRide(token,requestDraft,requestId,quoted.quote.id);
-   if(readRideState().owner===owner){recovery.clear();await openRide(rideId)}
+   if(readRideState().owner===owner){
+    if(requestDraft.pickupPoint&&requestDraft.destinationPoint)
+     rememberPassengerRoute(owner,rideId,requestDraft.pickupPoint,requestDraft.destinationPoint,quoted.plan.points);
+    recovery.clear();await openRide(rideId);
+   }
   }catch(e){
    if(readRideState().owner!==owner)return;
    if(submitted&&cloudMutationUncertain(e))return;
@@ -85,16 +90,14 @@ export default function Review(){
  function editStop(target:'pickup'|'destination'){
   router.replace({pathname:'/location',params:{target,focus:'1',fromReview:'1'}});
  }
- const stops=<PassengerStops pickup={draft.pickup||t('حدد نقطة الانطلاق','Choose pickup')} destination={draft.destination||t('حدد الوجهة','Choose destination')}
+ const stops=<PassengerStops compact pickup={draft.pickup||t('حدد نقطة الانطلاق','Choose pickup')} destination={draft.destination||t('حدد الوجهة','Choose destination')}
   onEditPickup={canEdit&&draft.destinationPoint?()=>editStop('pickup'):undefined}
   onEditDestination={canEdit?()=>editStop('destination'):undefined}/>;
  const footer=readyToReview&&auth.session?<RideFooter>
   <Button icon="car-outline" title={busy?t('جارٍ إرسال الطلب…','Sending request…'):recovery.id?t('إعادة إرسال نفس الطلب','Retry the same request'):t('اطلب تاكسي','Request a taxi')} onPress={()=>void confirm()} disabled={busy||connection==='offline'||recovery.checking||quoted?.key!==quoteKey}/>
  </RideFooter>:undefined;
  return <Page compact simpleHeader footer={footer} title={t('راجع رحلتك','Review your ride')} backTo={!recovery.id&&draft.destinationPoint?{pathname:'/location',params:{target:'pickup',fromReview:'1'}}:'/'}>
-  {recovery.id&&<Panel>
-   <Label>{connection==='offline'?t('انقطع الاتصال بعد محاولة الإرسال. سنتحقق من نفس الطلب عند عودة الإنترنت.','Connection lost after sending. We will check the same request when you reconnect.'):busy||recovery.checking?t('جارٍ التحقق من وصول الطلب…','Checking whether your request arrived…'):t('لم يتأكد وصول الطلب بعد. يمكنك إعادة إرساله بنفس رقم الطلب.','Your request is still unconfirmed. You can retry with the same request ID.')}</Label>
-  </Panel>}
+  {(!auth.session||!readyToReview)&&draft.destinationPoint&&<PassengerMap point={draft.pickupPoint??null} initialCenter={draft.destinationPoint} destinationPoint={draft.destinationPoint}/>}
   {!manualPickup&&!pickupReady?<Panel outlined>
    <Label>{error||t('جارٍ قراءة موقع الانطلاق من الهاتف…','Reading pickup from your phone…')}</Label>
    {!!error&&<Button secondary title={t('تحديث موقعي الحالي','Update my current location')} onPress={()=>setLocationAttempt(value=>value+1)}/>}
@@ -104,8 +107,8 @@ export default function Review(){
    {stops}
   </Panel>:<>
    {auth.session?<RoutePanel key={quoteKey} from={draft.pickupPoint} to={draft.destinationPoint} estimate autoEstimate
-    title={t('الأجرة التقديرية','Estimated fare')} onQuote={quote=>setQuoted(quote?{key:quoteKey,quote}:null)}>
-    <Panel outlined>{stops}</Panel>
+    title={t('الأجرة التقديرية','Estimated fare')} onQuote={(quote,plan)=>setQuoted(quote&&plan?{key:quoteKey,quote,plan}:null)}>
+    {stops}
    </RoutePanel>:<Panel outlined>
     {stops}
     <Label muted>{t('سجّل الدخول لعرض الأجرة وتأكيد الطلب.','Sign in to see the fare and confirm.')}</Label>
@@ -123,6 +126,9 @@ export default function Review(){
    </Panel>}
    <Label muted>{t('الأجرة تقديرية. يتأكد توفر السيارة بعد قبول سائق للطلب.','The fare is an estimate. A car is confirmed when a driver accepts.')}</Label>
   </>}
+  {recovery.id&&<Panel>
+   <Label>{connection==='offline'?t('انقطع الاتصال بعد محاولة الإرسال. سنتحقق من نفس الطلب عند عودة الإنترنت.','Connection lost after sending. We will check the same request when you reconnect.'):busy||recovery.checking?t('جارٍ التحقق من وصول الطلب…','Checking whether your request arrived…'):t('لم يتأكد وصول الطلب بعد. يمكنك إعادة إرساله بنفس رقم الطلب.','Your request is still unconfirmed. You can retry with the same request ID.')}</Label>
+  </Panel>}
   {!!error&&(manualPickup||pickupReady)&&<Panel><Label>{error}</Label><Button secondary title={t('فتح رحلاتي','Open My rides')} onPress={()=>router.push('/cloud')}/></Panel>}
  </Page>;
 }

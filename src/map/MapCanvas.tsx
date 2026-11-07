@@ -8,7 +8,7 @@ import {mapPolicy} from './network-policy';
 import {isNativeWebView} from '../site-bridge';
 import MapContent from './MapContent';
 import type {CameraTarget} from '../use-current-position';
-export default function MapCanvas(props:{point:Coordinate|null;taxiPoint?:Coordinate;passengerPoint?:Coordinate;onChange:(point:Coordinate)=>void;compact?:boolean;route?:Coordinate[];readOnly?:boolean;cameraTarget?:CameraTarget;initialCenter?:Coordinate;minMapHeight?:number}){
+export default function MapCanvas(props:{point:Coordinate|null;destinationPoint?:Coordinate;taxiPoint?:Coordinate;passengerPoint?:Coordinate;onChange:(point:Coordinate)=>void;compact?:boolean;route?:Coordinate[];readOnly?:boolean;cameraTarget?:CameraTarget;initialCenter?:Coordinate;minMapHeight?:number}){
  const {state,ready}=useApp();const {colors}=useTheme();const t=useText();const network=useMapNetwork();const policy=mapPolicy(network,state.preferences.dataSaver);
  const [mounted,setMounted]=useState(false);
  useEffect(()=>{
@@ -19,7 +19,7 @@ export default function MapCanvas(props:{point:Coordinate|null;taxiPoint?:Coordi
  // Never misrepresent the Damascus default as the user's live position in
  // the Android home map. Wait for an actual location; other map pickers can
  // still start in Damascus for destination selection.
- if(Platform.OS==='web'&&isNativeWebView()&&props.compact&&!props.cameraTarget&&!props.point)
+ if(Platform.OS==='web'&&isNativeWebView()&&props.compact&&!props.cameraTarget&&!props.point&&!props.destinationPoint)
   return <View style={{flex:1,minHeight:props.minMapHeight??200,justifyContent:'center',alignItems:'center',backgroundColor:colors.surface,gap:12,padding:16}}>
    <Icon name="locate" size={36} color={colors.purple}/>
    <Label>{t('بانتظار موقع الهاتف الحالي…','Waiting for your phone location…')}</Label>

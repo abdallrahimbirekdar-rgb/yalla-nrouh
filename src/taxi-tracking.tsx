@@ -6,10 +6,10 @@ import {usePickupEta} from './use-pickup-eta';
 import {authClient} from './auth-client';
 import {useApp} from './context';
 import {isCoordinate,type Coordinate} from './geo';
-import MapCanvas from './map/MapCanvas';
+import {PassengerMap} from './passenger-trip-summary';
 import {navigationPosition} from './navigation-position';
 import {positionDeadline} from './position-deadline';
-import {Icon,Label,Panel,useText,useTheme} from './ui';
+import {Icon,Label,useText,useTheme} from './ui';
 
 const foregroundTab=()=>Platform.OS==='web'&&document.visibilityState!=='hidden';
 const freshForMs=30000;
@@ -67,7 +67,7 @@ export function RideSearchTimer({startedAt,onExpired}:{startedAt:string;onExpire
  </View>;
 }
 
-export function PassengerTaxiMap({rideId,pickup,status,category}:{rideId:string;pickup:Coordinate;status:string;category:string}){
+export function PassengerTaxiMap({rideId,pickup,destination,route,status,category}:{rideId:string;pickup:Coordinate;destination?:Coordinate;route?:Coordinate[];status:string;category:string}){
  const {foreground,connection,state}=useApp();const t=useText();const {colors}=useTheme();
  const riding=status==='riding',approaching=status==='accepted';
  const [vehicle,setVehicle]=useState<DriverVehicleDetails|null>(null);
@@ -148,21 +148,18 @@ export function PassengerTaxiMap({rideId,pickup,status,category}:{rideId:string;
  const camera=useMemo(()=>riding&&lat!==undefined&&lng!==undefined
   ?{point:{latitude:lat,longitude:lng},revision:0,isLocation:false,zoom:16}:undefined,[riding,lat,lng]);
  const number=format.format(age);
- return <Panel>
-  <View style={{backgroundColor:colors.selected,borderRadius:15,padding:12,gap:6}}>
+ return <>
+  <PassengerMap point={pickup} destinationPoint={destination} route={route} taxiPoint={taxi} cameraTarget={camera}/>
+  <View style={{backgroundColor:colors.selected,borderRadius:12,paddingHorizontal:12,paddingVertical:8,gap:3}}>
    <View style={{flexDirection:state.language==='ar'?'row-reverse':'row',alignItems:'center',gap:8}}>
     <Icon name="car-outline" color={colors.purple}/>
-    <View style={{flex:1}}><Label large>{approaching?t('التاكسي في الطريق','Your taxi is on the way'):riding?t('الرحلة جارية','Ride in progress'):t('وصل التاكسي','Your taxi has arrived')}</Label></View>
+    <View style={{flex:1}}><Label>{approaching?t('التاكسي في الطريق','Your taxi is on the way'):riding?t('الرحلة جارية','Ride in progress'):t('وصل التاكسي','Your taxi has arrived')}</Label></View>
    </View>
    {approaching&&<Label>{etaText}</Label>}
    <Label muted>{fix?t('آخر تحديث للموقع قبل '+number+' ثانية','Location updated '+number+' s ago'):t('بانتظار أول تحديث لموقع التاكسي…','Waiting for the taxi’s first location update…')}</Label>
    {fix&&stale&&<Label muted>{age<180?t('نعرض آخر موقع معروف للتاكسي.','Showing the last known taxi location.'):t('موقع التاكسي غير محدّث.','The taxi location is no longer current.')}</Label>}
-   {vehicle?.display_name&&<Label>{t('السائق','Driver')} · {vehicle.display_name}</Label>}
-   {(vehicleCategory||vehicle?.vehicle_color)&&<Label>{t('السيارة','Vehicle')} · {[vehicleCategory,vehicle?.vehicle_color].filter(Boolean).join(' · ')}</Label>}
-   {vehicle?.vehicle_plate&&<Label>{t('رقم اللوحة','Plate number')} · {vehicle.vehicle_plate}</Label>}
+   {vehicle?.display_name&&<Label muted>{t('السائق','Driver')} · {vehicle.display_name}</Label>}
+   {(vehicleCategory||vehicle?.vehicle_color||vehicle?.vehicle_plate)&&<Label muted>{t('السيارة','Vehicle')} · {[vehicleCategory,vehicle?.vehicle_color,vehicle?.vehicle_plate&&t('لوحة ','Plate ')+vehicle.vehicle_plate].filter(Boolean).join(' · ')}</Label>}
   </View>
-  <View style={{height:205,borderRadius:14,overflow:'hidden'}}>
-   <MapCanvas compact readOnly minMapHeight={205} point={riding&&taxi?null:pickup} taxiPoint={taxi} cameraTarget={camera} onChange={()=>{}}/>
-  </View>
- </Panel>;
+ </>;
 }

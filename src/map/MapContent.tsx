@@ -6,7 +6,7 @@ import {type Coordinate} from '../geo';
 import type {CameraTarget} from '../use-current-position';
 import {Button,Label,useText,useTheme} from '../ui';
 
-export default function MapContent({point,passengerPoint,onChange,compact=false,route,readOnly=false,lean=false,loadTimeoutMs=25000,cameraTarget,initialCenter}:{point:Coordinate|null;passengerPoint?:Coordinate;onChange:(point:Coordinate)=>void;compact?:boolean;route?:Coordinate[];readOnly?:boolean;lean?:boolean;loadTimeoutMs?:number;cameraTarget?:CameraTarget;initialCenter?:Coordinate}){
+export default function MapContent({point,destinationPoint,taxiPoint,passengerPoint,onChange,compact=false,route,readOnly=false,lean=false,loadTimeoutMs=25000,cameraTarget,initialCenter}:{point:Coordinate|null;destinationPoint?:Coordinate;taxiPoint?:Coordinate;passengerPoint?:Coordinate;onChange:(point:Coordinate)=>void;compact?:boolean;route?:Coordinate[];readOnly?:boolean;lean?:boolean;loadTimeoutMs?:number;cameraTarget?:CameraTarget;initialCenter?:Coordinate}){
  const t=useText();const {colors,dark}=useTheme();const ref=useRef<MapView>(null);
  const [ready,setReady]=useState(false),[tilesLoaded,setTilesLoaded]=useState(false);
  const [slow,setSlow]=useState(false),[attempt,setAttempt]=useState(0);
@@ -17,8 +17,10 @@ export default function MapContent({point,passengerPoint,onChange,compact=false,
    return()=>clearTimeout(timer);
  },[configured,tilesLoaded,attempt,loadTimeoutMs]);
  useEffect(()=>{
-   if(ready&&route&&route.length>1)ref.current?.fitToCoordinates(route,{edgePadding:{top:30,left:30,right:30,bottom:30},animated:false});
- },[route,ready]);
+   if(!ready||cameraTarget)return;
+   const overview=destinationPoint&&point?[point,destinationPoint,...(taxiPoint?[taxiPoint]:[]),...(route??[])]:route;
+   if(overview&&overview.length>1)ref.current?.fitToCoordinates(overview,{edgePadding:{top:30,left:30,right:30,bottom:30},animated:false});
+ },[route,ready,cameraTarget,destinationPoint,point,taxiPoint]);
  useEffect(()=>{if(ready&&cameraTarget)ref.current?.setCamera({center:cameraTarget.point,zoom:cameraTarget.zoom??19})},[ready,cameraTarget]);
  if(!configured)return <View style={{flex:compact?1:undefined,minHeight:260,padding:24,justifyContent:'center',backgroundColor:colors.surface}}><Label>{t('خريطة Google غير متاحة حاليًا. يمكنك إدخال العنوان يدويًا.','Google Maps is not available right now. You can enter an address by hand.')}</Label></View>;
  return <View style={{height:compact?'100%':340,borderRadius:compact?0:16,overflow:'hidden',backgroundColor:colors.surface}}>
@@ -42,7 +44,9 @@ export default function MapContent({point,passengerPoint,onChange,compact=false,
     onPress={event=>{if(!readOnly)onChange(event.nativeEvent.coordinate)}}
   >
     {cameraTarget&&cameraTarget.isLocation!==false&&<Marker coordinate={cameraTarget.point} pinColor="#2688e8" title={t('موقعي الحالي','My current location')} zIndex={1}/> }
-    {point&&<Marker zIndex={2} coordinate={point} draggable={!readOnly} onDragEnd={event=>{if(!readOnly)onChange(event.nativeEvent.coordinate)}}/>}
+    {point&&<Marker title={destinationPoint?'A':undefined} zIndex={2} coordinate={point} draggable={!readOnly} onDragEnd={event=>{if(!readOnly)onChange(event.nativeEvent.coordinate)}}/>}
+    {destinationPoint&&<Marker coordinate={destinationPoint} title="B" pinColor="#006da5"/>}
+    {taxiPoint&&<Marker coordinate={taxiPoint} title={t('موقع التاكسي','Taxi location')} pinColor="#102a43" zIndex={3}/>}
     {passengerPoint&&<Marker coordinate={passengerPoint} pinColor="#15803d" zIndex={3} title={t('موقع الزبون','Customer location')}/>}
     {route&&route.length>1&&<Polyline coordinates={route} strokeColor="#2688e8" strokeWidth={5}/>}
   </MapView>
