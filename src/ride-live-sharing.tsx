@@ -1,4 +1,4 @@
-import {useEffect,useMemo,useRef,useState} from 'react';
+import {useCallback,useEffect,useMemo,useRef,useState} from 'react';
 import {Linking,Pressable,useWindowDimensions,View} from 'react-native';
 import {cloudGetToken} from './cloud-api';
 import {authClient} from './auth-client';
@@ -33,12 +33,16 @@ function nativeRequest(type:string,body:object={},timeout=5000):Promise<Reply>{
  });
 }
 
-export function useRideSharing(){
+export function useRideSharing(owner:string|undefined){
  const [capability,setCapability]=useState(bridge()?null:false);
  const [activeRide,setActiveRide]=useState<string|null>(null);
  const [busy,setBusy]=useState(false);
  const [problem,setProblem]=useState(false);
  const changing=useRef(false);
+ const currentOwner=useRef(owner);currentOwner.current=owner;
+ const mounted=useRef(false);
+ useEffect(()=>{mounted.current=true;return()=>{mounted.current=false}},[]);
+ useEffect(()=>setProblem(false),[owner]);
  useEffect(()=>{
   if(!bridge())return;
   let active=true,revision=0;
@@ -64,27 +68,37 @@ export function useRideSharing(){
    window.removeEventListener('yalla:native-visibility',resume);
   };
  },[]);
- async function toggle(rideId:string,role:SharingRole){
-  if(changing.current||!capability)return;
+ const change=useCallback(async(rideId:string,role:SharingRole,stop:boolean)=>{
+  if(changing.current||!capability||!owner)return false;
+  const current=()=>mounted.current&&currentOwner.current===owner;
   changing.current=true;setBusy(true);setProblem(false);
   let secret:string|null=null;
   try{
-   if(activeRide===rideId){
+   if(stop){
     if(!(await nativeRequest('ride-share-stop',{rideId})).ok)throw Error('stop');
-    setActiveRide(null);
+    if(current())setActiveRide(previous=>previous===rideId?null:previous);
    }else{
     const lease=await authClient().rpc('start_live_share',{p_ride:rideId,p_role:role});
     if(lease.error||typeof lease.data!=='string')throw Error('lease');
     secret=lease.data;
+    if(!current())throw Error('account');
     if(!(await nativeRequest('ride-share-start',{rideId,secret},65000)).ok)throw Error('start');
+    if(!current()){
+     if(currentOwner.current!==owner)await nativeRequest('ride-share-stop',{rideId});
+     throw Error('account');
+    }
     setActiveRide(rideId);
    }
+   return true;
   }catch{
    if(secret)void authClient().rpc('live_update',{p_secret:secret,p_lat:null,p_lng:null,p_time:null,p_stop:true}).then(()=>{});
-   setProblem(true);
-  }finally{changing.current=false;setBusy(false)}
- }
- return {capability,activeRide,busy,problem,toggle};
+   if(current())setProblem(true);
+   return false;
+  }finally{changing.current=false;if(mounted.current)setBusy(false)}
+ },[capability,owner]);
+ const start=useCallback((rideId:string,role:SharingRole)=>change(rideId,role,false),[change]);
+ const stop=useCallback((rideId:string)=>change(rideId,'driver',true),[change]);
+ return {capability,activeRide,busy,problem,start,stop};
 }
 
 const osmandPassengerSupported=()=>typeof window!=='undefined'&&

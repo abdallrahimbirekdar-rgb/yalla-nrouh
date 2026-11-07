@@ -22,6 +22,7 @@ import {PassengerTaxiMap,RideSearchTimer,useShareTaxiPosition} from '../taxi-tra
 import {CustomerTracking,OsmAndHelp,openRideMaps,pickupChange,stopOsmAndPassenger,useRideRow,useRideSharing,type NavigationProvider} from '../ride-live-sharing';
 import {authClient} from '../auth-client';
 import {useRideRecovery} from '../use-ride-recovery';
+import {claimDriverSharingAttempt,readDriverSharingConsent,saveDriverSharingConsent} from '../driver-sharing-consent';
 import {createRefreshQueue} from '../refresh-queue';
 import {Button,HelpTip,Icon,Label,Page,Panel,useText,useTheme} from '../ui';
 const live=(r:CloudRide)=>!['completed','cancelled'].includes(r.status);
@@ -122,17 +123,46 @@ export default function Rides(){
   void refresh().catch(()=>{});
  });
  const approachingRide=currentDriverRide?.status==='accepted'?currentDriverRide:undefined;
- const sharing=useRideSharing();
+ const sharing=useRideSharing(userId);
+ const [consentRevision,setConsentRevision]=useState(0);
+ const driverConsent=useMemo(()=>{
+  if(!userId||typeof localStorage==='undefined')return false;
+  return readDriverSharingConsent(localStorage,userId).allowed;
+ },[userId,consentRevision]);
+ const [consentError,setConsentError]=useState(false);
  const [trackingBackend,setTrackingBackend]=useState(false);
  const hasLiveRide=rides.some(live);
+ const mayShare=hasLiveRide||driverMode&&driver?.approved===true;
  useEffect(()=>{
-  if(!userId||!foreground||!hasLiveRide||connection==='offline')return;
+  if(!userId||!foreground||!mayShare||connection==='offline')return;
   const controller=new AbortController();
   void authClient().from('ride_pickup_changes').select('ride_id',{head:true}).limit(1).abortSignal(controller.signal)
    .then(({error})=>{if(!controller.signal.aborted&&!error)setTrackingBackend(true)});
   return()=>controller.abort();
- },[userId,foreground,hasLiveRide,connection]);
- useShareTaxiPosition(sharing.capability===false||!trackingBackend?approachingRide?.id:undefined,foreground);
+ },[userId,foreground,mayShare,connection]);
+ const driverRideId=currentDriverRide?.id;
+ const {capability:sharingCapability,activeRide:sharingRide,busy:sharingBusy,start:startSharing}=sharing;
+ const automaticStart=useRef<{rideId:string;task:Promise<boolean>}|null>(null);
+ const startDriverSharing=useCallback((rideId:string,manual=false)=>{
+  if(!userId||typeof localStorage==='undefined'||!driverConsent||!sharingCapability||
+     !trackingBackend||!foreground||connection==='offline'||sharingRide||sharingBusy)return;
+  if(automaticStart.current||!claimDriverSharingAttempt(localStorage,userId,rideId)&&!manual)return;
+  const task=startSharing(rideId,'driver');
+  automaticStart.current={rideId,task};
+  void task.finally(()=>{if(automaticStart.current?.task===task)automaticStart.current=null});
+ },[userId,driverConsent,sharingCapability,trackingBackend,foreground,connection,sharingRide,sharingBusy,startSharing]);
+ useEffect(()=>{
+  if(driverRideId)startDriverSharing(driverRideId);
+ },[driverRideId,startDriverSharing]);
+ useShareTaxiPosition(driverConsent&&(sharingCapability===false||!trackingBackend)?approachingRide?.id:undefined,foreground);
+
+ function setDriverSharingConsent(allowed:boolean){
+  if(!userId||typeof localStorage==='undefined')return;
+  const saved=saveDriverSharingConsent(localStorage,userId,{allowed});
+  setConsentError(!saved);
+  if(saved)setConsentRevision(value=>value+1);
+  if(!allowed&&sharingRide&&sharingRide===driverRideId)void sharing.stop(sharingRide);
+ }
  const [compactRide,setCompactRide]=useState<string|null>(()=>{
   try{return localStorage.getItem('yn-driver-split-ride')}catch{return null}
  });
@@ -208,12 +238,23 @@ export default function Rides(){
  const currentPassengerRide=mine.find(live);
  const proposalRide=approachingRide?.id??(!driverMode&&currentPassengerRide?.status==='accepted'?currentPassengerRide.id:undefined);
  const proposal=pickupChange(useRideRow('ride_pickup_changes',proposalRide,foreground));
- const shareButton=(ride:CloudRide,role:'driver'|'passenger')=>sharing.capability&&trackingBackend&&<View style={{gap:6}}>
-  <Label muted>{role==='driver'
-   ?t('بموافقتك يشارك التطبيق موقعك أثناء الرحلة، حتى عند فتح الخرائط أو قفل الشاشة.','With your consent, location is shared during this ride, including while Maps is open or the screen is locked.')
-   :t('بموافقتك يرى السائق المعيّن موقعك أثناء انتظار السيارة، حتى لو كان التطبيق في الخلفية.','With your consent, the assigned driver can see your location while you wait, including in the background.')}</Label>
+ const driverSharingControl=(ride?:CloudRide)=><View style={{gap:6}}>
+  <Label muted>{t('اسمح مرة واحدة على هذا الجهاز. يشارك التطبيق موقعك تلقائيًا مع زبون الرحلة المعيّنة لك، ويتوقف عند انتهاء الرحلة أو إلغائها.','Allow once on this device. Your location is shared automatically with the customer assigned to your ride and stops when the ride ends or is cancelled.')}</Label>
+  <Button secondary icon="locate-outline" title={driverConsent
+   ?t('إيقاف المشاركة التلقائية','Turn off automatic sharing')
+   :t('السماح بالمشاركة التلقائية','Allow automatic sharing')}
+   disabled={sharing.busy} onPress={()=>setDriverSharingConsent(!driverConsent)}/>
+  {ride&&sharing.capability&&(sharing.activeRide===ride.id||trackingBackend&&driverConsent)&&<Button secondary
+   title={sharing.activeRide===ride.id?t('إيقاف المشاركة لهذه الرحلة','Stop sharing for this ride'):t('بدء المشاركة لهذه الرحلة','Start sharing for this ride')}
+   disabled={sharing.busy} onPress={()=>sharing.activeRide===ride.id?void sharing.stop(ride.id):startDriverSharing(ride.id,true)}/>}
+  {driverConsent&&sharing.capability&&<Label muted>{t('على أندرويد تستمر المشاركة أثناء الملاحة وتقدر توقفها من الإشعار.','On Android, sharing continues during navigation. You can stop it from the notification.')}</Label>}
+  {consentError&&<Label muted>{t('تعذّر حفظ اختيارك على هذا الجهاز.','Could not save your choice on this device.')}</Label>}
+  {ride&&sharing.problem&&<Label muted>{t('تعذّرت المشاركة. تحقق من الاتصال وإذن الموقع الدقيق والإشعارات، ثم حاول مجددًا.','Could not share. Check your connection, precise location and notification permissions, then try again.')}</Label>}
+ </View>;
+ const sharePassenger=(ride:CloudRide)=>sharing.capability&&trackingBackend&&<View style={{gap:6}}>
+  <Label muted>{t('بموافقتك يرى السائق المعيّن موقعك أثناء انتظار السيارة، حتى لو كان التطبيق في الخلفية.','With your consent, the assigned driver can see your location while you wait, including in the background.')}</Label>
   <Button secondary icon="locate-outline" title={sharing.activeRide===ride.id?t('إيقاف مشاركة موقعي','Stop sharing my location'):t('أوافق على مشاركة موقعي','I agree to share my location')}
-   disabled={sharing.busy} onPress={()=>void sharing.toggle(ride.id,role)}/>
+   disabled={sharing.busy} onPress={()=>sharing.activeRide===ride.id?void sharing.stop(ride.id):void sharing.start(ride.id,'passenger')}/>
   <HelpTip title={t('متى تُشارك إحداثياتي؟','When is my location shared?')}>
    <Label>{t('يمكنك إيقاف المشاركة من هنا أو من إشعار أندرويد. تتوقف تلقائيًا عند انتهاء المرحلة التي تحتاج إلى موقعك.','You can stop sharing here or from the Android notification. Sharing stops automatically when your location is no longer needed for that part of the ride.')}</Label>
   </HelpTip>
@@ -250,12 +291,24 @@ export default function Rides(){
  function showExternal(ride:CloudRide,point:{latitude:number;longitude:number},adjacent:boolean){
   setSplitRide(adjacent?ride.id:null);
   setNotice('');
-  void openRideMaps(point,adjacent,sharing.capability===true,navigationProvider,ride.status==='accepted'?ride.id:undefined).then(ok=>{
+  const open=async()=>{
+   startDriverSharing(ride.id);
+   const pending=automaticStart.current;
+   if(pending?.rideId===ride.id){
+    // Give the native sharing service a chance to start before Android
+    // backgrounds the app. A slow network must not block navigation.
+    let timer:ReturnType<typeof setTimeout>|undefined;
+    await Promise.race([pending.task,new Promise<void>(resolve=>{timer=setTimeout(resolve,4000)})]);
+    clearTimeout(timer);
+   }
+   if(!alive.current||identity.current!==userId||!mode.current)return;
+   const ok=await openRideMaps(point,adjacent,sharing.capability===true,navigationProvider,ride.status==='accepted'?ride.id:undefined);
    if(!ok&&alive.current&&identity.current===userId)setNotice(navigationProvider==='google'
     ?t('تعذّر فتح خرائط Google. يمكنك إعادة المحاولة من شاشة الرحلة.','Could not open Google Maps. You can retry from the ride screen.')
     :t('تعذّر فتح '+providers[navigationProvider]+'. تأكد من تثبيته واستخدام أحدث نسخة أندرويد من يلّا نروح.',
        'Could not open '+providers[navigationProvider]+'. Install it and use the latest Yalla Nrouh Android app.'));
-  });
+  };
+  void open();
  }
 
  function startDriverRide(ride:CloudRide){
@@ -321,7 +374,7 @@ export default function Rides(){
    {ride.id!==searchingRide?.id&&<View style={{alignSelf:'flex-start',borderRadius:20,paddingHorizontal:12,paddingVertical:4,backgroundColor:colors.selected}}><Label muted>{ride.search_expired_at?t('انتهى البحث بدون سائق','Search expired without a driver'):status(ride.status)}</Label></View>}
    {typeof ride.estimated_fare==='number'&&<PassengerFare fare={ride.estimated_fare}/>}
    <PassengerStops pickup={ride.pickup} destination={ride.destination} category={ride.category}/>
-   {['requested','accepted','arrived'].includes(ride.status)&&!ride.pickup_confirmed_at&&shareButton(ride,'passenger')}
+   {['requested','accepted','arrived'].includes(ride.status)&&!ride.pickup_confirmed_at&&sharePassenger(ride)}
    {trackingBackend&&ride.status==='accepted'&&<>
     {proposal?.approved?<Label>{t('وافق السائق على نقطة الالتقاء الجديدة.','The driver approved the new meeting point.')}</Label>
      :<Button secondary title={t('اقتراح موقعي الحالي كنقطة التقاء','Suggest my current location as the meeting point')} disabled={proposing} onPress={()=>void proposePickup(ride)}/>}
@@ -380,11 +433,11 @@ export default function Rides(){
     </View>}
    </View>}
    {!split&&atPickup&&navButton(true,t('عرض الرحلة بشكل مختصر','Show compact ride view'))}
-   {sharing.capability&&trackingBackend&&<HelpTip title={sharing.activeRide===ride.id
+   <HelpTip title={sharing.activeRide===ride.id
     ?t('موقعك قيد المشاركة','You are sharing your location')
     :t('مشاركة موقعي مع الزبون','Share my location with the customer')}>
-    {shareButton(ride,'driver')}
-   </HelpTip>}
+    {driverSharingControl(ride)}
+   </HelpTip>
    <HelpTip title={t('تغيير تطبيق الملاحة وخيارات الرحلة','Change navigation app and ride options')}>
     {navigationOptions}
     {split&&!atPickup&&fullScreen}
@@ -427,6 +480,9 @@ export default function Rides(){
    online={driver.online} region={driver.region} category={driver.category} target={workTarget}
    disabled={busy||workTarget!==null||recovery.checking} onToggle={()=>void toggleWork()}
    soundReady={sound.ready} soundProblem={sound.problem} onEnableSound={()=>void sound.unlock()}/>}
+  {driverMode&&driver?.approved&&!currentDriverRide&&<HelpTip title={driverConsent?t('مشاركة الموقع التلقائية مفعّلة','Automatic location sharing is on'):t('مشاركة موقعي مع الزبون','Share my location with the customer')}>
+   {driverSharingControl()}
+  </HelpTip>}
   {currentDriverRide&&renderDriverRide(currentDriverRide,split)}
   {driverMode&&recovery.id&&!currentDriverRide&&<Panel>
    <Label>{busy||recovery.checking?t('جارٍ التحقق من قبول الطلب…','Checking request acceptance…'):t('لم يتأكد قبول الطلب. يمكنك المحاولة مجددًا إذا ظل متاحًا.','Acceptance is unconfirmed. You can retry if the request is still available.')}</Label>
