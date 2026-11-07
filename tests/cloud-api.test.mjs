@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   cloudSignIn,cloudSignOut,cloudSignUp,cloudGetToken,cloudWhoAmI,
-  cloudRequestRide,cloudRideOperation,cloudMutationUncertain,cloudCancelRide,cloudReleaseRide,CloudError
+  cloudRequestRide,cloudRideOperation,cloudMutationUncertain,cloudCancelRide,cloudCancelRideWithReason,cloudReleaseRide,CloudError
 } from '../src/cloud-api.ts';
 
 const token='test-access-token-for-requests';
@@ -220,4 +220,24 @@ test('driver route preview requests only the scoped RPC and validates the ride e
  await withFetch(async(url,options)=>{assert.match(String(url),/\/rpc\/driver_ride_preview$/);assert.deepEqual(JSON.parse(options.body),{p_ride_id:id});return reply([{ride_id:id,pickup_lat:33.5,pickup_lng:36.2,destination_lat:33.6,destination_lng:36.3}])},async()=>{assert.equal((await cloudDriverRidePreview(token,id)).ride_id,id)});
  await withFetch(async()=>reply([]),async()=>{await assert.rejects(cloudDriverRidePreview(token,id),error=>error.kind==='ride_unavailable')});
  await withFetch(async()=>reply([{ride_id:id,pickup_lat:100,pickup_lng:36.2,destination_lat:33.6,destination_lng:36.3}]),async()=>{await assert.rejects(cloudDriverRidePreview(token,id),error=>error.kind==='ride_unavailable')});
+});
+
+test('successful cancellation confirmation does not wait for the ride list',async()=>{
+ await withFetch(async(url,options)=>{
+  assert.match(url,/\/rpc\/cancel_ride_with_reason$/);
+  assert.deepEqual(JSON.parse(options.body),{p_ride_id:requestId,p_actor:'driver',p_reason:'other'});
+  return reply(true);
+ },async()=>assert.equal(await cloudCancelRideWithReason(token,requestId,'driver-one','driver','other'),true));
+});
+
+test('cancellation checks the exact ride when the server reply is lost',async()=>{
+ for(const actor of ['driver','passenger']){
+  let submissions=0;
+  await withFetch(async(url,options)=>{
+   if(options.method==='POST'){submissions++;throw Error('Response lost')}
+   assert.match(url,new RegExp('&id=eq\\.'+requestId+'&'+actor+'_id=eq\\.owner&limit=1$'));
+   return reply([{id:requestId,status:'cancelled'}]);
+  },async()=>assert.equal(await cloudCancelRideWithReason(token,requestId,'owner',actor,'other'),true));
+  assert.equal(submissions,1);
+ }
 });

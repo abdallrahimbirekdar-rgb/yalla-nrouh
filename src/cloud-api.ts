@@ -127,10 +127,10 @@ export async function cloudRideDriverVehicleDetails(token:string,rideId:string){
  const rows=await rpc<DriverVehicleDetails[]>('ride_driver_vehicle_details',token,{p_ride:rideId});
  return rows[0]??null;
 }
-export async function cloudRideOperation(token:string,kind:'request'|'accept',id:string,owner:string):Promise<CloudRide|null>{
+export async function cloudRideOperation(token:string,kind:'request'|'accept'|'cancel',id:string,owner:string):Promise<CloudRide|null>{
   requireToken(token);
   const column=kind==='request'?'client_request_id':'id';
-  const participant=kind==='request'?'passenger_id':'driver_id';
+  const participant=kind==='accept'?'driver_id':'passenger_id';
   const rows=await call<CloudRide[]>('/rest/v1/rides?select='+rideColumns+'&'+column+'=eq.'+encodeURIComponent(id)+'&'+participant+'=eq.'+encodeURIComponent(owner)+'&limit=1','GET',token);
   if(!Array.isArray(rows))throw new CloudError(500,'bad_response');
   return rows[0]??null;
@@ -152,8 +152,18 @@ export async function cloudRequestRide(token:string,draft:TripDraft,requestId:st
   if(typeof id!=='string'||!id)throw new CloudError(500,'bad_response');
   return id;
 }
-export const cloudCancelRideWithReason=(token:string,id:string,actor:CancellationActor,reason:CancellationReason)=>
- rpc<boolean>('cancel_ride_with_reason',token,{p_ride_id:id,p_actor:actor,p_reason:reason});
+export async function cloudCancelRideWithReason(token:string,id:string,owner:string,actor:CancellationActor,reason:CancellationReason){
+ try{
+  const confirmed=await rpc<boolean>('cancel_ride_with_reason',token,{p_ride_id:id,p_actor:actor,p_reason:reason});
+  if(typeof confirmed!=='boolean')throw new CloudError(500,'bad_response');
+  return confirmed;
+ }catch(error){
+  if(!cloudMutationUncertain(error))throw error;
+  const ride=await cloudRideOperation(token,actor==='driver'?'accept':'cancel',id,owner).catch(()=>null);
+  if(ride?.status==='cancelled')return true;
+  throw error;
+ }
+}
 export const cloudCancelRide=(token:string,id:string)=>rpc<boolean>('cancel_ride',token,{p_ride_id:id});
 export const cloudReleaseRide=(token:string,id:string)=>rpc<boolean>('release_ride',token,{p_ride_id:id});
 export const cloudRegisterDriver=(token:string,region:number,category:string)=>rpc<boolean>('register_driver',token,{p_region:region,p_category:category});
