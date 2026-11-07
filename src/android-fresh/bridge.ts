@@ -22,6 +22,7 @@ export type WebMessage=
  |{type:'notify';id:string;title:string;body:string}
  |{type:'status';safeToReload:boolean;canGoBack:boolean;language?:'ar'|'en';theme?:'system'|'light'|'dark';signedOut?:true}
  |{type:'refresh'}
+ |{type:'host-alive';id:string}
  |{type:'back-default'};
 const idOK=(v:unknown):v is string=>typeof v==='string'&&/^[a-z0-9-]{1,80}$/i.test(v);
 const tokenOK=(v:unknown):v is string=>typeof v==='string'&&v.length<=3072&&/^[a-z0-9_-]+\.[a-z0-9_-]+\.[a-z0-9_-]+$/i.test(v);
@@ -76,6 +77,7 @@ export function readWebMessage(raw:string):WebMessage|null{
      ...(v.signedOut===true?{signedOut:true as const}:{}),
      ...((v.theme==='system'||v.theme==='light'||v.theme==='dark')?{theme:v.theme}:{})};
   if(v.type==='refresh')return {type:'refresh'};
+  if(v.type==='host-alive'&&idOK(v.id))return {type:'host-alive',id:v.id};
   if(v.type==='back-default')return {type:'back-default'};
  }catch{}
  return null;

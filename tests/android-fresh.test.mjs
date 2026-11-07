@@ -10,6 +10,8 @@ test('trusted website only; no JavaScript URL injection',()=>{
  assert.equal(readWebMessage('{"type":"location","id":"!!!","askPermission":true}'),null);
  assert.equal(readWebMessage('{"type":"notify","id":"abc","title":"x","body":"y"}')?.type,'notify');
  assert.deepEqual(readWebMessage('{"type":"location-cancel","id":"x"}'),{type:'location-cancel',id:'x'});
+ assert.deepEqual(readWebMessage('{"type":"host-alive","id":"resume-1"}'),{type:'host-alive',id:'resume-1'});
+ assert.equal(readWebMessage('{"type":"host-alive","id":"bad!"}'),null);
  assert.deepEqual(readWebMessage('{"type":"driver-location-start","id":"drive-1","askPermission":false}'),{type:'driver-location-start',id:'drive-1',askPermission:false});
  assert.deepEqual(readWebMessage('{"type":"driver-location-stop","id":"drive-1"}'),{type:'driver-location-stop',id:'drive-1'});
  assert.equal(readWebMessage('{"type":"driver-location-start","id":"drive-1"}'),null);

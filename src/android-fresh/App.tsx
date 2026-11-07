@@ -98,6 +98,9 @@ export default function FreshAndroid(){
  const safeToReload=useRef(false),websiteRevision=useRef<string|null>(null);
  const [uri,setUri]=useState(()=>SITE+'?app=android&launch='+Date.now());
  const [loading,setLoading]=useState(true),[failed,setFailed]=useState(false),[newWeb,setNewWeb]=useState(false);
+ const [webSession,setWebSession]=useState(0),[rendererLost,setRendererLost]=useState(false);
+ const pageReady=useRef(false),wasBackground=useRef(false),resumeIndex=useRef(0),pendingResume=useRef<string|null>(null);
+ const readyTimer=useRef<ReturnType<typeof setTimeout>|null>(null),resumeTimer=useRef<ReturnType<typeof setTimeout>|null>(null);
  const [language,setLanguage]=useState<'ar'|'en'>('ar');
  const [notice,setNotice]=useState('');
  const [colorMode,setColorMode]=useState<'system'|'light'|'dark'>('system');
@@ -105,6 +108,20 @@ export default function FreshAndroid(){
  const text=useCallback((arText:string,enText:string)=>ar?arText:enText,[ar]);
  const background=colorMode==='dark'?'#171b20':'#fffaf5';
  const foreground=colorMode==='dark'?'#ffffff':'#24262b';
+ const clearReadyTimer=useCallback(()=>{if(readyTimer.current){clearTimeout(readyTimer.current);readyTimer.current=null}},[]);
+ const clearResumeTimer=useCallback(()=>{if(resumeTimer.current){clearTimeout(resumeTimer.current);resumeTimer.current=null}},[]);
+ const beginPageLoad=useCallback(()=>{
+  clearReadyTimer();pageReady.current=false;
+  readyTimer.current=setTimeout(()=>{if(active.current&&!pageReady.current){setLoading(false);setFailed(true)}},30000);
+ },[clearReadyTimer]);
+ // A dead WebView renderer cannot be reloaded. Rebuild only on user request.
+ const reopenWebsite=useCallback(()=>{
+  clearReadyTimer();clearResumeTimer();pendingResume.current=null;
+  pageReady.current=false;safeToReload.current=false;canGoBack.current=false;documentUrl.current='';
+  setNotice('');setNewWeb(false);setFailed(false);setLoading(true);setRendererLost(false);
+  setUri(SITE+'?app=android&launch='+Date.now());
+  setWebSession(value=>value+1);
+ },[clearReadyTimer,clearResumeTimer]);
  const inject=useCallback((script:string)=>{
   if(active.current)web.current?.injectJavaScript(script);
  },[]);
@@ -138,16 +155,15 @@ export default function FreshAndroid(){
    setScreenAwake(false);
   },[setScreenAwake]);
   useEffect(()=>{const requests=runs.current;active.current=true;void boot();return()=>{
-  active.current=false;stopDriverSpeech();stopDriverStream();for(const task of requests.values())task.controller.abort();requests.clear();
- }},[boot,stopDriverStream]);
+  active.current=false;clearReadyTimer();clearResumeTimer();stopDriverSpeech();stopDriverStream();for(const task of requests.values())task.controller.abort();requests.clear();
+ }},[boot,stopDriverStream,clearReadyTimer,clearResumeTimer]);
  const refresh=useCallback(()=>{
   if(!safeToReload.current){
    setNotice(text('أكمل تعديلك أو رحلتك أولًا ثم حدّث من الصفحة الرئيسية.','Finish your edit or ride, then refresh at home.'));
    return;
   }
-  setNotice('');setNewWeb(false);setLoading(true);setFailed(false);
-  setUri(SITE+'?app=android&launch='+Date.now());
- },[text]); // no automatic reset of drafts or website storage
+  reopenWebsite();
+ },[reopenWebsite,text]); // no automatic reset of drafts or website storage
  const checkWebUpdate=useCallback(async()=>{
   if(!websiteRevision.current)return;
   const controller=new AbortController();
@@ -168,15 +184,24 @@ export default function FreshAndroid(){
   const state=AppState.addEventListener('change',value=>{
    // Android permission sheets can briefly mark the activity inactive.
    // Cancel only on actual backgrounding so the first GPS request survives consent.
-   if(value==='background'){stopDriverSpeech();stopDriverStream();autoStarted.current=false;locationRequestedByPage.current=false;for(const task of runs.current.values()){inject(positionScript({id:task.id,point:null,error:'timeout'}));task.controller.abort()}inject(eventScript('yalla:native-visibility',{active:false}));return}
+   if(value==='background'){wasBackground.current=true;pendingResume.current=null;clearResumeTimer();stopDriverSpeech();stopDriverStream();autoStarted.current=false;locationRequestedByPage.current=false;for(const task of runs.current.values()){inject(positionScript({id:task.id,point:null,error:'timeout'}));task.controller.abort()}inject(eventScript('yalla:native-visibility',{active:false}));return}
    if(value==='active'){
     inject(eventScript('yalla:native-visibility',{active:true}));
+    if(wasBackground.current&&pageReady.current){
+     const id='resume-'+(++resumeIndex.current);
+     pendingResume.current=id;clearResumeTimer();
+     // A compositor-only blank screen can recover after a harmless repaint.
+     // A silent renderer displays manual recovery; never auto-reload a live ride.
+     inject("window.ReactNativeWebView?.postMessage(JSON.stringify({type:'host-alive',id:"+JSON.stringify(id)+"}));if(document.body){document.body.style.transform='translateZ(0)';requestAnimationFrame(function(){document.body.style.transform=''})}true;");
+     resumeTimer.current=setTimeout(()=>{if(active.current&&pendingResume.current===id){pendingResume.current=null;setLoading(false);setFailed(true)}},9000);
+    }
+    wasBackground.current=false;
     void syncPermission('resumed');
     void checkWebUpdate();
    }
   });
   return()=>{handle.remove();state.remove()};
- },[failed,inject,syncPermission,checkWebUpdate,stopDriverStream]);
+ },[failed,inject,syncPermission,checkWebUpdate,stopDriverStream,clearResumeTimer]);
  const respond=useCallback((reply:PositionResponse)=>{
   inject(positionScript(reply));
  },[inject]);
@@ -278,8 +303,13 @@ export default function FreshAndroid(){
   if(!trustedWebMessage(event.nativeEvent.url,documentUrl.current))return;
   const message=readWebMessage(event.nativeEvent.data);
   if(!message)return;
-  if(message.type==='status'){
-   safeToReload.current=message.safeToReload;
+  if(message.type==='host-alive'){
+    if(pendingResume.current===message.id){pendingResume.current=null;clearResumeTimer();if(pageReady.current)setFailed(false)}
+    return;
+   }
+   if(message.type==='status'){
+    pageReady.current=true;clearReadyTimer();pendingResume.current=null;clearResumeTimer();
+    safeToReload.current=message.safeToReload;
    canGoBack.current=message.canGoBack;
    if(message.signedOut){
     stopOsmAndPassenger();
@@ -368,7 +398,7 @@ export default function FreshAndroid(){
   else if(message.type==='back-default'){
    if(canGoBack.current)web.current?.goBack();else BackHandler.exitApp();
   }
- },[engine,inject,language,locate,refresh,syncPermission,startDriverStream,stopDriverStream,text]);
+ },[engine,inject,language,locate,refresh,syncPermission,startDriverStream,stopDriverStream,text,clearReadyTimer,clearResumeTimer]);
  const openExternal=(url:string)=>{
   if(externalTarget(url))void Linking.openURL(url).catch(()=>setNotice(text('تعذر فتح الرابط.','Could not open the link.')));
  };
@@ -379,7 +409,7 @@ export default function FreshAndroid(){
     <Text style={{color:'white',textAlign:'center'}}>{text('تحديث الواجهة','Refresh website')}</Text>
    </Pressable>}
   </View>}
-  <WebView ref={web} source={{uri}} style={{flex:1,backgroundColor:background}}
+  {!rendererLost&&<WebView key={webSession} ref={web} source={{uri}} style={{flex:1,backgroundColor:background}}
    originWhitelist={['https://abdallrahimbirekdar-rgb.github.io']}
    javaScriptEnabled domStorageEnabled geolocationEnabled={false}
    cacheEnabled cacheMode="LOAD_DEFAULT" mixedContentMode="never"
@@ -392,10 +422,11 @@ export default function FreshAndroid(){
    }}
    onOpenWindow={event=>openExternal(event.nativeEvent.targetUrl)}
    onMessage={handleMessage}
-   onNavigationStateChange={nav=>{canGoBack.current=nav.canGoBack;if(!nav.loading)setLoading(false)}}
-   onLoadStart={event=>{documentUrl.current=event.nativeEvent.url;stopDriverSpeech();stopDriverStream();autoStarted.current=false;locationRequestedByPage.current=false;for(const task of runs.current.values())task.controller.abort();setLoading(true);setFailed(false)}}
-   onLoadEnd={()=>{
-    setLoading(false);void syncPermission('page-loaded');
+   onNavigationStateChange={nav=>{canGoBack.current=nav.canGoBack}}
+   onLoadStart={event=>{documentUrl.current=event.nativeEvent.url;stopDriverSpeech();stopDriverStream();autoStarted.current=false;locationRequestedByPage.current=false;for(const task of runs.current.values())task.controller.abort();setLoading(true);setFailed(false);beginPageLoad()}}
+    onLoadEnd={()=>{
+     // HTML is not proof of a usable page: wait until React signals readiness.
+     void syncPermission('page-loaded');
     // If the website cannot post its location request to Android,
     // native GPS still starts and injects a cached position for the map.
     if(!autoStarted.current&&!locationRequestedByPage.current){
@@ -403,12 +434,12 @@ export default function FreshAndroid(){
      void locate({type:'location',id:'auto-location',askPermission:false,track:false});
     }
    }}
-   onError={()=>{setLoading(false);setFailed(true)}}
-   onRenderProcessGone={()=>{setLoading(false);setFailed(true)}}
+   onError={()=>{clearReadyTimer();setLoading(false);setFailed(true)}}
+    onRenderProcessGone={()=>{clearReadyTimer();clearResumeTimer();pendingResume.current=null;pageReady.current=false;setLoading(false);setRendererLost(true);setFailed(true)}}
    onHttpError={event=>{if(event.nativeEvent.statusCode>=400&&event.nativeEvent.url===uri){
-    setLoading(false);setFailed(true);
-   }}}
-  />
+    clearReadyTimer();setLoading(false);setFailed(true);
+    }}}
+   />}
   {loading&&!failed&&<View pointerEvents="none" style={{position:'absolute',left:0,right:0,top:0,bottom:0,
    justifyContent:'center',alignItems:'center',backgroundColor:background,gap:14}}>
    <ActivityIndicator color="#d67749" size="large"/>
@@ -419,7 +450,7 @@ export default function FreshAndroid(){
    <Text style={{fontSize:18,color:foreground,textAlign:'center'}}>
     {text('تعذر فتح الموقع. تأكد من الاتصال بالإنترنت وأعد المحاولة.','Could not open the website. Check the internet and try again.')}
    </Text>
-   <Pressable style={btn} onPress={()=>{setFailed(false);setLoading(true);web.current?.reload()}}>
+   <Pressable style={btn} onPress={reopenWebsite}>
     <Text style={{color:'#ffffff',textAlign:'center'}}>{text('إعادة المحاولة','Try again')}</Text>
    </Pressable>
    <Pressable style={btn} onPress={()=>openExternal(SITE)}>
