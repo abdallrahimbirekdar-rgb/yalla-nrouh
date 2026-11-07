@@ -50,8 +50,11 @@ export function usePickupEta(fix:{point:Coordinate;time:number}|null,pickup:Coor
    if(run.current===scope&&!controller.signal.aborted)setPending(false);
   });
  },[enabled,fix,language,latitude,longitude,pending,plan,progress,target]);
+ const usable=enabled&&progress&&progress.offRouteMeters<=100?progress:null;
  return {
-  minutes:enabled&&progress&&progress.offRouteMeters<=100?Math.max(1,Math.ceil(progress.remainingSeconds/60)):null,
+  minutes:usable?Math.max(0,Math.ceil(usable.remainingSeconds/60)):null,
+  meters:usable?Math.round(usable.remainingMeters):null,
+  route:usable?.remainingPath,
   pending,
  };
 }
