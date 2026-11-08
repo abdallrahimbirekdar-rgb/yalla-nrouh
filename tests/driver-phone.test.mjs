@@ -9,7 +9,8 @@ const origin='https://abdallrahimbirekdar-rgb.github.io';
 const request=(body,token='test-admin-token')=>new Request(endpoint,{
  method:'POST',headers:{Origin:origin,Authorization:'Bearer '+token},body:JSON.stringify(body),
 });
-const form={action:'create',name:'  Test driver  ',phone,region:1,category:'classic'};
+const password='SafeDriver2026!';
+const form={action:'create',name:'  Test driver  ',phone,region:1,category:'classic',password};
 const reply=(value,status=200)=>new Response(JSON.stringify(value),{status});
 
 test('normalizes Syrian mobile numbers and rejects foreign, landline and malformed input',()=>{
@@ -49,7 +50,7 @@ test('phone provider disabled leaves account creation untouched',async()=>{
   assert.equal(response.status,503);assert.deepEqual(await response.json(),{code:'phone_provider_disabled'});
  });
 });
-test('an admin creates a phone-only account and receives a generated password',async()=>{
+test('admin chooses a driver password, which is never returned to client',async()=>{
  let created;
  await withBackend(async(url,init)=>{
   if(url.endsWith('/rpc/is_staff_admin'))return reply(true);
@@ -66,8 +67,8 @@ test('an admin creates a phone-only account and receives a generated password',a
   assert.equal(response.status,200);
   assert.equal(response.headers.get('Cache-Control'),'no-store');
   const credentials=await response.json();
-  assert.deepEqual(credentials,{phone,password:created.password});
-  assert.match(credentials.password,/^Yalla!9[0-9a-f]{32}$/);
+  assert.deepEqual(credentials,{phone});
+  assert.equal(created.password,password);
  });
 });
 test('reset updates only the driver account returned by the protected lookup',async()=>{
@@ -80,6 +81,21 @@ test('reset updates only the driver account returned by the protected lookup',as
   }
   assert.ok(url.endsWith('/auth/v1/admin/users/'+id));
   assert.equal(init.method,'PUT');
-  assert.deepEqual(Object.keys(JSON.parse(init.body)),['password']);return reply({id});
- },async()=>assert.equal((await driverPhoneAccount(request({action:'reset',phone}))).status,200));
+  assert.deepEqual(JSON.parse(init.body),{password});return reply({id});
+ },async()=>assert.equal((await driverPhoneAccount(request({action:'reset',phone,password}))).status,200));
+});
+
+test('rejects weak or missing chosen passwords before touching Auth Admin API',async()=>{
+ for(const bad of [undefined,'short1','12345678901','noNumbersHere','a'.repeat(73)]){
+  let adminCalls=0;
+  await withBackend(async(url)=>{
+   if(url.endsWith('/rpc/is_staff_admin'))return reply(true);
+   adminCalls++;return reply({external:{phone:true}});
+  },async()=>{
+   const response=await driverPhoneAccount(request({...form,password:bad}));
+   assert.equal(response.status,400);
+   assert.deepEqual(await response.json(),{code:'invalid_driver_password'});
+  });
+  assert.equal(adminCalls,0);
+ }
 });
