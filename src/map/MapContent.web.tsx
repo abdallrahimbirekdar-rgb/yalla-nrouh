@@ -15,6 +15,7 @@ export default function MapContent({point,destinationPoint,taxiPoint,passengerPo
  const {state}=useApp();const t=useText();const {colors,dark}=useTheme();const host=useRef<HTMLDivElement>(null);
  const map=useRef<GoogleMap|null>(null),api=useRef<GoogleMaps|null>(null),marker=useRef<GoogleMarker|null>(null),line=useRef<GoogleLine|null>(null);
  const userMarker=useRef<GoogleMarker|null>(null),endMarker=useRef<GoogleMarker|null>(null),taxiMarker=useRef<GoogleMarker|null>(null),passengerMarker=useRef<GoogleMarker|null>(null);
+ const markerKind=useRef<'taxi'|'passenger'|null>(null);
  const hasCameraTarget=!!cameraTarget;
  const destinationLat=destinationPoint?.latitude,destinationLng=destinationPoint?.longitude;
  const pickupLat=point?.latitude,pickupLng=point?.longitude;
@@ -43,7 +44,7 @@ export default function MapContent({point,destinationPoint,taxiPoint,passengerPo
    line.current=new maps.Polyline({map:instance,strokeColor:'#2688e8',strokeWeight:5,clickable:false});
    clearTimeout(pending);failed.current=false;setError(false);setReady(true);
   }).catch(()=>{if(!disposed){clearTimeout(pending);failed.current=true;setError(true)}});
-  return()=>{disposed=true;clearTimeout(pending);removeAuthListener();window.removeEventListener('online',online);if(marker.current){api.current?.event.clearInstanceListeners(marker.current);marker.current.map=null}if(endMarker.current)endMarker.current.map=null;endMarker.current=null;if(userMarker.current)userMarker.current.map=null;userMarker.current=null;if(taxiMarker.current)taxiMarker.current.map=null;taxiMarker.current=null;if(passengerMarker.current)passengerMarker.current.map=null;passengerMarker.current=null;line.current?.setMap(null);if(map.current)api.current?.event.clearInstanceListeners(map.current);map.current=null;marker.current=null;line.current=null;container.replaceChildren()};
+  return()=>{disposed=true;clearTimeout(pending);removeAuthListener();window.removeEventListener('online',online);if(marker.current){api.current?.event.clearInstanceListeners(marker.current);marker.current.map=null}if(endMarker.current)endMarker.current.map=null;endMarker.current=null;if(userMarker.current)userMarker.current.map=null;userMarker.current=null;if(taxiMarker.current)taxiMarker.current.map=null;taxiMarker.current=null;markerKind.current=null;if(passengerMarker.current)passengerMarker.current.map=null;passengerMarker.current=null;line.current?.setMap(null);if(map.current)api.current?.event.clearInstanceListeners(map.current);map.current=null;marker.current=null;line.current=null;container.replaceChildren()};
  },[key,state.language,readOnly,attempt,loadTimeoutMs,t]);
  useEffect(()=>{
   const instance=map.current,pin=marker.current;if(!ready||!instance||!pin)return;
@@ -87,9 +88,11 @@ export default function MapContent({point,destinationPoint,taxiPoint,passengerPo
   const instance=map.current,maps=api.current;
   if(!ready||!instance||!maps)return;
   const tracked=taxiPoint??passengerPoint;
-  if(!tracked){if(taxiMarker.current)taxiMarker.current.map=null;taxiMarker.current=null;return}
+  if(!tracked){if(taxiMarker.current)taxiMarker.current.map=null;taxiMarker.current=null;markerKind.current=null;return}
   const taxi=position(tracked),first=!taxiMarker.current,onlyPassenger=!!passengerPoint&&!taxiPoint;
+  if(taxiMarker.current&&markerKind.current!==(onlyPassenger?'passenger':'taxi')){taxiMarker.current.map=null;taxiMarker.current=null}
   if(!taxiMarker.current){
+   markerKind.current=onlyPassenger?'passenger':'taxi';
    const icon=document.createElement('div');icon.textContent=onlyPassenger?'●':'🚕';
    Object.assign(icon.style,{display:'grid',placeItems:'center',width:'34px',height:'34px',background:onlyPassenger?'#15803d':'#102a43',color:'white',border:'2px solid white',borderRadius:'50%',fontSize:'21px'});
    taxiMarker.current=new maps.marker.AdvancedMarkerElement({map:instance,position:taxi,content:icon,title:onlyPassenger?(t('موقع الزبون','Customer location')):(t('موقع التاكسي','Taxi location'))});
