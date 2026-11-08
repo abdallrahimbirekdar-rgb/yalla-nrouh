@@ -1,10 +1,11 @@
 import React from 'react';
 import {Image,Pressable,Text,View} from 'react-native';
-import {router,usePathname} from 'expo-router';
+import {Link} from 'expo-router';
 import {useAuth} from './auth';
 import {useApp} from './context';
 import {translate} from './locale';
 import {brandHeader,useTheme} from './theme';
+import {logoHomeHref} from './logo-home-route';
 
 /** The live website uses a bilingual lockup with real, shaped Arabic text. */
 export function BrandLogo({menu=false,driver=false,inverse=false}:{menu?:boolean;driver?:boolean;inverse?:boolean}){
@@ -30,18 +31,13 @@ export function BrandLogo({menu=false,driver=false,inverse=false}:{menu?:boolean
 export function HomeBrandLogo({onNavigate,...appearance}:React.ComponentProps<typeof BrandLogo>&{onNavigate?:()=>void}){
  const {state}=useApp();
  const auth=useAuth();
- const path=usePathname();
- const adminHome=auth.admin;
- function goHome(){
-  onNavigate?.();
-  if(adminHome)router.replace({pathname:'/admin',params:{section:'home'}});
-  else if(auth.driver)router.replace({pathname:'/cloud',params:{mode:'driver'}});
-  else if(path!=='/')router.replace('/');
- }
- return <Pressable accessibilityRole="button" accessibilityLabel={adminHome
-  ?translate(state.language,'العودة إلى لوحة الإدارة الرئيسية','Back to the admin dashboard','Zurück zur Verwaltung')
-  :translate(state.language,'العودة إلى الصفحة الرئيسية','Back to home','Zurück zur Startseite')}
-  onPress={goHome} style={{flexShrink:1}}>
-  <BrandLogo {...appearance}/>
- </Pressable>;
+ const driverHome=auth.driver&&!auth.admin;
+ return <Link href={logoHomeHref(auth.driver,auth.admin)} replace asChild>
+  <Pressable accessibilityRole="link" accessibilityLabel={driverHome
+   ?translate(state.language,'العودة إلى لوحة السائق','Back to driver dashboard','Zurück zum Fahrerbereich')
+   :translate(state.language,'العودة إلى الصفحة الرئيسية','Back to home','Zurück zur Startseite')}
+   onPress={onNavigate} hitSlop={8} style={{flexShrink:1,minHeight:52,justifyContent:'center'}}>
+   <View pointerEvents="none"><BrandLogo {...appearance}/></View>
+  </Pressable>
+ </Link>;
 }
