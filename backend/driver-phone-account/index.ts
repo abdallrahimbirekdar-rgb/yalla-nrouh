@@ -29,6 +29,7 @@ export async function driverPhoneAccount(request:Request){
   if(!staff.ok||await staff.json()!==true)return reply(403,{code:'not_admin'});
 
   const body=await request.json().catch(()=>null);
+  if(body?.action==='capabilities')return reply(200,{mode:'admin_selected_password_v1'});
   if(!body||typeof body.phone!=='string'||!syrian.test(body.phone)||!['create','reset'].includes(body.action))
    return reply(400,{code:'invalid_phone_driver'});
   const phone:string=body.phone;
