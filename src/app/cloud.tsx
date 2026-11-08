@@ -6,7 +6,8 @@ import {useApp} from '../context';
 import {useAuth} from '../auth';
 import {authErrorMessage} from '../auth-errors';
 import {cloudCurrentToken,cloudDriverDispatchPing,cloudMutationUncertain,cloudMyRides,cloudDriverInbox,cloudOpenRides,cloudDeclineDriverOffer,cloudAcceptRide,cloudAdvanceRide,cloudReleaseRide,cloudCancelRideWithReason,cloudRegisterDriver,cloudSetDriverOnline,type CloudRide,type CloudDriver,type DriverHistoryKind,type RidePreview} from '../cloud-api';
-import {navigationPosition} from '../navigation-position';
+import {navigationPosition,watchDriverPosition} from '../navigation-position';
+import {distanceMeters} from '../navigation-progress';
 import RideOptions from '../ride-options';
 import {isCoordinate} from '../geo';
 import {PassengerFare,PassengerStops,RideFooter} from '../passenger-trip-summary';
@@ -86,6 +87,23 @@ export default function Rides(){
  },[userId,driverMode,queue]);
  useEffect(()=>{setRides([]);setOffers([]);setDriver(null);setInboxProblem(false);setLoading(true);if(!userId){setLoading(false);return}let active=true;void refresh().catch(()=>{if(active){setNotice(t('تعذر تحميل الرحلات. تحقق من الاتصال وأعد المحاولة.','Could not load rides. Check internet and retry.'));setLoading(false)}});return()=>{active=false}},[refresh,userId,state.language,t]);
  const currentDriverRide=driverMode?rides.find(r=>r.driver_id===userId&&live(r)):undefined;
+ // Track the driver's own moving taxi, independently of customer location sharing.
+ const [driverMapFix,setDriverMapFix]=useState<{point:{latitude:number;longitude:number};time:number}|null>(null);
+ const pickupRideId=driverMode&&currentDriverRide&&['accepted','arrived'].includes(currentDriverRide.status)?currentDriverRide.id:null;
+ useEffect(()=>{
+  setDriverMapFix(null);
+  if(!pickupRideId||!foreground||connection==='offline')return;
+  let active=true;
+  const stop=watchDriverPosition(false,fix=>{
+   if(!active)return;
+   setDriverMapFix(previous=>{
+    if(previous&&fix.time<=previous.time)return previous;
+    if(previous&&fix.time-previous.time<3500&&distanceMeters(previous.point,fix)<8)return previous;
+    return {point:{latitude:fix.latitude,longitude:fix.longitude},time:fix.time};
+   });
+  },()=>{/* Show a retryable GPS status instead of a false taxi marker. */});
+  return()=>{active=false;stop?.()};
+ },[pickupRideId,foreground,connection]);
  const gps=useCurrentPosition(driverMode&&Boolean(currentDriverRide||driver?.approved&&driver.online)&&state.preferences.permissionsIntroSeen);
  useEffect(()=>{
   if(!driverMode||!driver?.approved||!driver.online||currentDriverRide||!foreground||connection==='offline')return;
@@ -406,7 +424,7 @@ export default function Rides(){
     {atPickup&&<Label muted>{t('ابدأ الرحلة بعد ركوب الزبون.','Start the ride once the customer is in the car.')}</Label>}
    </View>
    {!!notice&&<View accessibilityRole="alert"><Label>{notice}</Label></View>}
-   <CustomerTracking key={ride.id+':'+ride.driver_id} rideId={ride.id} pickup={pickup} proposedPickup={pickingUp?proposal?.point:undefined} foreground={foreground} compact={split} duringTrip={!tracking}/>
+   <CustomerTracking key={ride.id+':'+ride.driver_id} rideId={ride.id} pickup={pickup} proposedPickup={pickingUp&&proposal?.approved?proposal.point:undefined} foreground={foreground} compact={split} duringTrip={!tracking} taxiFix={tracking?driverMapFix:null}/>
    {split&&tracking&&<Label muted>{address}</Label>}
    {pickingUp&&proposal&&!proposal.approved&&<Panel outlined>
     <Label>{t('الزبون اقترح نقطة التقاء جديدة.','The customer suggested a new meeting point.')}</Label>
