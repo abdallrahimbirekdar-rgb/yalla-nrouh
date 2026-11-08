@@ -1,5 +1,5 @@
 import React,{useEffect,useState} from 'react';
-import {ActivityIndicator,Platform,View} from 'react-native';
+import {ActivityIndicator,Image,Platform,View} from 'react-native';
 import {cloudCurrentToken,cloudRideDriverVehicleDetails,rideSearchLimitMs,type DriverVehicleDetails} from './cloud-api';
 import {categories} from './domain';
 import {usePickupEta} from './use-pickup-eta';
@@ -165,8 +165,14 @@ export function PassengerTaxiMap({rideId,pickup,status,category}:{rideId:string;
    {approaching&&distanceLabel&&<Label>{eta.meters===null?t('المسافة المباشرة تقريبًا: ','Approximate direct distance: '):t('المسافة المتبقية: ','Distance remaining: ')}{distanceLabel}</Label>}
    <Label muted>{fix?t('آخر تحديث للموقع قبل '+number+' ثانية','Location updated '+number+' s ago'):t('بانتظار أول تحديث لموقع التاكسي…','Waiting for the taxi’s first location update…')}</Label>
    {fix&&stale&&<Label muted>{age<180?t('نعرض آخر موقع معروف للتاكسي.','Showing the last known taxi location.'):t('موقع التاكسي غير محدّث.','The taxi location is no longer current.')}</Label>}
-   {vehicle?.display_name&&<Label muted>{t('السائق','Driver')} · {vehicle.display_name}</Label>}
-   {(vehicleCategory||vehicle?.vehicle_color||vehicle?.vehicle_plate)&&<Label muted>{t('السيارة','Vehicle')} · {[vehicleCategory,vehicle?.vehicle_color,vehicle?.vehicle_plate&&t('لوحة ','Plate ')+vehicle.vehicle_plate].filter(Boolean).join(' · ')}</Label>}
+   {(vehicleCategory||vehicle)&&<View style={{flexDirection:state.language==='ar'?'row-reverse':'row',alignItems:'center',gap:10,paddingTop:6}}>
+    {vehicle?.photo&&<Image accessibilityLabel={t('صورة التاكسي المعيّن','Assigned taxi photo')} source={{uri:'data:image/jpeg;base64,'+vehicle.photo}}
+     style={{height:54,width:72,borderRadius:8}} resizeMode="contain"/>}
+    <View style={{flex:1}}>
+     {vehicle?.display_name&&<Label muted>{t('السائق','Driver')} · {vehicle.display_name}</Label>}
+     <Label muted>{[vehicleCategory,vehicle?.vehicle_model,vehicle?.vehicle_color,vehicle?.vehicle_plate&&t('لوحة ','Plate ')+vehicle.vehicle_plate].filter(Boolean).join(' · ')}</Label>
+    </View>
+   </View>}
   </View>
  </>;
 }

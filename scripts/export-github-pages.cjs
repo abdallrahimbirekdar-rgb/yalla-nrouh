@@ -13,3 +13,5 @@ const recovery=readFileSync('scripts/startup-recovery.html','utf8');
 writeFileSync('dist-pages/index.html',html.replace('</body>',recovery+'</body>'));
 copyFileSync('dist-pages/index.html','dist-pages/404.html');
 writeFileSync('dist-pages/.nojekyll','');
+
+require('./write-play-pages.cjs');

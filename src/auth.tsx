@@ -5,7 +5,7 @@ import {Platform} from 'react-native';
 import {type Session} from '@supabase/supabase-js';
 import {cloudIsAdmin,cloudMyDriver,cloudSetSessionBridge,CloudError} from './cloud-api';
 const SITE='https://abdallrahimbirekdar-rgb.github.io/yalla-nrouh/';
-type AuthValue={session:Session|null;ready:boolean;admin:boolean;checkingAdmin:boolean;driver:boolean;rolesReady:boolean;recovery:boolean;problem:string;signIn:(email:string,password:string)=>Promise<void>;signUp:(email:string,password:string)=>Promise<boolean>;signOut:()=>Promise<void>;reset:(email:string)=>Promise<void>;updatePassword:(password:string)=>Promise<void>;retry:()=>Promise<void>};
+type AuthValue={session:Session|null;ready:boolean;admin:boolean;checkingAdmin:boolean;driver:boolean;rolesReady:boolean;recovery:boolean;problem:string;signIn:(email:string,password:string)=>Promise<void>;signUp:(email:string,password:string)=>Promise<boolean>;signOut:(expectedUserId?:string)=>Promise<void>;reset:(email:string)=>Promise<void>;updatePassword:(password:string)=>Promise<void>;retry:()=>Promise<void>};
 const noAuth=async()=>{throw Error('login_required')};
 const AuthContext=createContext<AuthValue>({session:null,ready:false,admin:false,checkingAdmin:false,driver:false,rolesReady:false,recovery:false,problem:'',signIn:noAuth,signUp:async()=>{throw Error('login_required')},signOut:noAuth,reset:noAuth,updatePassword:noAuth,retry:noAuth});
 export function AuthProvider({children}:{children:React.ReactNode}){
@@ -41,7 +41,7 @@ export function AuthProvider({children}:{children:React.ReactNode}){
  const value=useMemo<AuthValue>(()=>({session,ready,admin,checkingAdmin,driver,rolesReady,recovery,problem,retry,
   signIn:async(email,password)=>{const {data,error}=await authClient().auth.signInWithPassword({email:email.trim(),password});if(error)throw error;accept(data.session)},
   signUp:async(email,password)=>{const {data,error}=await authClient().auth.signUp({email:email.trim(),password,options:{emailRedirectTo:SITE}});if(error)throw error;if(data.session)accept(data.session);return Boolean(data.session)},
-  signOut:async()=>{const {error}=await authClient().auth.signOut({scope:'local'});if(error)throw error;setAdmin(false);setRecovery(false);accept(null)},
+  signOut:async(expectedUserId)=>{if(expectedUserId&&current.current?.user.id!==expectedUserId)return;const {error}=await authClient().auth.signOut({scope:'local'});if(error)throw error;setAdmin(false);setRecovery(false);accept(null)},
   reset:async(email)=>{const {error}=await authClient().auth.resetPasswordForEmail(email.trim(),{redirectTo:SITE});if(error)throw error},
   updatePassword:async(password)=>{const {error}=await authClient().auth.updateUser({password});if(error)throw error;setRecovery(false)},
  }),[session,ready,admin,checkingAdmin,driver,rolesReady,recovery,problem,retry,accept]);

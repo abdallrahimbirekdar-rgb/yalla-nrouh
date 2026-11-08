@@ -11,6 +11,7 @@ import RideOptions from '../ride-options';
 import {isCoordinate} from '../geo';
 import {PassengerFare,PassengerStops,RideFooter} from '../passenger-trip-summary';
 import DriverOffer from '../driver-offer';
+import DriverVehicleSettings from '../driver-vehicle-settings';
 import {DriverQueueEmpty,DriverQueueHeader,DriverShift} from '../driver-dashboard';
 import {DriverHistory,DriverHistoryBar} from '../driver-history';
 import {useDriverOfferSound} from '../use-driver-offer-sound';
@@ -222,6 +223,7 @@ export default function Rides(){
  const passengerPickup=passengerRide?(proposal?.approved?proposal.point:{latitude:passengerRide.pickup_lat,longitude:passengerRide.pickup_lng}):undefined;
  const driverSharingControl=(ride?:CloudRide)=><View style={{gap:6}}>
   <Label muted>{t('اسمح مرة واحدة على هذا الجهاز. يشارك التطبيق موقعك تلقائيًا مع زبون الرحلة المعيّنة لك، ويتوقف عند انتهاء الرحلة أو إلغائها.','Allow once on this device. Your location is shared automatically with the customer assigned to your ride and stops when the ride ends or is cancelled.')}</Label>
+  {sharing.capability&&<Label muted>{t('أثناء الرحلة على أندرويد تستمر مشاركة الموقع حتى عند تصغير التطبيق أو فتح الملاحة. يمكنك إيقافها من الإشعار.','During an active ride on Android, location sharing continues when the app is minimized or navigation opens. Stop it from the notification.')}</Label>}
   <Button secondary icon="locate-outline" title={driverConsent
    ?t('إيقاف المشاركة التلقائية','Turn off automatic sharing')
    :t('السماح بالمشاركة التلقائية','Allow automatic sharing')}
@@ -229,7 +231,6 @@ export default function Rides(){
   {ride&&sharing.capability&&(sharing.activeRide===ride.id||trackingBackend&&driverConsent)&&<Button secondary
    title={sharing.activeRide===ride.id?t('إيقاف المشاركة لهذه الرحلة','Stop sharing for this ride'):t('بدء المشاركة لهذه الرحلة','Start sharing for this ride')}
    disabled={sharing.busy} onPress={()=>sharing.activeRide===ride.id?void sharing.stop(ride.id):startDriverSharing(ride.id,true)}/>}
-  {driverConsent&&sharing.capability&&<Label muted>{t('على أندرويد تستمر المشاركة أثناء الملاحة وتقدر توقفها من الإشعار.','On Android, sharing continues during navigation. You can stop it from the notification.')}</Label>}
   {consentError&&<Label muted>{t('تعذّر حفظ اختيارك على هذا الجهاز.','Could not save your choice on this device.')}</Label>}
   {ride&&sharing.problem&&<Label muted>{t('تعذّرت المشاركة. تحقق من الاتصال وإذن الموقع الدقيق والإشعارات، ثم حاول مجددًا.','Could not share. Check your connection, precise location and notification permissions, then try again.')}</Label>}
  </View>;
@@ -502,9 +503,10 @@ export default function Rides(){
     : loading&&!driver
      ? <Panel><Label>{t('جارٍ تحميل حالة السائق…','Loading driver status…')}</Label></Panel>
      : <Panel>
-      {driver?<><Label>{t('طلبك بانتظار مراجعة الإدارة','Your application is waiting for review')}</Label><Label muted>{t('يمكنك تحديث الصفحة بعد اعتماد الحساب.','Refresh after your account is approved.')}</Label></>
+      {driver?<><Label>{t('استقبال الطلبات غير مفعّل بعد','Ride requests are disabled')}</Label><Label muted>{t('راجع حالة بيانات السيارة أدناه. حدّث الصفحة بعد الاعتماد لتفعيل وضع السائق.','Check the status of your vehicle details below. Refresh after approval to enable driver mode.')}</Label></>
        :<><Label>{t('التسجيل كسائق','Register as a driver')}</Label><RideOptions driver/><Button title={t('إرسال طلب اعتماد سائق','Apply for driver approval')} disabled={busy} onPress={()=>void run(async token=>{await cloudRegisterDriver(token,draft.region,draft.category)},t('تم إرسال الطلب إلى الإدارة.','Application sent to admin.'))}/></>}
      </Panel>)}
+   {!currentDriverRide&&driver&&!driver.approved&&<DriverVehicleSettings key={userId}/>}
    {!currentDriverRide&&navigationSettings}
    {!currentDriverRide&&(!driver?.approved||!driver.online&&!!notice)&&<Button secondary icon="refresh-outline" title={t('تحديث الحالة','Refresh status')} disabled={busy} onPress={()=>void run(async()=>{})}/>}
   </>:<>

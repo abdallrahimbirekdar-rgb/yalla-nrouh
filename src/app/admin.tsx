@@ -3,12 +3,12 @@ import {ActivityIndicator,View} from 'react-native';
 import {router} from 'expo-router';
 import {useAuth} from '../auth';
 import {useApp} from '../context';
-import {cloudCurrentToken,cloudFareSettings,cloudUpdateFareSettings,cloudStaffDrivers,cloudApproveDriver,cloudAdminAddDriverByEmail,type StaffDriver} from '../cloud-api';
+import {cloudCurrentToken,cloudFareSettings,cloudUpdateFareSettings,cloudStaffDrivers,cloudAdminAddDriverByEmail,type StaffDriver} from '../cloud-api';
 import AdminRulesGuide from '../admin-rules-guide';
 import AdminDispatch from '../admin-dispatch';
+import AdminVehicleReview from '../admin-vehicle-review';
 import {authErrorMessage} from '../auth-errors';
 import {parseAmount,priceForRoute,type Tariff} from '../meter';
-import {regions} from '../domain';
 import {Button,Field,Icon,Label,Page,Panel,useText,useTheme} from '../ui';
 export default function Admin(){
  const auth=useAuth();const userId=auth.session?.user.id;const {state,dispatch}=useApp();const t=useText();const {colors}=useTheme();
@@ -40,11 +40,14 @@ export default function Admin(){
    }
    setDrivers(await cloudStaffDrivers(token));
    setNewDriverEmail('');
-   setNotice(t('أُضيف الحساب إلى قائمة السائقين. راجع بيانات السائق ثم اضغط «اعتماد السائق».','Account added to driver list. Review the driver, then approve.'));
+   setNotice(t('أُضيف الحساب إلى قائمة السائقين. يمكن للسائق الآن إرسال بيانات السيارة للمراجعة.','Account added to driver list. The driver can now submit vehicle details for review.'));
   }catch(e){setNotice(authErrorMessage(e,state.language))}
   finally{setBusy(false)}
  }
- async function approve(account:StaffDriver){if(busy)return;setBusy(true);setNotice('');try{const token=await cloudCurrentToken();const ok=await cloudApproveDriver(token,account.user_id,!account.approved);if(!ok)throw Error('not_allowed');setDrivers(await cloudStaffDrivers(token));setNotice(t('تم تحديث صلاحية السائق.','Driver access updated.'))}catch(e){setNotice(authErrorMessage(e,state.language))}finally{setBusy(false)}}
+ async function refreshDrivers(){
+  try{setDrivers(await cloudStaffDrivers(await cloudCurrentToken()))}
+  catch(error){setNotice(authErrorMessage(error,state.language))}
+ }
  if(!auth.ready||auth.checkingAdmin)return <Page title={t('لوحة الإدارة','Administration')}><ActivityIndicator color={colors.purple}/><Label muted>{t('جارٍ التحقق من صلاحيات الحساب…','Checking account access…')}</Label></Page>;
  if(!auth.session)return <Page title={t('لوحة الإدارة','Administration')}><Panel><Icon name="shield-checkmark-outline" size={44}/><Label>{t('ادخل ببريد حساب الإدارة وكلمة المرور لفتح لوحة التحكم.','Sign in with the admin email and password to open this page.')}</Label><Button title={t('تسجيل دخول الإدارة','Admin sign in')} onPress={()=>router.replace({pathname:'/account',params:{next:'admin'}})}/></Panel></Page>;
  if(!auth.admin)return <Page title={t('لوحة الإدارة','Administration')}><Panel><Label>{t('هذا الحساب لا يملك صلاحية الإدارة.','This account does not have admin access.')}</Label><Label muted>{auth.session.user.email}</Label><Button title={t('الذهاب إلى حسابي','Go to my account')} onPress={()=>router.replace('/account')}/><Button secondary title={t('إعادة التحقق من الصلاحية','Check access again')} onPress={()=>void auth.retry()}/></Panel></Page>;
@@ -79,7 +82,7 @@ export default function Admin(){
    </Panel>
    <Panel><Label large>{t('طلبات السائقين','Driver accounts')}</Label><Label muted>{t('تحقق من هوية السائق وأوراق السيارة قبل اعتماده.','Check the driver and vehicle papers before approval.')}</Label>
     {drivers.length===0&&<Label muted>{t('لا توجد طلبات تسجيل سائق بعد.','No driver accounts yet.')}</Label>}
-    {drivers.map(account=><View key={account.user_id} style={{gap:9,paddingVertical:10,borderTopWidth:1,borderColor:colors.line}}><Label>{regions[account.region]?.[state.language==='ar'?0:1]} · {account.category}</Label><Label muted>{account.user_id}</Label><Label>{account.approved?t('معتمد','Approved'):t('بانتظار المراجعة','Waiting for review')}</Label><Button secondary title={account.approved?t('تعليق السائق','Suspend driver'):t('اعتماد السائق','Approve driver')} disabled={busy} onPress={()=>void approve(account)}/></View>)}
+    {drivers.map(account=><AdminVehicleReview key={userId+':'+account.user_id} account={account} onChanged={()=>void refreshDrivers()}/>)}
    </Panel>
   </>}
   {!!notice&&<View accessibilityRole="alert"><Label>{notice}</Label></View>}

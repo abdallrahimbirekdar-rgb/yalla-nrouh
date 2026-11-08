@@ -22,7 +22,7 @@ export interface CloudRide {
   status:'requested'|'accepted'|'arrived'|'riding'|'completed'|'cancelled';
   created_at:string;updated_at:string;search_expired_at?:string|null;
 }
-export interface DriverVehicleDetails {display_name?:string|null;vehicle_color?:string|null;vehicle_plate?:string|null;category?:string}
+export interface DriverVehicleDetails {display_name?:string|null;vehicle_color?:string|null;vehicle_plate?:string|null;vehicle_model?:string|null;category?:string;photo?:string|null}
 export interface CloudDriver {user_id:string;region:number;category:string;approved:boolean;online:boolean;last_seen_at:string|null}
 export interface RidePreview {ride_id:string;region:number;category:string;created_at:string;pickup_lat_approx:number;pickup_lng_approx:number;estimated_fare?:number|null;remaining_ms?:number;expiresOnDevice?:number}
 export interface StaffDriver {user_id:string;region:number;category:string;approved:boolean;online:boolean;created_at:string}
@@ -115,18 +115,27 @@ export async function cloudMyDriver(token:string):Promise<CloudDriver|null>{
   const accounts=await call<CloudDriver[]>('/rest/v1/driver_accounts?select=user_id,region,category,approved,online,last_seen_at&limit=1','GET',token);
   return accounts[0]??null;
 }
-export async function cloudMyDriverVehicleDetails(token:string){
- requireToken(token);
- const rows=await call<DriverVehicleDetails[]>('/rest/v1/driver_accounts?select=display_name,vehicle_color,vehicle_plate&approved=eq.true&limit=1','GET',token);
+async function vehicleProfile(token:string,rideId:string|null){
+ const rows=await rpc<DriverVehicleDetails[]>('vehicle_profile',token,{p_ride:rideId});
  return rows[0]??null;
 }
-export const cloudSaveDriverVehicleDetails=(token:string,details:DriverVehicleDetails)=>rpc<boolean>('save_driver_vehicle_details',token,{
+export type VehicleReviewStatus='unsubmitted'|'pending'|'approved'|'changes_requested'|'rejected';
+export type VehicleReviewDecision='approve'|'changes_requested'|'rejected';
+export interface VehicleReviewDetails extends DriverVehicleDetails {
+ status:VehicleReviewStatus;revision:string|null;reason:string|null;approved:boolean;
+}
+export const cloudVehicleReviewDetails=(token:string,driverId:string|null=null)=>
+ rpc<VehicleReviewDetails|null>('vehicle_review_details',token,{p_driver_id:driverId});
+export const cloudMyDriverVehicleDetails=(token:string)=>cloudVehicleReviewDetails(token);
+export const cloudReviewVehicle=(token:string,driverId:string,revision:string,decision:VehicleReviewDecision,reason:string)=>
+ rpc<'saved'|'stale'|'incomplete'|'active_ride'|'invalid'>('review_vehicle_submission',token,{
+  p_driver_id:driverId,p_revision:revision,p_decision:decision,p_reason:reason.trim()||null,
+ });
+export const cloudSaveDriverVehicleDetails=(token:string,details:DriverVehicleDetails,changePhoto:boolean)=>rpc<boolean>('save_vehicle_profile',token,{
  p_name:details.display_name?.trim()||null,p_color:details.vehicle_color?.trim()||null,p_plate:details.vehicle_plate?.trim()||null,
+ p_model:details.vehicle_model?.trim()||null,p_change_photo:changePhoto,p_photo:changePhoto?details.photo??null:null,
 });
-export async function cloudRideDriverVehicleDetails(token:string,rideId:string){
- const rows=await rpc<DriverVehicleDetails[]>('ride_driver_vehicle_details',token,{p_ride:rideId});
- return rows[0]??null;
-}
+export const cloudRideDriverVehicleDetails=(token:string,rideId:string)=>vehicleProfile(token,rideId);
 export async function cloudRideOperation(token:string,kind:'request'|'accept'|'cancel',id:string,owner:string):Promise<CloudRide|null>{
   requireToken(token);
   const column=kind==='request'?'client_request_id':'id';
@@ -203,7 +212,7 @@ export function cloudReviseAdminRule(token:string,expectedId:number,section:stri
 
 export const cloudIsAdmin=(token:string)=>rpc<boolean>('is_staff_admin',token);
 export const cloudStaffDrivers=(token:string)=>rpc<StaffDriver[]>('admin_pending_drivers',token);
-export const cloudApproveDriver=(token:string,id:string,approved:boolean)=>rpc<boolean>('admin_review_driver',token,{p_driver_id:id,p_approved:approved});
+export const cloudSuspendDriver=(token:string,id:string)=>rpc<boolean>('admin_review_driver',token,{p_driver_id:id,p_approved:false});
 // Admin adds only a verified existing Supabase Auth user, not credentials.
 export function cloudAdminAddDriverByEmail(token:string,email:string,region=0,category='classic'):Promise<boolean>{
  const clean=email.trim().toLowerCase();
