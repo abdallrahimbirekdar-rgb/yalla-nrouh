@@ -11,7 +11,7 @@ function endpointBadge(letter:string,background:string){
  Object.assign(badge.style,{background,color:'white',border:'2px solid white',borderRadius:'50%',width:'28px',height:'28px',display:'grid',placeItems:'center',fontWeight:'bold'});
  return badge;
 }
-export default function MapContent({point,destinationPoint,taxiPoint,passengerPoint,onChange,compact=false,route,readOnly=false,lean=false,loadTimeoutMs=25000,cameraTarget,initialCenter,minMapHeight=compact?260:340}:{point:Coordinate|null;destinationPoint?:Coordinate;taxiPoint?:Coordinate;passengerPoint?:Coordinate;onChange:(point:Coordinate)=>void;compact?:boolean;route?:Coordinate[];readOnly?:boolean;lean?:boolean;loadTimeoutMs?:number;cameraTarget?:CameraTarget;initialCenter?:Coordinate;minMapHeight?:number}){
+export default function MapContent({point,destinationPoint,taxiPoint,passengerPoint,userPoint,onChange,compact=false,route,readOnly=false,lean=false,loadTimeoutMs=25000,cameraTarget,initialCenter,minMapHeight=compact?260:340}:{point:Coordinate|null;destinationPoint?:Coordinate;taxiPoint?:Coordinate;passengerPoint?:Coordinate;userPoint?:Coordinate;onChange:(point:Coordinate)=>void;compact?:boolean;route?:Coordinate[];readOnly?:boolean;lean?:boolean;loadTimeoutMs?:number;cameraTarget?:CameraTarget;initialCenter?:Coordinate;minMapHeight?:number}){
  const {state}=useApp();const t=useText();const {colors,dark}=useTheme();const host=useRef<HTMLDivElement>(null);
  const map=useRef<GoogleMap|null>(null),api=useRef<GoogleMaps|null>(null),marker=useRef<GoogleMarker|null>(null),line=useRef<GoogleLine|null>(null);
  const userMarker=useRef<GoogleMarker|null>(null),endMarker=useRef<GoogleMarker|null>(null),taxiMarker=useRef<GoogleMarker|null>(null);
@@ -77,12 +77,16 @@ export default function MapContent({point,destinationPoint,taxiPoint,passengerPo
   if(!ready||!map.current||!api.current||!cameraTarget)return;
   const center=position(cameraTarget.point);
   if(cameraTarget.overview&&route&&route.length>1){const bounds=new api.current.LatLngBounds();route.forEach(point=>bounds.extend(position(point)));map.current.fitBounds(bounds,30)}else{map.current.setCenter(center);map.current.setZoom(cameraTarget.zoom??19)}
-  if(cameraTarget.isLocation===false)return;
+ },[cameraTarget,ready,route]);
+ useEffect(()=>{
+  if(!ready||!map.current||!api.current)return;
+  const current=userPoint??(cameraTarget?.isLocation!==false?cameraTarget?.point:undefined);
+  if(!current){if(userMarker.current)userMarker.current.map=null;userMarker.current=null;return}
   if(!userMarker.current){
    const dot=document.createElement('div');Object.assign(dot.style,{width:'18px',height:'18px',background:'#2688e8',border:'3px solid white',borderRadius:'50%',boxShadow:'0 0 0 8px #2688e822'});
-   userMarker.current=new api.current.marker.AdvancedMarkerElement({map:map.current,position:center,content:dot,title:t('موقعي الحالي','My current location')});
-  }else userMarker.current.position=center;
- },[cameraTarget,ready,state.language,route,t]);
+   userMarker.current=new api.current.marker.AdvancedMarkerElement({map:map.current,position:position(current),content:dot,title:t('موقعي الحالي','My current location'),zIndex:4});
+  }else userMarker.current.position=position(current);
+ },[cameraTarget,userPoint,ready,t]);
  useEffect(()=>{
   const instance=map.current,maps=api.current;
   if(!ready||!instance||!maps)return;
@@ -101,17 +105,18 @@ export default function MapContent({point,destinationPoint,taxiPoint,passengerPo
    return;
   }
   const bounds=instance.getBounds();
-  if(point&&(first||bounds&&!bounds.contains(taxi))){
-   if(destinationLat===undefined&&Math.abs(point.latitude-tracked.latitude)<0.0003&&Math.abs(point.longitude-tracked.longitude)<0.0003){
+  if(point&&(first||bounds&&(!bounds.contains(taxi)||(userPoint&&!bounds.contains(position(userPoint)))))){
+   if((!userPoint||(Math.abs(point.latitude-userPoint.latitude)<0.0003&&Math.abs(point.longitude-userPoint.longitude)<0.0003))&&destinationLat===undefined&&Math.abs(point.latitude-tracked.latitude)<0.0003&&Math.abs(point.longitude-tracked.longitude)<0.0003){
     instance.setCenter(taxi);instance.setZoom(17);
    }else{
     const overview=new maps.LatLngBounds();overview.extend(position(point));overview.extend(taxi);
+    if(userPoint)overview.extend(position(userPoint));
     if(destinationLat!==undefined&&destinationLng!==undefined)overview.extend({lat:destinationLat,lng:destinationLng});
     for(const pointOnRoute of route??[])overview.extend(position(pointOnRoute));
     instance.fitBounds(overview,42);
    }
   }
- },[point,taxiPoint,passengerPoint,hasCameraTarget,ready,state.language,destinationLat,destinationLng,route,t]);
+ },[point,taxiPoint,passengerPoint,userPoint,hasCameraTarget,ready,state.language,destinationLat,destinationLng,route,t]);
  useEffect(()=>{map.current?.setOptions({tilt:0,heading:0,headingInteractionEnabled:!lean,tiltInteractionEnabled:false})},[lean,ready]);
  return <View style={compact?{flex:1,minHeight:minMapHeight}:{gap:10}}>
   {React.createElement('div',{ref:host,role:'region','aria-label':readOnly&&destinationPoint?t('خريطة الرحلة','Ride map'):t('خريطة Google لاختيار الموقع','Google map to choose a location'),style:{height:compact?'100%':minMapHeight,minHeight:minMapHeight,width:'100%',borderRadius:compact?0:16,overflow:'hidden',background:colors.surface}})}

@@ -109,6 +109,7 @@ export function AppMenu({onSettings,inverse=false}:{onSettings?:()=>void;inverse
  <Button secondary icon="options-outline" title={t('الإعدادات والأذونات','Settings and permissions')} onPress={()=>go('/settings')}/>
  {shell&&<Button secondary icon="refresh-outline" title={t('تحديث العرض','Refresh page')} onPress={()=>{setOpen(false);shell.postMessage(JSON.stringify({type:'refresh'}))}}/>}
  <Button secondary icon="shield-outline" title={t('سياسة الخصوصية','Privacy policy','Datenschutzerklärung')} onPress={()=>go('/privacy')}/>
+ <Button secondary icon="trash-outline" title={t('حذف الحساب','Delete account','Konto löschen')} onPress={()=>go('/delete-account')}/>
  <LanguagePicker/>
  {Platform.OS==='web'&&!shell&&<Link
   href="https://github.com/abdallrahimbirekdar-rgb/yalla-nrouh/releases/download/android-test-unified/yalla-nrouh-test.apk" asChild>

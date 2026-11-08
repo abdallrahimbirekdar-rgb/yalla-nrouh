@@ -1,5 +1,6 @@
 import React,{useEffect,useState} from 'react';
 import {Modal,Platform,Pressable,ScrollView,View} from 'react-native';
+import {cloudCurrentToken,cloudRideCancellationDetails,type RideCancellationDetails} from './cloud-api';
 import {useApp} from './context';
 import {Button,Icon,Label,useText,useTheme} from './ui';
 
@@ -23,8 +24,27 @@ const reasons={
 export type CancellationActor=keyof typeof reasons;
 export type CancellationReason=typeof reasons[CancellationActor][number][0];
 
-export default function RideCancellation({actor,arrived,busy,error,onClose,onConfirm}:{
- actor:CancellationActor;arrived:boolean;busy:boolean;error:string;onClose:()=>void;onConfirm:(reason:CancellationReason)=>void;
+export function RideCancellationSummary({rideId,details}:{rideId:string;details?:RideCancellationDetails|null}){
+ const t=useText();
+ const {foreground,connection}=useApp();
+ const [loaded,setLoaded]=useState<RideCancellationDetails>();
+ useEffect(()=>{
+  if(details!==undefined||!foreground||connection==='offline')return;
+  let active=true;
+  void cloudCurrentToken().then(token=>cloudRideCancellationDetails(token,[rideId])).then(rows=>{
+   if(active)setLoaded(rows[0]);
+  }).catch(()=>{});
+  return()=>{active=false};
+ },[rideId,details,foreground,connection]);
+ const item=details??loaded;
+ if(item?.ride_id!==rideId||!(item.actor in reasons))return null;
+ const option=reasons[item.actor].find(([id])=>id===item.reason);
+ if(!option)return null;
+ return <Label muted>{item.actor==='driver'?t('ألغى السائق الرحلة','The driver cancelled the ride'):t('ألغى الزبون الرحلة','The passenger cancelled the ride')} · {t(option[1],option[2],option[3])}</Label>;
+}
+
+export default function RideCancellation({actor,arrived,busy,canConfirm,error,onClose,onConfirm}:{
+ actor:CancellationActor;arrived:boolean;busy:boolean;canConfirm:boolean;error:string;onClose:()=>void;onConfirm:(reason:CancellationReason)=>void;
 }){
  const t=useText();
  const {state}=useApp();
@@ -54,7 +74,7 @@ export default function RideCancellation({actor,arrived,busy,error,onClose,onCon
     </ScrollView>
     {!!error&&<View accessibilityRole="alert"><Label>{error}</Label></View>}
     <Button tone="danger" title={t('تأكيد إلغاء الرحلة','Confirm cancellation','Stornierung bestätigen')}
-     disabled={busy||!selected} onPress={()=>{if(selected)onConfirm(selected[0])}}/>
+     disabled={busy||!canConfirm||!selected} onPress={()=>{if(selected)onConfirm(selected[0])}}/>
     <Button secondary title={t('متابعة الرحلة','Keep the ride','Fahrt behalten')} disabled={busy} onPress={onClose}/>
    </View>
   </View>

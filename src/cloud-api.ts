@@ -100,15 +100,19 @@ export async function cloudMyRides(token:string):Promise<CloudRide[]>{
   receiveRideState(owner,rides);return rides;
 }
 export type DriverHistoryKind='completed'|'cancelled'|'released';
-export type DriverHistoryEntry={id:string|number;ride_id?:string;region:number;category:string;pickup?:string;pickup_lat?:number;pickup_lng?:number;destination?:string;updated_at?:string;released_at?:string};
+export type DriverHistoryEntry={id:string|number;ride_id?:string;region:number;category:string;pickup?:string;pickup_lat?:number;pickup_lng?:number;destination?:string;updated_at?:string;released_at?:string;cancellation?:RideCancellationDetails|null};
 export const driverHistoryPageSize=20;
-export function cloudDriverHistory(token:string,owner:string,kind:DriverHistoryKind,offset:number){
+export async function cloudDriverHistory(token:string,owner:string,kind:DriverHistoryKind,offset:number){
  requireToken(token);
  const page='&driver_id=eq.'+encodeURIComponent(owner)+'&limit='+driverHistoryPageSize+'&offset='+offset;
  const path=kind==='released'
   ? '/rest/v1/driver_ride_releases?select=id,ride_id,region,category,released_at&order=released_at.desc,id.desc'
   : '/rest/v1/rides?select=id,region,category,pickup,pickup_lat,pickup_lng,destination,updated_at&status=eq.'+kind+'&order=updated_at.desc,id.desc';
- return call<DriverHistoryEntry[]>(path+page,'GET',token);
+ const rows=await call<DriverHistoryEntry[]>(path+page,'GET',token);
+ if(kind!=='cancelled'||!rows.length)return rows;
+ const reasons=await cloudRideCancellationDetails(token,rows.map(row=>String(row.id))).catch(()=>[]);
+ const byRide=new Map(reasons.map(reason=>[reason.ride_id,reason]));
+ return rows.map(row=>({...row,cancellation:byRide.get(String(row.id))??null}));
 }
 export async function cloudMyDriver(token:string):Promise<CloudDriver|null>{
   requireToken(token);
@@ -136,10 +140,20 @@ export const cloudSaveDriverVehicleDetails=(token:string,details:DriverVehicleDe
  p_model:details.vehicle_model?.trim()||null,p_change_photo:changePhoto,p_photo:changePhoto?details.photo??null:null,
 });
 export const cloudRideDriverVehicleDetails=(token:string,rideId:string)=>vehicleProfile(token,rideId);
-export async function cloudRideOperation(token:string,kind:'request'|'accept'|'cancel',id:string,owner:string):Promise<CloudRide|null>{
+export type RideOperation='request'|'accept'|'cancel'|'driver-cancel';
+export function matchesRideOperation(kind:RideOperation,owner:string,ride:CloudRide|null):ride is CloudRide{
+ if(!ride)return false;
+ const driver=kind==='accept'||kind==='driver-cancel';
+ const cancellation=kind==='cancel'||kind==='driver-cancel';
+ return (driver?ride.driver_id:ride.passenger_id)===owner&&(!cancellation||ride.status==='cancelled');
+}
+export interface RideCancellationDetails {ride_id:string;actor:CancellationActor;reason:CancellationReason}
+export const cloudRideCancellationDetails=(token:string,rideIds:string[])=>
+ rpc<RideCancellationDetails[]>('ride_cancellation_details',token,{p_ride_ids:rideIds});
+export async function cloudRideOperation(token:string,kind:RideOperation,id:string,owner:string):Promise<CloudRide|null>{
   requireToken(token);
   const column=kind==='request'?'client_request_id':'id';
-  const participant=kind==='accept'?'driver_id':'passenger_id';
+  const participant=kind==='accept'||kind==='driver-cancel'?'driver_id':'passenger_id';
   const rows=await call<CloudRide[]>('/rest/v1/rides?select='+rideColumns+'&'+column+'=eq.'+encodeURIComponent(id)+'&'+participant+'=eq.'+encodeURIComponent(owner)+'&limit=1','GET',token);
   if(!Array.isArray(rows))throw new CloudError(500,'bad_response');
   return rows[0]??null;
@@ -168,7 +182,7 @@ export async function cloudCancelRideWithReason(token:string,id:string,owner:str
   return confirmed;
  }catch(error){
   if(!cloudMutationUncertain(error))throw error;
-  const ride=await cloudRideOperation(token,actor==='driver'?'accept':'cancel',id,owner).catch(()=>null);
+  const ride=await cloudRideOperation(token,actor==='driver'?'driver-cancel':'cancel',id,owner).catch(()=>null);
   if(ride?.status==='cancelled')return true;
   throw error;
  }

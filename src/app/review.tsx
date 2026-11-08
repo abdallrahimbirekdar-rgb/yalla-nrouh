@@ -24,7 +24,7 @@ export default function Review(){
  const sharing=useRideSharing(owner);
  const [sharingOwner,setSharingOwner]=useState<string>();
  const shareOnRequest=!!owner&&sharingOwner===owner;
- const mounted=useRef(false);
+ const mounted=useRef(false),sending=useRef(false);
  useEffect(()=>{mounted.current=true;return()=>{mounted.current=false}},[]);
  useEffect(()=>{
   setPickupReady(false);setQuoted(null);setError('');
@@ -50,8 +50,8 @@ export default function Review(){
  }
  const recovery=useRideRecovery('request',owner,foreground,busy,ride=>{void openRide(ride.id)});
  async function confirm(){
-  if(busy||connection==='offline'||!owner||invalid||(!manualPickup&&!pickupReady)||quoted?.key!==quoteKey||recovery.checking)return;
-  setBusy(true);setError('');
+  if(sending.current||busy||connection==='offline'||!owner||invalid||(!manualPickup&&!pickupReady)||quoted?.key!==quoteKey||recovery.checking)return;
+  sending.current=true;setBusy(true);setError('');
   let submitted=false;
   try{
    let requestDraft=draft;
@@ -83,7 +83,7 @@ export default function Review(){
    const kind=(e as {kind?:string})?.kind;
    if(kind==='YQ001'){setQuoted(null);setQuoteAttempt(value=>value+1);setError(t('انتهت صلاحية التقدير. نحدّث الأجرة؛ راجعها ثم أكّد الطلب.','The estimate expired. We are updating the fare. Check it, then confirm again.'));return}
    setError(kind==='too_many_requests'||kind==='23505'?t('قد يكون لديك طلب نشط. افتح رحلاتي للتحقق.','You may already have an active request. Open My rides to check.'):authErrorMessage(e,state.language));
-  }finally{setBusy(false)}
+  }finally{sending.current=false;setBusy(false)}
  }
  const readyToReview=!!(manualPickup||pickupReady)&&!invalid;
  const canEdit=!busy&&!recovery.id;

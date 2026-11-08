@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {distanceMeters,navigationProgress} from '../src/navigation-progress.ts';
+import {distanceMeters,navigationProgress,pickupApproachLine} from '../src/navigation-progress.ts';
 const plan={from:{latitude:0,longitude:0},to:{latitude:.01,longitude:0},meters:4000,seconds:600,points:[{latitude:0,longitude:0},{latitude:0,longitude:.01},{latitude:.01,longitude:.01},{latitude:.01,longitude:0}],steps:[{instruction:'Go east',meters:1333},{instruction:'Turn left',meters:1334},{instruction:'Turn left again',meters:1333}],provider:'Google Maps'};
 test('navigation follows the road polyline rather than a straight line to the destination',()=>{
  const position={latitude:0,longitude:.01};const progress=navigationProgress(plan,position);
@@ -25,4 +25,10 @@ test('navigation detects arrival and off-route location without advancing ride s
 test('zero-length geometry is bounded and has no invented progress',()=>{
  const p={...plan,points:[plan.from,plan.from],meters:0,seconds:0,steps:[]};const result=navigationProgress(p,plan.from);
  assert.equal(result.remainingMeters,0);assert.equal(result.instruction,'');assert.ok(Number.isFinite(result.remainingSeconds));
+});
+
+test('an approach line reaches the selected pickup even when Google snaps the route to the road',()=>{
+ const taxi={latitude:0,longitude:0},roadside={latitude:.009,longitude:0},pickup={latitude:.01,longitude:0};
+ assert.deepEqual(pickupApproachLine(taxi,pickup,[taxi,roadside]),[taxi,roadside,pickup]);
+ assert.deepEqual(pickupApproachLine(taxi,pickup),[taxi,pickup]);
 });

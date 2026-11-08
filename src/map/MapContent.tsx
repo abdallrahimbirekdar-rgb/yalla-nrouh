@@ -6,7 +6,7 @@ import {type Coordinate} from '../geo';
 import type {CameraTarget} from '../use-current-position';
 import {Button,Label,useText,useTheme} from '../ui';
 
-export default function MapContent({point,destinationPoint,taxiPoint,passengerPoint,onChange,compact=false,route,readOnly=false,lean=false,loadTimeoutMs=25000,cameraTarget,initialCenter,minMapHeight}:{point:Coordinate|null;destinationPoint?:Coordinate;taxiPoint?:Coordinate;passengerPoint?:Coordinate;onChange:(point:Coordinate)=>void;compact?:boolean;route?:Coordinate[];readOnly?:boolean;lean?:boolean;loadTimeoutMs?:number;cameraTarget?:CameraTarget;initialCenter?:Coordinate;minMapHeight?:number}){
+export default function MapContent({point,destinationPoint,taxiPoint,passengerPoint,userPoint,onChange,compact=false,route,readOnly=false,lean=false,loadTimeoutMs=25000,cameraTarget,initialCenter,minMapHeight}:{point:Coordinate|null;destinationPoint?:Coordinate;taxiPoint?:Coordinate;passengerPoint?:Coordinate;userPoint?:Coordinate;onChange:(point:Coordinate)=>void;compact?:boolean;route?:Coordinate[];readOnly?:boolean;lean?:boolean;loadTimeoutMs?:number;cameraTarget?:CameraTarget;initialCenter?:Coordinate;minMapHeight?:number}){
  const t=useText();const {colors,dark}=useTheme();const ref=useRef<MapView>(null);
  const [ready,setReady]=useState(false),[tilesLoaded,setTilesLoaded]=useState(false);
  const [slow,setSlow]=useState(false),[attempt,setAttempt]=useState(0);
@@ -43,7 +43,7 @@ export default function MapContent({point,destinationPoint,taxiPoint,passengerPo
     onMapLoaded={()=>{setTilesLoaded(true);setSlow(false)}}
     onPress={event=>{if(!readOnly)onChange(event.nativeEvent.coordinate)}}
   >
-    {cameraTarget&&cameraTarget.isLocation!==false&&<Marker coordinate={cameraTarget.point} pinColor="#2688e8" title={t('موقعي الحالي','My current location')} zIndex={1}/> }
+    {(userPoint||(cameraTarget?.isLocation!==false&&cameraTarget?.point))&&<Marker coordinate={userPoint??cameraTarget!.point} pinColor="#2688e8" title={t('موقعي الحالي','My current location')} zIndex={1}/> }
     {point&&<Marker title={destinationPoint?'A':undefined} zIndex={2} coordinate={point} draggable={!readOnly} onDragEnd={event=>{if(!readOnly)onChange(event.nativeEvent.coordinate)}}/>}
     {destinationPoint&&<Marker coordinate={destinationPoint} title="B" pinColor="#006da5"/>}
     {taxiPoint&&<Marker coordinate={taxiPoint} title={t('موقع التاكسي','Taxi location')} pinColor="#102a43" zIndex={3}/>}

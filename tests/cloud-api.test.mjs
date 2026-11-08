@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   cloudSignIn,cloudSignOut,cloudSignUp,cloudGetToken,cloudWhoAmI,
-  cloudRequestRide,cloudRideOperation,cloudMutationUncertain,cloudCancelRide,cloudCancelRideWithReason,cloudReleaseRide,CloudError
+  cloudRequestRide,cloudRideOperation,matchesRideOperation,cloudRideCancellationDetails,cloudMutationUncertain,cloudCancelRide,cloudCancelRideWithReason,cloudReleaseRide,CloudError
 } from '../src/cloud-api.ts';
 
 const token='test-access-token-for-requests';
@@ -240,4 +240,35 @@ test('cancellation checks the exact ride when the server reply is lost',async()=
   },async()=>assert.equal(await cloudCancelRideWithReason(token,requestId,'owner',actor,'other'),true));
   assert.equal(submissions,1);
  }
+});
+
+test('a cancellation committed during an outage is recovered after reconnect without posting again',async()=>{
+ const passenger='passenger-account',driver='driver-account',id=requestId;
+ const detail={ride_id:id,actor:'driver',reason:'vehicle_problem'};
+ let row={id,passenger_id:passenger,driver_id:driver,status:'accepted'};
+ let offline=false,posts=0;
+ await withFetch(async (url,options)=>{
+  const {pathname,searchParams}=new URL(url);
+  if(pathname.endsWith('/cancel_ride_with_reason')){
+   posts++;
+   assert.deepEqual(JSON.parse(options.body),{p_ride_id:id,p_actor:'driver',p_reason:'vehicle_problem'});
+   row={...row,status:'cancelled'};offline=true;
+  }
+  if(offline)throw Error('internet disconnected');
+  if(pathname.endsWith('/ride_cancellation_details')){
+   assert.deepEqual(JSON.parse(options.body),{p_ride_ids:[id]});return reply([detail]);
+  }
+  const owner=searchParams.get('driver_id')??searchParams.get('passenger_id');
+  assert.ok(['eq.'+driver,'eq.'+passenger].includes(owner));
+  return reply([row]);
+ },async()=>{
+  assert.equal(matchesRideOperation('driver-cancel',driver,row),false);
+  await assert.rejects(()=>cloudCancelRideWithReason(token,id,driver,'driver','vehicle_problem'),cloudMutationUncertain);
+  offline=false;
+  for(const [kind,owner] of [['driver-cancel',driver],['cancel',passenger]]){
+   assert.ok(matchesRideOperation(kind,owner,await cloudRideOperation(token,kind,id,owner)));
+   assert.deepEqual(await cloudRideCancellationDetails(token,[id]),[detail]);
+  }
+  assert.equal(posts,1);
+ });
 });

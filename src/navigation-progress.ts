@@ -6,6 +6,11 @@ export function distanceMeters(a:Coordinate,b:Coordinate):number{
  const h=Math.sin(dLat/2)**2+Math.cos(radians(a.latitude))*Math.cos(radians(b.latitude))*Math.sin(dLng/2)**2;
  return 6371000*2*Math.atan2(Math.sqrt(Math.min(1,h)),Math.sqrt(Math.max(0,1-h)));
 }
+export function pickupApproachLine(taxi:Coordinate,pickup:Coordinate,road?:Coordinate[]){
+ if(!road||road.length<2)return [taxi,pickup];
+ const last=road[road.length-1];
+ return last.latitude===pickup.latitude&&last.longitude===pickup.longitude?road:[...road,pickup];
+}
 export function navigationProgress(plan:RoutePlan,position:Coordinate){
  const points=plan.points;
  let total=0,best=Infinity,along=0,bestSegment=1,bestProjection:Coordinate|undefined;

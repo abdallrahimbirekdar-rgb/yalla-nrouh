@@ -1,9 +1,8 @@
 import {useEffect,useRef,useState} from 'react';
-import {cloudCurrentToken,cloudRideOperation,type CloudRide} from './cloud-api';
+import {cloudCurrentToken,cloudRideOperation,matchesRideOperation,type CloudRide,type RideOperation} from './cloud-api';
 
-type Operation='request'|'accept';
-type Pending={owner:string;id:string;since:number};
-const storageKey=(kind:Operation,owner:string)=>'yalla-ride-operation:'+kind+':'+owner;
+type Pending={kind:RideOperation;owner:string;id:string;since:number};
+const storageKey=(kind:RideOperation,owner:string)=>'yalla-ride-operation:'+kind+':'+owner;
 // Use secure random bytes on WebViews that predate crypto.randomUUID().
 export function newRideRequestId(){
  if(typeof crypto.randomUUID==='function')return crypto.randomUUID();
@@ -14,20 +13,20 @@ export function newRideRequestId(){
  return [hex.slice(0,8),hex.slice(8,12),hex.slice(12,16),hex.slice(16,20),hex.slice(20)].join('-');
 }
 const idPattern=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-export function readPendingRideOperation(kind:Operation,owner:string|undefined):Pending|null{
+export function readPendingRideOperation(kind:RideOperation,owner:string|undefined):Pending|null{
  if(!owner)return null;
  try{
   const saved=JSON.parse(localStorage.getItem(storageKey(kind,owner))??'null') as Partial<Pending>|null;
   if(typeof saved?.id==='string'&&idPattern.test(saved.id)&&typeof saved.since==='number'&&Number.isFinite(saved.since))
-   return {owner,id:saved.id,since:saved.since};
+   return {kind,owner,id:saved.id,since:saved.since};
  }catch{}
  return null;
 }
 
-export function useRideRecovery(kind:Operation,owner:string|undefined,foreground:boolean,busy:boolean,onFound:(ride:CloudRide)=>void){
+export function useRideRecovery(kind:RideOperation,owner:string|undefined,foreground:boolean,busy:boolean,onFound:(ride:CloudRide)=>void){
  const [operation,setOperation]=useState(()=>readPendingRideOperation(kind,owner));
  const [absentId,setAbsentId]=useState<string|null>(null);
- const pending=operation?.owner===owner?operation:null;
+ const pending=operation?.owner===owner&&operation?.kind===kind?operation:null;
  const found=useRef(onFound);found.current=onFound;
  const account=useRef(owner);account.current=owner;
  const current=useRef(pending);current.current=pending;
@@ -39,7 +38,7 @@ export function useRideRecovery(kind:Operation,owner:string|undefined,foreground
 
  function remember(id:string){
   if(!owner)return;
-  const next={owner,id,since:Date.now()};
+  const next={kind,owner,id,since:Date.now()};
   current.current=next;setOperation(next);setAbsentId(null);
   try{localStorage.setItem(storageKey(kind,owner),JSON.stringify(next))}catch{}
  }
@@ -63,7 +62,7 @@ export function useRideRecovery(kind:Operation,owner:string|undefined,foreground
    try{
     const ride=await cloudRideOperation(await cloudCurrentToken(),kind,id,owner!);
     if(!active||account.current!==owner||current.current?.id!==id)return;
-    if(ride&&(kind==='request'?ride.passenger_id===owner:ride.driver_id===owner)){
+    if(matchesRideOperation(kind,owner!,ride)){
      current.current=null;setOperation(null);setAbsentId(null);
      try{
       const key=storageKey(kind,owner!),raw=localStorage.getItem(key);

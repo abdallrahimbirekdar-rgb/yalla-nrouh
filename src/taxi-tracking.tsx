@@ -8,7 +8,7 @@ import {useApp} from './context';
 import {isCoordinate,type Coordinate} from './geo';
 import {PassengerMap} from './passenger-trip-summary';
 import {navigationPosition} from './navigation-position';
-import {distanceMeters} from './navigation-progress';
+import {distanceMeters,pickupApproachLine} from './navigation-progress';
 import {positionDeadline} from './position-deadline';
 import {Icon,Label,useText,useTheme} from './ui';
 
@@ -71,6 +71,24 @@ export function RideSearchTimer({startedAt,onExpired}:{startedAt:string;onExpire
 export function PassengerTaxiMap({rideId,pickup,status,category}:{rideId:string;pickup:Coordinate;status:string;category:string}){
  const {foreground,connection,state}=useApp();const t=useText();const {colors}=useTheme();
  const riding=status==='riding',approaching=status==='accepted';
+ const [userPoint,setUserPoint]=useState<Coordinate>();
+ useEffect(()=>{
+  if(!foreground||Platform.OS!=='web')return;
+  const controller=new AbortController();
+  let reading=false;
+  async function locate(){
+   if(reading||controller.signal.aborted)return;
+   reading=true;
+   try{
+    const fix=await positionDeadline(signal=>navigationPosition(false,signal),controller,18000);
+    if(!controller.signal.aborted)setUserPoint({latitude:fix.latitude,longitude:fix.longitude});
+   }catch{if(!controller.signal.aborted)setUserPoint(undefined)}
+   finally{reading=false}
+  }
+  void locate();
+  const timer=setInterval(()=>void locate(),15000);
+  return()=>{controller.abort();clearInterval(timer)};
+ },[foreground]);
  const [vehicle,setVehicle]=useState<DriverVehicleDetails|null>(null);
  useEffect(()=>{
   if(!foreground||connection==='offline')return;
@@ -148,14 +166,14 @@ export function PassengerTaxiMap({rideId,pickup,status,category}:{rideId:string;
  const approachingTaxi=approaching&&!stale&&taxi;
  // Draw only the path from the moving taxi to the customer's pickup point.
  // Prefer the remaining street route; a direct line is a temporary fallback.
- const approachRoute=approachingTaxi?(eta.route&&eta.route.length>1?eta.route:[taxi!,pickup]):undefined;
+ const approachRoute=approachingTaxi?pickupApproachLine(taxi!,pickup,eta.route):undefined;
  const remainingMeters=approachingTaxi?(eta.meters??Math.round(distanceMeters(taxi!,pickup))):null;
  const distanceLabel=remainingMeters===null?null:remainingMeters>=1000
   ?(remainingMeters/1000).toLocaleString(state.language,{maximumFractionDigits:1})+' '+t('كم','km')
   :format.format(remainingMeters)+' '+t('م','m');
  const number=format.format(age);
  return <>
-  <PassengerMap point={pickup} route={approachRoute} taxiPoint={taxi}/>
+  <PassengerMap point={pickup} route={approachRoute} taxiPoint={taxi} userPoint={userPoint}/>
   <View style={{backgroundColor:colors.selected,borderRadius:12,paddingHorizontal:12,paddingVertical:8,gap:3}}>
    <View style={{flexDirection:state.language==='ar'?'row-reverse':'row',alignItems:'center',gap:8}}>
     <Icon name="car-outline" color={colors.purple}/>

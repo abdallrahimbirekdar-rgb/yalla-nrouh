@@ -6,6 +6,7 @@ import {useApp} from './context';
 import {categories,regions} from './domain';
 import {formatCoordinate,isCoordinate} from './geo';
 import {createPickupAddressLookup} from './map/pickup-address';
+import {RideCancellationSummary} from './ride-cancellation';
 import {Button,Icon,Label,Panel,useText,useTheme} from './ui';
 
 const sections=[
@@ -132,6 +133,7 @@ function DriverHistoryList({kind,owner}:{kind:DriverHistoryKind;owner:string}){
     </View>
     {pickupAddress&&<HistoryStop label={t('الانطلاق','Pickup')} address={pickupAddress} icon="ellipse-outline" attribution={resolvedAddress?'Google Maps':undefined}/>}
     {item.destination&&<HistoryStop label={t('الوجهة','Destination')} address={item.destination} icon="location-outline"/>}
+    {kind==='cancelled'&&<RideCancellationSummary rideId={String(item.id)} details={item.cancellation??null}/>}
     {kind==='released'&&<Label>{regions[item.region]?.[rtl?0:1]} · {categories.find(c=>c.id===item.category)?.[state.language]??item.category}</Label>}
     <View style={{borderTopWidth:1,borderColor:colors.line,paddingTop:5}}>
      <Label muted>{t('رقم الطلب','Request ID')} · {String(item.ride_id??item.id).slice(0,8)}</Label>
