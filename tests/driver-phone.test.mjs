@@ -99,3 +99,13 @@ test('rejects weak or missing chosen passwords before touching Auth Admin API',a
   assert.equal(adminCalls,0);
  }
 });
+
+test('supports a safe feature check without creating an account',async()=>{
+ let calls=0;
+ await withBackend(async(url)=>{calls++;assert.match(url,/\/rpc\/is_staff_admin$/);return reply(true)},async()=>{
+  const response=await driverPhoneAccount(request({action:'capabilities'}));
+  assert.equal(response.status,200);
+  assert.deepEqual(await response.json(),{mode:'admin_selected_password_v1'});
+ });
+ assert.equal(calls,1);
+});
