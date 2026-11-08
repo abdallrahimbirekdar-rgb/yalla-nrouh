@@ -2,8 +2,12 @@ import {useCallback,useEffect,useMemo,useRef,useState} from 'react';
 import {Linking,Pressable,useWindowDimensions,View} from 'react-native';
 import {authClient} from './auth-client';
 import {isCoordinate,type Coordinate} from './geo';
+import {useApp} from './context';
 import {distanceMeters} from './navigation-progress';
 import MapCanvas from './map/MapCanvas';
+import {PassengerMapFrame,usePassengerMapHeight} from './passenger-trip-summary';
+import {usePickupEta} from './use-pickup-eta';
+import {driverApproachPath,liveDriverFix} from './driver-approach';
 import {Button,HelpTip,Icon,Label,useText,useTheme} from './ui';
 
 type Reply={ok:boolean;rideId?:string|null};
@@ -165,13 +169,14 @@ export function pickupChange(row:Record<string,unknown>|null){
  return isCoordinate(point)?{point,id:row.proposal_id,approved:row.approved===true}:null;
 }
 
-export function CustomerTracking({rideId,pickup,proposedPickup,foreground,compact,duringTrip=false}:{rideId:string;pickup:Coordinate;proposedPickup?:Coordinate;foreground:boolean;compact?:boolean;duringTrip?:boolean}){
- const t=useText();
- const {colors}=useTheme();
- const {height}=useWindowDimensions();
- const mapHeight=compact?Math.max(110,Math.min(165,Math.round(height*0.33))):165;
- const [showPickup,setShowPickup]=useState(false);
- const [cameraRevision,setCameraRevision]=useState(0);
+export function CustomerTracking({rideId,pickup,proposedPickup,foreground,compact,duringTrip=false,taxiFix=null}:{
+ rideId:string;pickup:Coordinate;proposedPickup?:Coordinate;foreground:boolean;compact?:boolean;
+ duringTrip?:boolean;taxiFix?:{point:Coordinate;time:number}|null;
+}){
+ const t=useText(),{state}=useApp(),{colors}=useTheme();
+ const {height}=useWindowDimensions(),expandedHeight=usePassengerMapHeight();
+ const mapHeight=compact?Math.max(110,Math.min(165,Math.round(height*0.33))):expandedHeight;
+ const [showPickup,setShowPickup]=useState(false),[cameraRevision,setCameraRevision]=useState(0);
  const [pageVisible,setPageVisible]=useState(()=>typeof document!=='undefined'&&document.visibilityState==='visible');
  useEffect(()=>{
   if(!compact||typeof document==='undefined')return;
@@ -179,56 +184,74 @@ export function CustomerTracking({rideId,pickup,proposedPickup,foreground,compac
   document.addEventListener('visibilitychange',visibility);
   return()=>document.removeEventListener('visibilitychange',visibility);
  },[compact]);
- // Older Android versions can pause the unfocused app while it is still visible in split screen.
  const visible=compact?pageVisible:foreground;
  const row=useRideRow('ride_passenger_positions',rideId,visible);
- const [now,setNow]=useState(Date.now);
- const [away,setAway]=useState(false);
+ const [now,setNow]=useState(Date.now),[away,setAway]=useState(false);
  useEffect(()=>{
   if(!visible)return;
   setNow(Date.now());
   const timer=setInterval(()=>setNow(Date.now()),1000);
   return()=>clearInterval(timer);
  },[visible]);
- const latitude=row?.latitude,longitude=row?.longitude;
- const point=useMemo(()=>({latitude,longitude}),[latitude,longitude]);
+ const point=useMemo(()=>({latitude:row?.latitude,longitude:row?.longitude}),[row?.latitude,row?.longitude]);
  const measured=typeof row?.measured_at==='string'?Date.parse(row.measured_at):NaN;
  const age=Math.max(0,Math.floor((now-measured)/1000));
  const passenger=isCoordinate(point)&&age<180?point:undefined;
  const distance=passenger&&!duringTrip?Math.round(distanceMeters(pickup,passenger)):null;
  const meetingPoint=proposedPickup??pickup;
- const focus=(!duringTrip&&showPickup)||!passenger?meetingPoint:passenger;
+ // The same street-route estimate used for the passenger's approach map.
+ const taxi=liveDriverFix(taxiFix,now);
+ const eta=usePickupEta(duringTrip?null:taxi,meetingPoint,!duringTrip&&!!taxi&&visible,state.language);
+ const {path:approachRoute,fallback}=driverApproachPath(duringTrip?null:taxi,meetingPoint,eta.route);
+ const overview=!duringTrip&&!!taxi&&!showPickup;
+ const focus=overview?meetingPoint:(!duringTrip&&showPickup)||!passenger?meetingPoint:passenger;
  const {latitude:focusLat,longitude:focusLng}=focus;
  const cameraTarget=useMemo(()=>({
-  point:{latitude:focusLat,longitude:focusLng},revision:cameraRevision,isLocation:false,zoom:19,
- }),[focusLat,focusLng,cameraRevision]);
+  point:{latitude:focusLat,longitude:focusLng},revision:cameraRevision,isLocation:false,zoom:19,overview,
+ }),[focusLat,focusLng,cameraRevision,overview]);
  useEffect(()=>{
   if(distance===null||age>=30)return;
-  if(distance>=100)setAway(true);
-  else if(distance<=65)setAway(false);
+  if(distance>=100)setAway(true);else if(distance<=65)setAway(false);
  },[distance,age]);
- const title=passenger&&(duringTrip||!showPickup)
-  ?age<30?t('موقع الزبون الآن','Customer location now'):t('آخر موقع للزبون','Last customer location')
-  :proposedPickup?t('نقطة الالتقاء الجديدة','New meeting point'):t('نقطة الالتقاء الأصلية','Original meeting point');
+ const title=duringTrip
+  ?t('موقع الزبون','Customer location')
+  :t('الطريق إلى نقطة ركوب الزبون','Route to customer pickup');
  const status=passenger
-  ?age<30?t(`تحديث قبل ${age} ث`,`Updated ${age}s ago`,`Vor ${age} Sek. aktualisiert`):t('موقع الزبون قديم','Customer location is stale')
+  ?age<30?t('تحديث موقع الزبون قبل '+age+' ثانية','Customer location updated '+age+' s ago')
+    :t('آخر موقع للزبون غير حديث','Customer location is not current')
   :t('موقع الزبون غير متاح الآن','Customer location unavailable');
+ const remaining=taxi?(eta.meters??Math.round(distanceMeters(taxi.point,meetingPoint))):null;
+ const distanceText=remaining===null?null:remaining>=1000
+  ?(remaining/1000).toLocaleString(state.language,{maximumFractionDigits:1})+' '+t('كم','km')
+  :remaining.toLocaleString(state.language)+' '+t('م','m');
  if(duringTrip&&!passenger)return null;
- const switchTitle=showPickup?t('عرض الزبون','Show customer'):t('عرض نقطة الالتقاء','Show meeting point');
- return <View style={{backgroundColor:colors.background,borderColor:colors.line,borderWidth:1,borderRadius:14,overflow:'hidden'}}>
-  <View style={{paddingHorizontal:10,paddingVertical:5}}><Label>{title}</Label></View>
-  <View style={{height:mapHeight,overflow:'hidden'}}>
-   <MapCanvas compact readOnly minMapHeight={mapHeight} point={duringTrip?null:meetingPoint} passengerPoint={passenger} cameraTarget={cameraTarget} onChange={()=>{}}/>
+ return <View style={{backgroundColor:colors.background,borderColor:colors.line,borderWidth:1,borderRadius:16,overflow:'hidden',gap:5}}>
+  <View style={{paddingHorizontal:10,paddingTop:9,paddingBottom:4}}><Label>{title}</Label></View>
+  <View style={{height:mapHeight}}>
+   <PassengerMapFrame>
+    <View style={{height:mapHeight-8,overflow:'hidden',borderRadius:14}}>
+     <MapCanvas compact readOnly minMapHeight={mapHeight-8} point={duringTrip?null:meetingPoint}
+      passengerPoint={passenger} taxiPoint={taxi?.point} route={approachRoute} cameraTarget={cameraTarget} onChange={()=>{}}/>
+    </View>
+   </PassengerMapFrame>
   </View>
-  <View style={{paddingHorizontal:10,paddingVertical:5}}>
-   <Label muted>{status}{distance!==null&&t(` · ${distance} م عن نقطة الالتقاء الأصلية`,` · ${distance} m vom ursprünglichen Treffpunkt`)}</Label>
-   {!duringTrip&&passenger&&age<30&&away&&<Label>{t('الزبون ابتعد عن نقطة الالتقاء.','The customer moved away from the meeting point.')}</Label>}
+  <View style={{paddingHorizontal:10,paddingBottom:9,gap:6}}>
+   {!duringTrip&&<View style={{gap:3}}>
+    {taxi&&eta.minutes!==null
+     ?<Label>{t('الوصول خلال نحو ','Arriving in about ')}{eta.minutes.toLocaleString(state.language)} {t('دقيقة','min')}</Label>
+     :taxi?<Label muted>{eta.pending?t('جارٍ حساب وقت الوصول…','Estimating arrival time…'):t('وقت الوصول غير متاح بعد.','Arrival time not available yet.')}</Label>
+      :<Label muted>{t('بانتظار تحديث موقع السيارة لعرض المسار.','Waiting for the taxi location to show the route.')}</Label>}
+    {distanceText&&<Label>{eta.meters===null?t('المسافة المباشرة التقريبية: ','Approximate direct distance: '):t('المسافة المتبقية بالطريق: ','Remaining road distance: ')}{distanceText}</Label>}
+    {fallback&&<Label muted>{t('الخط المباشر مؤقت حتى توفر مسار الشوارع.','The straight line is temporary until the road route is available.')}</Label>}
+   </View>}
+   <Label muted>{status}{distance!==null?t(' · ابتعد عن نقطة الالتقاء الأصلية '+distance+' م',' · '+distance+' m from original pickup'):''}</Label>
+   {!duringTrip&&passenger&&age<30&&away&&<Label>{t('الزبون ابتعد عن نقطة الالتقاء.','The customer moved away from the pickup point.')}</Label>}
    <View style={{flexDirection:'row',flexWrap:'wrap',justifyContent:'space-between',columnGap:8}}>
     <Pressable accessibilityRole="button" onPress={()=>setCameraRevision(value=>value+1)} style={{minHeight:44,flexDirection:'row',alignItems:'center',gap:5}}>
      <Icon name="locate-outline" size={17} color={colors.purple}/><Label>{t('إعادة التوسيط','Recenter map')}</Label>
     </Pressable>
     {!duringTrip&&passenger&&<Pressable accessibilityRole="button" onPress={()=>{setShowPickup(value=>!value);setCameraRevision(value=>value+1)}} style={{minHeight:44,justifyContent:'center'}}>
-     <Label>{switchTitle}</Label>
+     <Label>{showPickup?t('عرض المسار إلى الزبون','Show route to pickup'):t('عرض الزبون','Show customer')}</Label>
     </Pressable>}
    </View>
   </View>
