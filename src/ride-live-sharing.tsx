@@ -202,9 +202,12 @@ export function CustomerTracking({rideId,pickup,proposedPickup,foreground,compac
  // The same street-route estimate used for the passenger's approach map.
  const taxi=liveDriverFix(taxiFix,now);
  const eta=usePickupEta(duringTrip?null:taxi,meetingPoint,!duringTrip&&!!taxi&&visible,state.language);
- const {path:approachRoute,fallback}=driverApproachPath(duringTrip?null:taxi,meetingPoint,eta.route);
+ const {path:approachRoute,fallback}=useMemo(
+  ()=>driverApproachPath(duringTrip?null:taxi,meetingPoint,eta.route),
+  [duringTrip,taxi?.point.latitude,taxi?.point.longitude,meetingPoint.latitude,meetingPoint.longitude,eta.route],
+ );
  const overview=!duringTrip&&!!taxi&&!showPickup;
- const focus=overview?meetingPoint:(!duringTrip&&showPickup)||!passenger?meetingPoint:passenger;
+ const focus=duringTrip&&passenger?passenger:showPickup&&passenger?passenger:meetingPoint;
  const {latitude:focusLat,longitude:focusLng}=focus;
  const cameraTarget=useMemo(()=>({
   point:{latitude:focusLat,longitude:focusLng},revision:cameraRevision,isLocation:false,zoom:19,overview,
