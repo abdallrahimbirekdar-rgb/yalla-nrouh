@@ -1,5 +1,5 @@
 import React,{useCallback,useEffect,useRef,useState} from 'react';
-import {ActivityIndicator,AppState,BackHandler,Image,Linking,Pressable,Text,View} from 'react-native';
+import {AppState,BackHandler,Linking,Pressable,Text,View} from 'react-native';
 import {SafeAreaView} from 'react-native-safe-area-context';
 import {WebView,type WebViewMessageEvent} from 'react-native-webview';
 import * as Location from 'expo-location';
@@ -8,6 +8,7 @@ import {requireOptionalNativeModule} from 'expo-modules-core';
 import {localAlertsGranted,readLocalAlerts,requestLocalAlerts,notifyLocal} from '../alerts';
 import Storage from 'expo-sqlite/kv-store';
 import {setupPermission} from './permission-setup';
+import LaunchScreen from './LaunchScreen';
 import {acceptableFix,awaitFreshFix,deadlineOr,firstUsableMapFix,GpsTaskPool} from './gps';
 import {SITE,websiteEntryUrl,bootstrapScript,diagnosticScript,eventScript,autoFixScript,externalTarget,positionScript,readWebMessage,trustedSite,trustedWebMessage,
  type WebMessage,type PositionResponse} from './bridge';
@@ -470,18 +471,7 @@ export default function FreshAndroid(){
     clearReadyTimer();setLoading(false);setFailed(true);
     }}}
    />}
-  {loading&&!failed&&<View pointerEvents="none" accessibilityRole="progressbar"
-   accessibilityLabel={text('جارٍ تحميل التطبيق','App is loading')}
-   style={{position:'absolute',left:0,right:0,top:0,bottom:0,
-    justifyContent:'center',alignItems:'center',backgroundColor:background,padding:24,gap:18}}>
-   <Image source={require('../../assets/logo-approved.png')} resizeMode="contain"
-    accessibilityLabel={text('شعار يلّا نروح','Yalla Nrouh logo')}
-    style={{width:'100%',maxWidth:280,height:160}}/>
-   <View style={{width:50,height:50,borderRadius:25,alignItems:'center',justifyContent:'center',
-    backgroundColor:colorMode==='dark'?'#153458':'#d5e7ff'}}>
-    <ActivityIndicator color="#0755b3" size="large"/>
-   </View>
-  </View>}
+  {loading&&!failed&&<LaunchScreen loadingLabel={text('جارٍ تحميل التطبيق','App is loading')}/>}
   {failed&&<View style={{position:'absolute',left:0,right:0,top:0,bottom:0,padding:24,
    backgroundColor:background,justifyContent:'center',gap:16}}>
    <Text style={{fontSize:18,color:foreground,textAlign:'center'}}>
