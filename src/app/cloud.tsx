@@ -22,6 +22,7 @@ import {authClient} from '../auth-client';
 import {useRideRecovery} from '../use-ride-recovery';
 import {claimDriverSharingAttempt,readDriverSharingConsent,saveDriverSharingConsent} from '../driver-sharing-consent';
 import {createRefreshQueue} from '../refresh-queue';
+import {applyConfirmedCancellations,isUnresolvedRide} from '../ride-cancellation-state';
 import {Button,DriverModeIcon,HelpTip,Icon,Label,Page,Panel,useText,useTheme} from '../ui';
 const live=(r:CloudRide)=>!['completed','cancelled'].includes(r.status);
 export default function Rides(){
@@ -58,6 +59,8 @@ export default function Rides(){
   return()=>clearTimeout(timer);
  },[driverMode,offers]);
  const offerRead=useRef(0),historyRead=useRef(0);
+ const confirmedCancelledIds=useRef<Set<string>>(new Set());
+ const pendingCancellationId=useRef<string|null>(null);
  const alive=useRef(true),queue=useRef(createRefreshQueue()).current,identity=useRef(auth.session?.user.id),mode=useRef(driverMode);identity.current=auth.session?.user.id;mode.current=driverMode;
  useEffect(()=>{alive.current=true;return()=>{alive.current=false}},[]);
  const refresh=useCallback(async()=>{
@@ -69,7 +72,19 @@ export default function Rides(){
    const ticket=++offerRead.current,historyTicket=++historyRead.current;
    const readInbox=driverMode?cloudDriverInbox(token):Promise.resolve({driver:null,offers:[] as RidePreview[]});
    const [history,inbox]=await Promise.allSettled([
-    cloudMyRides(token).then(next=>{if(isCurrent()&&historyTicket===historyRead.current)setRides(next)}),
+    cloudMyRides(token).then(next=>{
+     if(!isCurrent()||historyTicket!==historyRead.current)return;
+     const pending=pendingCancellationId.current;
+     if(pending&&next.some(ride=>ride.id===pending&&ride.status==='cancelled')){
+      confirmedCancelledIds.current.add(pending);
+      pendingCancellationId.current=null;
+      setCancelId(previous=>previous===pending?null:previous);
+      setCancelError('');
+      setCancelConfirmed(true);
+      setNotice(t('تم إلغاء الرحلة بنجاح. يمكنك استقبال طلب جديد.','Ride cancelled. You can accept a new request.'));
+     }
+     setRides(applyConfirmedCancellations(next,confirmedCancelledIds.current));
+    }),
     readInbox.then(next=>{
      if(!isCurrent())return;
      setDriver(next.driver);
@@ -85,8 +100,10 @@ export default function Rides(){
    if(history.status==='rejected')throw history.reason;
   });
  },[userId,driverMode,queue]);
- useEffect(()=>{setRides([]);setOffers([]);setDriver(null);setInboxProblem(false);setLoading(true);if(!userId){setLoading(false);return}let active=true;void refresh().catch(()=>{if(active){setNotice(t('تعذر تحميل الرحلات. تحقق من الاتصال وأعد المحاولة.','Could not load rides. Check internet and retry.'));setLoading(false)}});return()=>{active=false}},[refresh,userId,state.language,t]);
- const currentDriverRide=driverMode?rides.find(r=>r.driver_id===userId&&live(r)):undefined;
+ useEffect(()=>{
+  confirmedCancelledIds.current.clear();pendingCancellationId.current=null;
+  setRides([]);setOffers([]);setDriver(null);setInboxProblem(false);setLoading(true);if(!userId){setLoading(false);return}let active=true;void refresh().catch(()=>{if(active){setNotice(t('تعذر تحميل الرحلات. تحقق من الاتصال وأعد المحاولة.','Could not load rides. Check internet and retry.'));setLoading(false)}});return()=>{active=false}},[refresh,userId,state.language,t]);
+ const currentDriverRide=driverMode?rides.find(r=>r.driver_id===userId&&isUnresolvedRide(r,confirmedCancelledIds.current)):undefined;
  // Track the driver's own moving taxi, independently of customer location sharing.
  const [driverMapFix,setDriverMapFix]=useState<{point:{latitude:number;longitude:number};time:number}|null>(null);
  const pickupRideId=driverMode&&currentDriverRide&&['accepted','arrived'].includes(currentDriverRide.status)?currentDriverRide.id:null;
@@ -125,7 +142,13 @@ export default function Rides(){
  },[userId,driverMode,driver?.approved,driver?.online,currentDriverRide,foreground,connection]);
  const recovery=useRideRecovery('accept',driverMode?userId:undefined,foreground,busy,ride=>{
   historyRead.current++;
-  setRides(previous=>[ride,...previous.filter(item=>item.id!==ride.id)]);
+  if(ride.status==='cancelled')confirmedCancelledIds.current.add(ride.id);
+  if(confirmedCancelledIds.current.has(ride.id)){
+   setRides(previous=>applyConfirmedCancellations(previous,confirmedCancelledIds.current));
+   void refresh().catch(()=>{});
+   return;
+  }
+  setRides(previous=>applyConfirmedCancellations([ride,...previous.filter(item=>item.id!==ride.id)],confirmedCancelledIds.current));
   setNotice(t('تم تأكيد قبول الطلب.','Request acceptance confirmed.'));
   void refresh().catch(()=>{});
  });
@@ -233,7 +256,7 @@ export default function Rides(){
  }
  const status=(value:string)=>({requested:t('بانتظار السائق','Waiting for driver'),accepted:t('السائق في الطريق','Driver is on the way'),arrived:t('وصل السائق','Driver arrived'),riding:t('الرحلة جارية','Ride in progress'),completed:t('مكتملة','Completed'),cancelled:t('ملغاة','Cancelled')} as Record<string,string>)[value]??value;
  const mine=rides.filter(r=>r.passenger_id===userId);
- const currentPassengerRide=mine.find(live);
+ const currentPassengerRide=mine.find(ride=>isUnresolvedRide(ride,confirmedCancelledIds.current));
  const proposalRide=approachingRide?.id??(!driverMode&&currentPassengerRide&&currentPassengerRide.status!=='requested'?currentPassengerRide.id:undefined);
  const proposal=pickupChange(useRideRow('ride_pickup_changes',proposalRide,foreground));
  const passengerRide=driverMode||historyMode?undefined:currentPassengerRide;
@@ -323,29 +346,40 @@ export default function Rides(){
  const searchingRide=!driverMode&&!historyMode&&currentPassengerRide?.status==='requested'?currentPassengerRide:undefined;
  const cancellationRide=cancelId&&(driverMode?currentDriverRide:currentPassengerRide);
  function openCancellation(ride:CloudRide){
+  pendingCancellationId.current=null;
   setCancelError('');setCancelConfirmed(false);setNotice('');setCancelId(ride.id);
  }
  async function confirmCancellation(reason:CancellationReason){
   if(busy||!userId||!cancellationRide||cancellationRide.id!==cancelId)return;
   const id=cancellationRide.id,owner=userId,actor=driverMode?'driver':'passenger';
   const isCurrent=()=>alive.current&&identity.current===owner&&mode.current===driverMode;
+  pendingCancellationId.current=id;
   setBusy(true);setCancelError('');
   try{
    const token=await cloudCurrentToken();
    if(!isCurrent())return;
    const confirmed=await cloudCancelRideWithReason(token,id,owner,actor,reason);
    if(!isCurrent())return;
-   if(!confirmed){
-    setCancelError(t('لم يعد الإلغاء متاحًا لهذه الرحلة.','This ride can no longer be cancelled.','Diese Fahrt kann nicht mehr storniert werden.'));
-   }else{
+   if(confirmed){
+    pendingCancellationId.current=null;
+    confirmedCancelledIds.current.add(id);
     historyRead.current++;
-    setRides(previous=>previous.map(ride=>ride.id===id?{...ride,status:'cancelled'}:ride));
+    setRides(previous=>applyConfirmedCancellations(previous,confirmedCancelledIds.current));
+    if(recovery.id===id)recovery.clear();
+    setCancelId(null);
+    setCancelError('');
     setCancelConfirmed(true);
-    closeCancellation();
+    setNotice(t('تم إلغاء الرحلة بنجاح. يمكنك استقبال طلب جديد.','Ride cancelled. You can accept a new request.'));
+   }else{
+    pendingCancellationId.current=null;
+    setCancelError(t('لم يعد الإلغاء متاحًا لهذه الرحلة. حدّث حالة الطلب.','This ride can no longer be cancelled. Refresh its status.'));
    }
    void refresh().catch(()=>{});
   }catch{
-   if(isCurrent())setCancelError(t('تعذّر التحقق من الإلغاء. حاول مجددًا.','Could not confirm the cancellation. Try again.','Die Stornierung konnte nicht bestätigt werden. Versuche es erneut.'));
+   if(isCurrent()){
+    setCancelError(t('تعذّر تأكيد نتيجة الإلغاء. جارٍ تحديث حالة الرحلة، ولا حاجة لتكرار الطلب فورًا.','Could not confirm cancellation yet. Checking the ride status; do not retry immediately.'));
+    void refresh().catch(()=>{});
+   }
   }finally{if(alive.current&&identity.current===owner)setBusy(false)}
  }
  function reuseDestination(ride:CloudRide){
