@@ -1,10 +1,10 @@
-import {useEffect,useState} from 'react';
+import {useCallback,useState} from 'react';
+import {useFocusEffect} from 'expo-router';
 import {ActivityIndicator,Linking,View} from 'react-native';
-import {cloudAdminServiceUsage,cloudCurrentToken,cloudRecordServiceUsage} from './cloud-api';
+import {cloudAdminServiceUsage,cloudCurrentToken} from './cloud-api';
 import {useApp} from './context';
-import {parseAmount} from './meter';
-import {nextGoogleReset,quotaRemaining,serviceMetrics,usageSnapshotExpired,validUsageDate,type AdminServiceUsage,type UsageMetric,type UsageSnapshot} from './service-usage';
-import {Button,Field,Label,Panel,useText,useTheme} from './ui';
+import {nextGoogleReset,quotaRemaining,serviceMetrics,type AdminServiceUsage} from './service-usage';
+import {Button,Label,Panel,useText,useTheme} from './ui';
 
 const organization='https://supabase.com/dashboard/org/jputmlhqnsyaxyvimord/usage';
 const googleBilling='https://console.cloud.google.com/billing';
@@ -27,82 +27,68 @@ function Quantity({used,cap,unit=''}:{used:number;cap:number;unit?:string}){
   {level==='near'&&<Label muted>{t('وصل الاستخدام إلى ٨٠٪ من الحد على الأقل.','Usage is at least 80% of the limit.')}</Label>}
  </>;
 }
-function Metric({metric,snapshot,now,onSaved}:{metric:UsageMetric;snapshot?:UsageSnapshot;now:Date;onSaved:()=>void}){
- const t=useText();const {state}=useApp();const {colors}=useTheme();
- const [editing,setEditing]=useState(false),[used,setUsed]=useState(''),[reset,setReset]=useState('');
- const [busy,setBusy]=useState(false),[failed,setFailed]=useState(false);
- const expired=!!snapshot&&usageSnapshotExpired(metric,snapshot,now);
- const resetDate=metric.reset==='google'?nextGoogleReset(now):snapshot?.resets_on;
- const amount=parseAmount(used);
- async function save(){
-  if(busy||amount===null||amount>1000000000000||(reset!==''&&!validUsageDate(reset)))return;
-  setBusy(true);setFailed(false);
-  try{
-   const date=metric.reset==='google'?nextGoogleReset(now):metric.reset==='manual'?(reset||null):null;
-   if(!await cloudRecordServiceUsage(await cloudCurrentToken(),metric.id,amount,date))throw Error('save');
-   setEditing(false);onSaved();
-  }catch{setFailed(true)}finally{setBusy(false)}
- }
- return <View style={{gap:6,paddingVertical:8,borderTopWidth:1,borderColor:colors.line}}>
-  <Label>{t(metric.ar,metric.en)}</Label>
-  {snapshot&&!expired?<Quantity used={snapshot.used} cap={metric.cap} unit={metric.unit}/>:<>
-   <Label muted>{t('الحد المرجعي المجاني','Reference free cap')} · {new Intl.NumberFormat(state.language).format(metric.cap)} {metric.unit}</Label>
-   <Label muted>{expired?t('قراءة من فترة سابقة. أدخل قراءة الفترة الحالية.','The reading is from a previous period. Enter the current usage.'):t('لم يُسجّل الاستخدام بعد.','Usage has not been recorded yet.')}</Label>
-  </>}
-  {!!resetDate&&<Label muted>{expired&&metric.reset==='manual'?t('تاريخ تجديد القراءة السابقة','Renewal date for the previous reading'):t('تجديد الحصة','Quota renewal')} · {resetDate}{metric.reset==='google'?t('، منتصف الليل بتوقيت المحيط الهادئ',' at midnight Pacific time'):''}</Label>}
-  {snapshot&&<Label muted>{t('آخر قراءة يدوية','Last manual reading')} · {new Date(snapshot.recorded_at).toLocaleString(state.language)}</Label>}
-  {editing?<>
-   <Field label={t('الاستخدام الحالي من لوحة المزوّد','Current usage from provider console')+(metric.unit?' · '+metric.unit:'')} value={used} onChangeText={setUsed} keyboardType="decimal-pad" editable={!busy} maxLength={20}/>
-   {metric.reset==='manual'&&<Field label={t('تاريخ التجديد إن ظهر في لوحة المزوّد','Renewal date if shown in provider console')} placeholder="YYYY-MM-DD" value={reset} onChangeText={setReset} editable={!busy} maxLength={10}/>}
-   <Button title={t('حفظ القراءة','Save reading')} disabled={busy||amount===null||amount>1000000000000||(reset!==''&&!validUsageDate(reset))} onPress={()=>void save()}/>
-   <Button secondary title={t('إلغاء','Cancel')} disabled={busy} onPress={()=>setEditing(false)}/>
-   {failed&&<View accessibilityRole="alert"><Label>{t('تعذّر حفظ القراءة.','Could not save the reading.')}</Label></View>}
-  </>:<Button secondary title={t('إدخال الاستخدام','Enter usage')} onPress={()=>{setUsed(snapshot&&!expired?String(snapshot.used):'');setReset(resetDate&&!expired&&metric.reset==='manual'?resetDate:'');setFailed(false);setEditing(true)}}/>}
- </View>;
-}
-
+const refreshIntervalMs=60000;
 export default function ServiceUsage(){
- const t=useText();const {state}=useApp();
- const [data,setData]=useState<AdminServiceUsage|null>(null),[attempt,setAttempt]=useState(0);
- const [busy,setBusy]=useState(true),[failed,setFailed]=useState(false);
- useEffect(()=>{
-  let active=true;setBusy(true);setFailed(false);
-  void cloudCurrentToken().then(cloudAdminServiceUsage).then(value=>{if(active)setData(value)})
-   .catch(()=>{if(active)setFailed(true)}).finally(()=>{if(active)setBusy(false)});
-  return()=>{active=false};
- },[attempt]);
- const refresh=()=>setAttempt(value=>value+1);
+ const t=useText();const {state,foreground,connection}=useApp();
+ const [data,setData]=useState<AdminServiceUsage|null>(null);
+ const [busy,setBusy]=useState(false),[failed,setFailed]=useState(false);
+ useFocusEffect(useCallback(()=>{
+  if(!foreground||connection==='offline')return;
+  let active=true;
+  let timer:ReturnType<typeof setTimeout>|undefined;
+  async function refresh(){
+   setBusy(true);
+   try{
+    const reading=await cloudAdminServiceUsage(await cloudCurrentToken());
+    if(active){setData(reading);setFailed(false)}
+   }catch{if(active)setFailed(true)}
+   finally{
+    if(active){setBusy(false);timer=setTimeout(()=>void refresh(),refreshIntervalMs)}
+   }
+  }
+  void refresh();
+  return()=>{active=false;clearTimeout(timer)};
+ },[foreground,connection]));
  const now=new Date();
+ const format=(value:number)=>new Intl.NumberFormat(state.language,{maximumFractionDigits:2}).format(value);
  const metrics=(group:keyof typeof serviceMetrics)=>serviceMetrics[group].map(metric=>
-  <Metric key={metric.id} metric={metric} now={now} snapshot={data?.snapshots[metric.id]} onSaved={refresh}/>);
+  <Label key={metric.id} muted>{t(metric.ar,metric.en)} · {format(metric.cap)} {metric.unit}</Label>);
  return <>
   <Panel outlined>
-   <Label>{t('تُقاس قاعدة بيانات يلّا نروح وطلبات المسار الداخلية تلقائيًا. بقية قراءات الاستخدام تدخلها من لوحات المزوّدين.','Yalla Nrouh database size and the internal route counter are measured automatically. Enter other readings from the provider consoles.')}</Label>
-   <Button secondary icon="refresh-outline" title={t('تحديث القياسات','Refresh readings')} disabled={busy} onPress={refresh}/>
-   {busy&&<ActivityIndicator/>}
-   {failed&&<View accessibilityRole="alert"><Label>{t('تعذّر تحديث القياسات.','Could not refresh the readings.')}</Label></View>}
+   <Label>{t('تتحدّث قياسات يلّا نروح كل دقيقة تلقائيًا أثناء فتح هذه الصفحة، وتُحدّث فور عودة الاتصال.','Yalla Nrouh metrics refresh every minute while this page is open, and immediately after reconnecting.')}</Label>
+   {connection==='offline'?<Label muted>{t('بانتظار الاتصال. إذا ظهر قياس فهو آخر قراءة محفوظة على هذه الصفحة.','Waiting for a connection. Any values shown are the last reading on this page.')}</Label>:busy&&<ActivityIndicator/>}
+   {failed&&<View accessibilityRole="alert"><Label>{t('تعذّر تحديث القياسات. سنحاول مجددًا تلقائيًا.','Could not refresh the readings. Retrying automatically.')}</Label></View>}
    {data&&<Label muted>{t('آخر قياس مباشر','Last live measurement')} · {new Date(data.checked_at).toLocaleString(state.language)}</Label>}
   </Panel>
   <Panel>
    <Label large>Supabase · {t('قاعدة البيانات والمصادقة','Database and Auth')}</Label>
    <Label>{t('يلّا نروح وسوق داريا مشروعان منفصلان ضمن نفس المؤسسة المجانية. يستخدمان خانتي المشاريع المتاحتين في الحساب. لكل مشروع قاعدة بيانات بحد ٥٠٠ MB. حصص النقل والتخزين والمستخدمين والدوال وRealtime مشتركة على مستوى المؤسسة.','Yalla Nrouh and Sooq Daraya are separate projects in the same Free organization. They use both free project slots. Each project has its own 500 MB database allowance. The egress, file storage, user, function and Realtime allowances are shared by the organization.')}</Label>
    <Label muted>{t('تحقّقت من الخطة والمشاريع في 2026-11-08. حجم قاعدة يلّا نروح يشمل حجم PostgreSQL ويُعرض بالتقريب.','Plan and projects checked on 2026-11-08. Yalla Nrouh’s PostgreSQL database size is approximate.')}</Label>
-   {data&&<Quantity used={data.database_bytes/1000000} cap={500} unit="MB"/>}
+   {data&&<>
+    <Label>{t('قاعدة بيانات يلّا نروح','Yalla Nrouh database')}</Label>
+    <Quantity used={data.database_bytes/1000000} cap={500} unit="MB"/>
+    <Label>{t('ملفات مشروع يلّا نروح في Supabase Storage','Yalla Nrouh files in Supabase Storage')} · {format(data.storage_bytes/1000000)} MB</Label>
+    <Label>{t('حسابات يلّا نروح التي سجّلت الدخول خلال ٣٠ يومًا','Yalla Nrouh accounts with a sign-in in the last 30 days')} · {format(data.recent_sign_ins)}</Label>
+   </>}
+   <Label muted>{t('هذه القياسات لمشروع يلّا نروح. الاستهلاك المشترك وفاتورة المشروعين تظهر في لوحة مؤسسة Supabase.','These readings cover Yalla Nrouh. The Supabase organization dashboard shows shared usage and billing for both projects.')}</Label>
    <External title={t('استخدام مؤسسة Supabase','Supabase organization usage')} url={organization}/>
    <External title={t('حدود خطة Supabase الرسمية','Official Supabase plan limits')} url="https://supabase.com/docs/guides/platform/billing-on-supabase"/>
+   <Label>{t('الحصص المرجعية المشتركة','Shared reference allowances')}</Label>
    {metrics('supabase')}
    <Label muted>{t('قد يوقف Supabase المشروع المجاني قليل النشاط بعد سبعة أيام. هذا منفصل عن استهلاك الحصص.','Supabase may pause a Free project after seven days of low activity, separately from quota usage.')}</Label>
    <Label muted>{t('خدمة البريد الافتراضية في Supabase محدودة برسالتين في الساعة وعناوين فريق المشروع. إذا استُخدم SMTP مخصص، تُراجع حصته لدى مزوّد البريد.','Supabase’s default SMTP is limited to two emails per hour and project team addresses. If custom SMTP is configured, check the email provider’s quota.')}</Label>
   </Panel>
   <Panel>
    <Label large>Google Maps Platform</Label>
-   <Label muted>{t('الأرقام أدناه مرجع للتسعير العالمي حسب الاستخدام. أدخل الاستخدام القابل للفوترة من تقرير SKU في حساب الفوترة، بما يشمل المشاريع المرتبطة به عند الاقتضاء.','The figures below are global pay-as-you-go references. Enter billable usage from the SKU report for your billing account, including other linked projects when applicable.')}</Label>
+   <Label muted>{t('الأرقام أدناه مرجع للتسعير العالمي حسب الاستخدام. الاستهلاك والمتبقي الفعليان يظهران في تقرير SKU في حساب الفوترة.','The figures below are global pay-as-you-go references. See the SKU report in your billing account for actual usage and remaining allowance.')}</Label>
    <External title={t('فتح فواتير Google Cloud','Open Google Cloud Billing')} url={googleBilling}/>
    <External title={t('حدود وأسعار Google الرسمية','Google pricing and limits')} url="https://developers.google.com/maps/billing-and-pricing/pricing"/>
    {metrics('google')}
+   <Label muted>{t('تجديد حصص Google','Google quota renewal')} · {nextGoogleReset(now)} · {t('منتصف الليل بتوقيت المحيط الهادئ','midnight Pacific time')}</Label>
    <Label>{t('عداد حساب الطريق الداخلي في يلّا نروح','Yalla Nrouh internal route counter')}</Label>
    {data&&<>
     <Quantity used={data.proxy_calls_today} cap={100}/>
+    <Label muted>{t('طلبات العداد خلال آخر ٣٠ يومًا حسب UTC','Proxy counter over the last 30 UTC dates')} · {format(data.proxy_calls_30_days)}</Label>
     <Label muted>{t('يتجدّد','Resets')} · {new Date(data.proxy_resets_at).toLocaleString(state.language)}</Label>
    </>}
    <Label muted>{t('هذا عداد يومي للخدمة داخل التطبيق. يستثني طلبات الإدارة ومصفوفة توزيع السائقين. تعرّف الفاتورة الاستخدام الفعلي لدى Google.','This is the app’s daily proxy counter. It excludes admin calls and driver-dispatch matrix calls. Check Google Billing for actual usage.')}</Label>

@@ -31,10 +31,10 @@ export function HomeBrandLogo({onNavigate,...appearance}:React.ComponentProps<ty
  const {state}=useApp();
  const auth=useAuth();
  const path=usePathname();
- const adminHome=auth.admin&&path==='/admin';
+ const adminHome=auth.admin;
  function goHome(){
   onNavigate?.();
-  if(adminHome)router.setParams({section:''});
+  if(adminHome)router.replace({pathname:'/admin',params:{section:'home'}});
   else if(auth.driver)router.replace({pathname:'/cloud',params:{mode:'driver'}});
   else if(path!=='/')router.replace('/');
  }

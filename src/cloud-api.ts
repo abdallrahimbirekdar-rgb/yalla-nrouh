@@ -1,7 +1,7 @@
 import type {AdminServiceUsage} from './service-usage.ts';
 import type {CancellationActor,CancellationReason} from './ride-cancellation';
 import {readRideState,receiveRideState} from './cloud-ride-state.ts';
-import type {TripDraft} from './domain.ts';
+import type {RideType,TripDraft} from './domain.ts';
 import {validTariff,type Tariff} from './meter.ts';
 import {isCoordinate} from './geo.ts';
 import {pickupRegion} from './map/pickup-region.ts';
@@ -89,8 +89,6 @@ export interface DispatchOverview {
  rides:{id:string;status:CloudRide['status'];category:string;created_at:string;search_expired_at:string|null;started_at:string|null;matrix_state:string|null;first_offer_at:string|null;accepted_at:string|null}[];
 }
 export const cloudAdminServiceUsage=(token:string)=>rpc<AdminServiceUsage>('admin_service_usage',token);
-export const cloudRecordServiceUsage=(token:string,metric:string,used:number,resetsOn:string|null)=>
- rpc<boolean>('admin_record_service_usage',token,{p_metric:metric,p_used:used,p_resets_on:resetsOn});
 export const cloudAdminDispatchOverview=(token:string)=>rpc<DispatchOverview>('admin_dispatch_overview',token);
 export async function cloudMyRides(token:string):Promise<CloudRide[]>{
   requireToken(token);
@@ -208,6 +206,11 @@ export function cloudReviseAdminRule(token:string,expectedId:number,section:stri
 export const cloudIsAdmin=(token:string)=>rpc<boolean>('is_staff_admin',token);
 export const cloudStaffDrivers=(token:string)=>rpc<StaffDriver[]>('admin_pending_drivers',token);
 export const cloudApproveDriver=(token:string,id:string,approved:boolean)=>rpc<boolean>('admin_review_driver',token,{p_driver_id:id,p_approved:approved});
+export type DriverPhoneAction=
+ |{action:'create';phone:string;name:string;region:number;category:RideType}
+ |{action:'reset';phone:string};
+export const cloudAdminPhoneDriver=(token:string,data:DriverPhoneAction)=>
+ call<{phone:string;password:string}>('/functions/v1/driver-phone-account','POST',token,data);
 // Admin adds only a verified existing Supabase Auth user, not credentials.
 export function cloudAdminAddDriverByEmail(token:string,email:string,region=0,category='classic'):Promise<boolean>{
  const clean=email.trim().toLowerCase();
