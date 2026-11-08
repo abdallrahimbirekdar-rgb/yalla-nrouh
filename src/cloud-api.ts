@@ -209,6 +209,8 @@ export const cloudApproveDriver=(token:string,id:string,approved:boolean)=>rpc<b
 export type DriverPhoneAction=
  |{action:'create';phone:string;password:string;name:string;region:number;category:RideType}
  |{action:'reset';phone:string;password:string};
+export const cloudAdminPhoneCapabilities=(token:string)=>
+ call<{mode:string}>('/functions/v1/driver-phone-account','POST',token,{action:'capabilities'});
 export const cloudAdminPhoneDriver=(token:string,data:DriverPhoneAction)=>
  call<{phone:string}>('/functions/v1/driver-phone-account','POST',token,data);
 // Admin adds only a verified existing Supabase Auth user, not credentials.
