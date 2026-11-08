@@ -8,7 +8,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import {Stack,router,usePathname} from 'expo-router';
 import {StatusBar} from 'expo-status-bar';
 import {AppProvider,useApp} from '../context';
-import {BrandLogo} from '../brand-logo';
+import {HomeBrandLogo} from '../brand-logo';
 import {AccountButton,AppMenu,Button,Label,useText} from '../ui';
 import {brandHeader,useTheme} from '../theme';
 
@@ -46,7 +46,7 @@ function PersistentSiteHeader(){
  const {state}=useApp();
  return <View style={{backgroundColor:brandHeader.background,borderBottomColor:brandHeader.accent,borderBottomWidth:2,paddingHorizontal:12,paddingVertical:6}}>
   <View style={{width:'100%',maxWidth:1000,alignSelf:'center',minHeight:62,flexDirection:state.language==='ar'?'row-reverse':'row',alignItems:'center',justifyContent:'space-between',gap:8}}>
-   <BrandLogo inverse/>
+   <HomeBrandLogo inverse/>
    <View style={{flexDirection:'row',alignItems:'center',gap:8,flexShrink:0}}>
     <AccountButton/>
     <AppMenu inverse onSettings={auth.driver?()=>router.push({pathname:'/settings',params:{mode:'driver'}}):undefined}/>

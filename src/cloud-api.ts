@@ -1,3 +1,4 @@
+import type {AdminServiceUsage} from './service-usage.ts';
 import type {CancellationActor,CancellationReason} from './ride-cancellation';
 import {readRideState,receiveRideState} from './cloud-ride-state.ts';
 import type {TripDraft} from './domain.ts';
@@ -87,6 +88,9 @@ export interface DispatchOverview {
  route_errors_24h:number;
  rides:{id:string;status:CloudRide['status'];category:string;created_at:string;search_expired_at:string|null;started_at:string|null;matrix_state:string|null;first_offer_at:string|null;accepted_at:string|null}[];
 }
+export const cloudAdminServiceUsage=(token:string)=>rpc<AdminServiceUsage>('admin_service_usage',token);
+export const cloudRecordServiceUsage=(token:string,metric:string,used:number,resetsOn:string|null)=>
+ rpc<boolean>('admin_record_service_usage',token,{p_metric:metric,p_used:used,p_resets_on:resetsOn});
 export const cloudAdminDispatchOverview=(token:string)=>rpc<DispatchOverview>('admin_dispatch_overview',token);
 export async function cloudMyRides(token:string):Promise<CloudRide[]>{
   requireToken(token);
