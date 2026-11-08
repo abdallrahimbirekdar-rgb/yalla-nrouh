@@ -1,0 +1,77 @@
+{
+  "email": "info@damascus-shop.com",
+  "sections": [
+    {
+      "heading": [
+        "من يدير الخدمة وكيف تتواصل معنا",
+        "Service operator and contact",
+        "Anbieter und Kontakt"
+      ],
+      "body": [
+        "تغطي هذه السياسة تطبيق يلّا نروح وموقعه. للاستفسار عن بياناتك أو طلب تصحيحها أو حذفها، راسل فريق يلّا نروح على بريد الخصوصية الموضّح أدناه.",
+        "This policy covers the Yalla Nrouh app and website. Contact the Yalla Nrouh team at the privacy email below to ask about, correct or delete your data.",
+        "Diese Erklärung gilt für die App und Website von Yalla Nrouh. Fragen, Berichtigungs- und Löschanfragen kannst du an die unten genannte E-Mail-Adresse richten."
+      ]
+    },
+    {
+      "heading": [
+        "الحساب والملف الشخصي",
+        "Account and profile",
+        "Konto und Profil"
+      ],
+      "body": [
+        "نستخدم بريدك الإلكتروني ومعرّف حسابك لتسجيل الدخول وإدارة الحساب. اسمك ورقم هاتفك في الملف الشخصي اختياريان وخاصان بحسابك. يمكنك تعديلهما أو إفراغهما في أي وقت. يستطيع السائق حفظ اسم للعرض وفئة السيارة ولونها ولوحتها. تظهر بيانات التعرّف على السيارة للسائق وللزبون المعيّن أثناء الرحلة.",
+        "We use your email and account ID to sign you in and manage your account. Your optional profile name and phone number are private and can be edited or cleared. Drivers can provide a display name, vehicle class, color and plate. The driver and the assigned passenger can see vehicle identification details during the ride.",
+        "E-Mail-Adresse und Konto-ID dienen der Anmeldung und Kontoverwaltung. Dein freiwillig hinterlegter Name und deine Telefonnummer sind privat und können geändert oder geleert werden. Fahrer können Anzeigename, Fahrzeugklasse, Farbe und Kennzeichen hinterlegen. Diese Angaben sind während der Fahrt für Fahrer und zugeordnete Fahrgäste sichtbar."
+      ]
+    },
+    {
+      "heading": [
+        "الرحلات والموقع",
+        "Rides and location",
+        "Fahrten und Standort"
+      ],
+      "body": [
+        "نستخدم عناوين الانطلاق والوصول وإحداثياتهما والأماكن المحفوظة لتجهيز الطلب وعرض المسار وتقدير الأجرة. عند تفعيل إذن الموقع يمكن للتطبيق قراءة موقع الجهاز. نستخدم موقع السائق أثناء التوفّر لتوزيع الطلبات، ويستطيع طرفا الرحلة رؤية تحديثات الموقع بحسب المرحلة وإعدادات المشاركة. على أندرويد يمكن أن تستمر مشاركة الموقع أثناء رحلة نشطة عند تفعيلها، حتى عند تصغير التطبيق أو فتح الملاحة، مع إشعار يسمح بإيقافها. يمكن سحب إذن الموقع من إعدادات الجهاز.",
+        "We use pickup and drop-off addresses and coordinates, and saved places, to prepare bookings, show routes and estimate fares. The app can read your device location if permission is granted. Available drivers’ locations help match rides. During a ride, the parties can see location updates based on ride stage and sharing settings. On Android, enabled sharing for an active ride may continue when the app is minimized or navigation opens, with a notification that lets you stop it. Location permission can be withdrawn in device settings.",
+        "Abhol- und Zieladressen, Koordinaten und gespeicherte Orte dienen der Buchung, Routenanzeige und Preisberechnung. Mit Standortberechtigung kann die App den Gerätestandort lesen. Der Standort verfügbarer Fahrer hilft bei der Vermittlung. Standortupdates sind je nach Fahrtphase und Freigabe für die Beteiligten sichtbar. Auf Android kann eine aktivierte Freigabe während einer Fahrt auch bei minimierter App oder geöffneter Navigation weiterlaufen. Eine Benachrichtigung ermöglicht das Beenden. Die Berechtigung kannst du in den Geräteeinstellungen entziehen."
+      ]
+    },
+    {
+      "heading": [
+        "الخدمات التي تساعد في تشغيل التطبيق",
+        "Service providers",
+        "Dienstleister"
+      ],
+      "body": [
+        "يستضيف GitHub Pages الموقع. يعالج Supabase الحسابات وبيانات الرحلات والملفات. تستخدم خدمات Google Maps وPlaces وRoutes بيانات الخرائط والبحث والمسارات، ويستقبل تطبيق الملاحة الخارجي إحداثيات الوجهة عند فتحه. يمكن تفعيل إشعارات الرحلة على أندرويد. تنتقل البيانات إلى الموقع والخادم عبر HTTPS. تُدفع أجرة الرحلة نقدًا، ولا يطلب التطبيق بيانات بطاقة مصرفية.",
+        "GitHub Pages hosts the website. Supabase processes accounts, ride data and profiles. Google Maps, Places and Routes process map, search and route data. The external navigation app receives destination coordinates when opened. Ride notifications can be enabled on Android. The website and server use HTTPS. Ride fares are paid in cash and the app does not ask for card details.",
+        "GitHub Pages hostet die Website. Supabase verarbeitet Konten, Fahrtdaten und Profile. Google Maps, Places und Routes verarbeiten Karten-, Such- und Routendaten. Beim Öffnen externer Navigation werden Zielkoordinaten übergeben. Fahrtbenachrichtigungen können unter Android aktiviert werden. Website und Server nutzen HTTPS. Der Fahrpreis wird bar bezahlt. Die App fragt keine Kartendaten ab."
+      ]
+    },
+    {
+      "heading": [
+        "الإعدادات والأعطال",
+        "Settings and errors",
+        "Einstellungen und Fehler"
+      ],
+      "body": [
+        "يحتفظ جهازك بجلسة الدخول والإعدادات ومسودة الرحلة لتتمكن من المتابعة. نربط بعض رموز أخطاء حساب المسار وحصص استخدامه بمعرّف الحساب لمتابعة عمل الخدمة. يمكنك تسجيل الخروج من الجهاز من صفحة حسابي.",
+        "Your device stores the sign-in session, settings and ride draft so you can continue later. We link some routing error codes and usage limits to the account ID to operate the service. You can sign out of this device from My account.",
+        "Das Gerät speichert Sitzung, Einstellungen und Fahrtentwurf, damit du später weitermachen kannst. Einige Routenfehlercodes und Nutzungslimits werden zur Bereitstellung des Dienstes mit der Konto-ID verknüpft. Unter Mein Konto kannst du dich auf diesem Gerät abmelden."
+      ]
+    },
+    {
+      "heading": [
+        "مدة الحفظ وحذف الحساب",
+        "Retention and account deletion",
+        "Speicherung und Kontolöschung"
+      ],
+      "body": [
+        "يبقى الحساب وملفه والأماكن المحفوظة وسجل الرحلات متاحًا أثناء وجود الحساب. يُحدّث الموقع المباشر خلال المشاركة. لحذف حسابك، افتح حسابي ثم حذف الحساب أو استخدم الرابط أدناه. سجّل الدخول وأكّد الحذف بكلمة المرور بعد إنهاء الرحلة النشطة أو إلغاء الطلب. تُحذف بيانات حسابك ورحلاتك كزبون وبيانات سيارتك. تبقى سجلات رحلات الزبائن الآخرين لديهم دون ربطها بحساب السائق المحذوف. قد تُحفظ بيانات محددة عند وجود التزام قانوني أو نزاع قائم، ويمكنك طلب تفاصيلها من جهة التواصل.",
+        "The account, profile, saved places and ride history remain available while the account exists. Live location is updated while sharing. To delete your account, open My account and choose Delete account or use the link below. Sign in and confirm with your password after ending the active ride or canceling the request. Your account data, passenger rides and vehicle data are deleted. Other passengers retain their own ride records without a link to the deleted driver account. Specific data may be retained when required by law or for an ongoing dispute. Ask the privacy contact for details.",
+        "Konto, Profil, gespeicherte Orte und Fahrtenverlauf bleiben verfügbar, solange das Konto besteht. Der Live-Standort wird während der Freigabe aktualisiert. Öffne zur Löschung Mein Konto und dann Konto löschen oder nutze den Link unten. Melde dich an und bestätige mit deinem Passwort, nachdem du die laufende Fahrt beendet oder die Anfrage storniert hast. Kontodaten, Fahrten als Fahrgast und Fahrzeugdaten werden gelöscht. Andere Fahrgäste behalten ihre eigenen Fahrtbelege ohne Zuordnung zum gelöschten Fahrerkonto. Einzelne Daten können bei gesetzlichen Pflichten oder laufenden Streitfällen aufbewahrt werden. Details erhältst du über den Datenschutzkontakt."
+      ]
+    }
+  ]
+}

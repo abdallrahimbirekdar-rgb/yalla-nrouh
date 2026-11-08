@@ -10,7 +10,7 @@ import {useConnection,type Connection} from './connectivity';
 import {notifyLocal} from './alerts';
 import {isNativeWebView,siteCurrentFix,siteCurrentPosition} from './site-bridge';
 type InternalAction=Action|{type:'hydrate';state:AppState};
-type AppContext={state:AppState;dispatch:React.Dispatch<Action>;draft:TripDraft;setDraft:React.Dispatch<React.SetStateAction<TripDraft>>;ready:boolean;loadError:boolean;recoveryNotice:boolean;saveError:boolean;alertError:boolean;retry:()=>void;retrySave:()=>void;connection:Connection;trackingId:string|null;trackingError:boolean;startTracking:(id:string)=>Promise<void>;stopTracking:()=>void;foreground:boolean};
+type AppContext={state:AppState;dispatch:React.Dispatch<Action>;draft:TripDraft;setDraft:React.Dispatch<React.SetStateAction<TripDraft>>;ready:boolean;loadError:boolean;recoveryNotice:boolean;saveError:boolean;alertError:boolean;retry:()=>void;retrySave:()=>void;connection:Connection;trackingId:string|null;trackingError:boolean;startTracking:(id:string)=>Promise<void>;stopTracking:()=>void;foreground:boolean;clearDeletedAccountData:(userId:string)=>Promise<void>};
 const Context=createContext<AppContext|null>(null);
 export function AppProvider({children}:{children:React.ReactNode}){
  const [state,dispatch]=useReducer((s:AppState,a:InternalAction)=>a.type==='hydrate'?a.state:reduce(s,a),initialState);
@@ -70,11 +70,26 @@ export function AppProvider({children}:{children:React.ReactNode}){
   if(generation===startGeneration.current&&mounted.current)setTrackingId(id);
  }catch{if(generation===startGeneration.current&&mounted.current)setTrackingError(true);}}
  function stopTracking(){startGeneration.current++;if(trackingId)dispatch({type:'pauseTracking',id:trackingId});setTrackingId(null);}
+ async function clearDeletedAccountData(userId:string){
+  stopTracking();
+  const clean={...latest.current.state,trips:[],activeTripId:null,driver:initialState.driver};
+  const cleanDraft={...emptyDraft};
+  latest.current={state:clean,draft:cleanDraft};
+  dispatch({type:'hydrate',state:clean});setDraft(cleanDraft);setRecoveryNotice(false);
+  if(Platform.OS==='web'){
+   const storage=globalThis.localStorage;
+   for(const key of Object.keys(storage)){
+    if(key.startsWith('yalla-nrouh-demo-v1-')||key==='yn-driver-split-ride'||
+       ((key.startsWith('yn-')||key.startsWith('yalla-'))&&key.includes(userId)))storage.removeItem(key);
+   }
+  }
+  await writer.current?.enqueue(JSON.stringify({storageVersion:2,state:clean,draft:cleanDraft}));
+ }
  const previousStatuses=useRef<Record<string,string>|null>(null);
  useEffect(()=>{if(!ready)return;const next=Object.fromEntries(state.trips.map(t=>[t.id,t.status]));const previous=previousStatuses.current;previousStatuses.current=next;if(!previous||!state.preferences.notifications)return;
   const messages={accepted:['السائق في طريقه إليك','Driver is on the way'],arrived:['وصلت السيارة','Car has arrived'],completed:['اكتملت الرحلة','Ride completed'],cancelled:['أُلغيت الرحلة','Ride cancelled']} as const;
   for(const trip of state.trips){if(previous[trip.id]&&previous[trip.id]!==trip.status&&trip.status in messages){const [ar,en]=messages[trip.status as keyof typeof messages];const message=translate(state.language,ar,en);void notifyLocal(translate(state.language,'يلّا نروح — تجربة محلية','Yalla Nrouh — local demo'),message).then(()=>setAlertError(false)).catch(()=>setAlertError(true));}}
  },[state.trips,state.preferences.notifications,state.language,ready]);
- return <Context.Provider value={{state,dispatch,draft,setDraft,ready,loadError,recoveryNotice,saveError,alertError,retry:()=>setAttempt(a=>a+1),retrySave:()=>{void writer.current?.retry()},connection,trackingId,trackingError,startTracking,stopTracking,foreground}}>{children}</Context.Provider>;
+ return <Context.Provider value={{state,dispatch,draft,setDraft,ready,loadError,recoveryNotice,saveError,alertError,retry:()=>setAttempt(a=>a+1),retrySave:()=>{void writer.current?.retry()},connection,trackingId,trackingError,startTracking,stopTracking,foreground,clearDeletedAccountData}}>{children}</Context.Provider>;
 }
 export function useApp(){const value=useContext(Context);if(!value)throw Error('AppProvider missing');return value;}

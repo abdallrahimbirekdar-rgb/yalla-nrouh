@@ -98,7 +98,7 @@ export function AppMenu({onSettings,inverse=false}:{onSettings?:()=>void;inverse
  const {state:{language}}=useApp();
  const shell=Platform.OS==='web'&&typeof window!=='undefined'?(window as Window&{ReactNativeWebView?:{postMessage:(value:string)=>void}}).ReactNativeWebView:undefined;
  useEffect(()=>{if(Platform.OS!=='web'||!open)return;const back=(event:Event)=>{event.preventDefault();setOpen(false)};window.addEventListener('yalla:native-back',back);return()=>window.removeEventListener('yalla:native-back',back)},[open]);
- const go=(path:'/'|'/account'|'/cloud'|'/admin'|'/settings')=>{setOpen(false);if(path==='/settings'&&onSettings)onSettings();else router.push(path)};
+ const go=(path:'/'|'/account'|'/cloud'|'/admin'|'/settings'|'/privacy'|'/delete-account')=>{setOpen(false);if(path==='/settings'&&onSettings)onSettings();else router.push(path)};
  return <><Pressable accessibilityRole="button" accessibilityLabel={t('فتح القائمة','Open menu')} onPress={()=>setOpen(true)} style={[themedStyles(colors).circle,inverse&&{backgroundColor:brandHeader.accent,borderColor:brandHeader.accent}]}><Icon name="menu" size={25} color={inverse?brandHeader.background:undefined}/></Pressable><Modal visible={open} transparent animationType="none" onRequestClose={()=>setOpen(false)}><View style={styles.overlay}><Pressable style={StyleSheet.absoluteFill} accessibilityLabel={t('إغلاق القائمة','Close menu')} onPress={()=>setOpen(false)}/><View style={[themedStyles(colors).menu,{maxHeight:'90%'}]}><View style={{flexDirection:'row-reverse',justifyContent:'space-between',alignItems:'center'}}><BrandLogo menu/><Pressable accessibilityRole="button" accessibilityLabel={t('إغلاق','Close')} onPress={()=>setOpen(false)} style={themedStyles(colors).circle}><Icon name="close"/></Pressable></View><ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{gap:10}}>
  <Label muted>{auth.session?.user.email??t('أهلًا بك في يلا نروح','Welcome to Yalla Nrouh')}</Label>
  {!auth.driver&&<Button icon="car-outline" title={t('حجز رحلة','Book a ride')} onPress={()=>go('/')}/>}
@@ -108,6 +108,8 @@ export function AppMenu({onSettings,inverse=false}:{onSettings?:()=>void;inverse
  {auth.admin&&<Button secondary icon="shield-checkmark-outline" title={t('لوحة الإدارة','Administration')} onPress={()=>go('/admin')}/>}
  <Button secondary icon="options-outline" title={t('الإعدادات والأذونات','Settings and permissions')} onPress={()=>go('/settings')}/>
  {shell&&<Button secondary icon="refresh-outline" title={t('تحديث العرض','Refresh page')} onPress={()=>{setOpen(false);shell.postMessage(JSON.stringify({type:'refresh'}))}}/>}
+ <Button secondary icon="shield-outline" title={t('سياسة الخصوصية','Privacy policy','Datenschutzerklärung')} onPress={()=>go('/privacy')}/>
+ <Button secondary icon="trash-outline" title={t('حذف الحساب','Delete account','Konto löschen')} onPress={()=>go('/delete-account')}/>
  <LanguagePicker/>
  {Platform.OS==='web'&&!shell&&<Link
   href="https://github.com/abdallrahimbirekdar-rgb/yalla-nrouh/releases/download/android-test-unified/yalla-nrouh-test.apk" asChild>

@@ -1,6 +1,7 @@
 import React,{useEffect,useState} from 'react';
 import {ActivityIndicator,Pressable,View} from 'react-native';
 import {router,useLocalSearchParams} from 'expo-router';
+import AccountProfile from '../account-profile';
 import {useAuth} from '../auth';
 import {authErrorMessage} from '../auth-errors';
 import {useApp} from '../context';
@@ -8,7 +9,7 @@ import {Button,Field,Icon,Label,Page,Panel,useText} from '../ui';
 export default function Account(){
  const auth=useAuth();const {state}=useApp();const t=useText();const {next}=useLocalSearchParams<{next?:string}>();
  const [mode,setMode]=useState<'login'|'signup'|'reset'>('login'),[email,setEmail]=useState(''),[password,setPassword]=useState(''),[repeat,setRepeat]=useState(''),[visible,setVisible]=useState(false),[busy,setBusy]=useState(false),[notice,setNotice]=useState('');
- const allowedNext=next==='admin'?'/admin':next==='review'?'/review':next==='destination'||next==='saved'?'/location':null;
+ const allowedNext=next==='delete-account'?'/delete-account':next==='admin'?'/admin':next==='review'?'/review':next==='destination'||next==='saved'?'/location':null;
  useEffect(()=>{if(auth.recovery)setNotice('')},[auth.recovery]);
  async function submit(){
   if(busy)return;setBusy(true);setNotice('');
@@ -24,6 +25,8 @@ export default function Account(){
   <View style={{alignItems:'center'}}><Label muted>{t('حساب واحد للموقع والتطبيق','One account for the website and app')}</Label></View>
   {!auth.ready||auth.session&&!auth.rolesReady?<ActivityIndicator/>:auth.session&&!auth.recovery?<>
    <Panel><Icon name="person-circle-outline" size={44}/><Label>{auth.session.user.email}</Label><Label muted>{auth.admin?t('حساب الإدارة','Administrator'):auth.driver?t('حساب سائق معتمد','Approved driver'):t('تم تسجيل الدخول','Signed in')}</Label></Panel>
+   <AccountProfile key={auth.session.user.id} userId={auth.session.user.id}/>
+   <Button secondary icon="trash-outline" title={t('حذف الحساب','Delete account','Konto löschen')} onPress={()=>router.push('/delete-account')}/>
    {auth.admin&&<Button icon="shield-checkmark-outline" title={t('لوحة الإدارة','Administration')} onPress={()=>router.push('/admin')}/>}
    {!auth.driver&&<>
    <Button icon="car-outline" title={t('حجز رحلة','Book a ride')} onPress={()=>router.replace('/')}/>
@@ -42,6 +45,7 @@ export default function Account(){
    {mode==='login'&&!auth.recovery&&<Button secondary title={t('نسيت كلمة المرور؟','Forgot password?')} onPress={()=>{setMode('reset');setNotice('')}}/>}
    <Label muted>{t('تبقى الجلسة محفوظة على هذا الجهاز حتى تسجّل الخروج. لا نحفظ كلمة المرور.','You stay signed in on this device until you sign out. Your password is not saved.')}</Label>
   </Panel>}
+  <Button secondary icon="shield-outline" title={t('سياسة الخصوصية','Privacy policy','Datenschutzerklärung')} onPress={()=>router.push('/privacy')}/>
   {!!notice&&<View accessibilityRole="alert"><Label>{notice}</Label></View>}
   {!!auth.problem&&<Panel><Label>{t('تعذر تحديث الجلسة أو صلاحيات الحساب. تحقق من الاتصال وأعد المحاولة.','Could not check the session or account access. Check internet and try again.')}</Label><Button secondary title={t('إعادة المحاولة','Try again')} onPress={()=>void auth.retry()}/></Panel>}
  </Page>;
