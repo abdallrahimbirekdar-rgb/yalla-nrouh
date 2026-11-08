@@ -32,6 +32,9 @@ export async function driverPhoneAccount(request:Request){
   if(!body||typeof body.phone!=='string'||!syrian.test(body.phone)||!['create','reset'].includes(body.action))
    return reply(400,{code:'invalid_phone_driver'});
   const phone:string=body.phone;
+  const password=body.password;
+  if(typeof password!=='string'||password.length<10||password.length>72||!/[A-Za-z]/.test(password)||!/[0-9]/.test(password)||/[\x00-\x1f\x7f]/.test(password))
+   return reply(400,{code:'invalid_driver_password'});
   const name=typeof body.name==='string'?body.name.trim():'';
   if(body.action==='create'&&(!name||name.length>80||!Number.isInteger(body.region)||body.region<0||body.region>13||!categories.has(body.category)))
    return reply(400,{code:'invalid_phone_driver'});
@@ -48,8 +51,6 @@ export async function driverPhoneAccount(request:Request){
    if(typeof id!=='string'||!uuid.test(id))return reply(404,{code:'phone_driver_not_found'});
    path+='/'+id;
   }
-  const random=crypto.getRandomValues(new Uint8Array(16));
-  const password='Yalla!9'+Array.from(random,byte=>byte.toString(16).padStart(2,'0')).join('');
   const result=await requestApi(path,{
    method:body.action==='create'?'POST':'PUT',
    headers:{apikey:secret,Authorization:'Bearer '+secret,'Content-Type':'application/json'},
@@ -63,7 +64,7 @@ export async function driverPhoneAccount(request:Request){
     return reply(409,{code:'phone_driver_exists'});
    return reply(503,{code:'phone_driver_unavailable'});
   }
-  return reply(200,{phone,password});
+  return reply(200,{phone});
  }catch{return reply(503,{code:'phone_driver_unavailable'})}
 }
 
