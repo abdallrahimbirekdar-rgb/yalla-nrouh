@@ -1,6 +1,6 @@
 import {useState} from 'react';
 import {Linking,View} from 'react-native';
-import {CloudError,cloudAdminPhoneDriver,cloudCurrentToken} from './cloud-api';
+import {CloudError,cloudAdminPhoneCapabilities,cloudAdminPhoneDriver,cloudCurrentToken} from './cloud-api';
 import {useApp} from './context';
 import {categories,regions,type RideType} from './domain';
 import {syrianMobile} from './syrian-phone';
@@ -22,7 +22,10 @@ export default function AdminDriverPhone({onCreated}:{onCreated:()=>void}){
   if(!canSubmit)return;
   setBusy(true);setNotice('');
   try{
-   const created=await cloudAdminPhoneDriver(await cloudCurrentToken(),reset
+   const token=await cloudCurrentToken();
+   const capabilities=await cloudAdminPhoneCapabilities(token).catch(()=>null);
+   if(capabilities?.mode!=='admin_selected_password_v1')throw new CloudError(503,'driver_phone_service_outdated');
+   const created=await cloudAdminPhoneDriver(token,reset
     ?{action:'reset',phone:normalized,password}
     :{action:'create',phone:normalized,password,name:name.trim(),region,category});
    if(created.phone!==normalized)throw Error('invalid_response');
@@ -40,6 +43,7 @@ export default function AdminDriverPhone({onCreated}:{onCreated:()=>void}){
     phone_driver_not_found:t('لم أجد حساب سائق أضافته الإدارة بهذا الرقم.','No admin-created driver account was found with this number.'),
     phone_provider_disabled:t('يجب تفعيل تسجيل الدخول بالهاتف في إعدادات المصادقة قبل إضافة حسابات السائقين.','Enable phone sign-in in authentication settings before adding driver accounts.'),
     invalid_driver_password:t('كلمة المرور يجب أن تكون من ١٠ إلى ٧٢ حرفًا وتحتوي على حرف إنجليزي ورقم على الأقل.','Use 10 to 72 characters with at least one letter and one number.'),
+    driver_phone_service_outdated:t('خدمة إنشاء السائقين بحاجة لتحديث على الخادم. لم نرسل طلب إنشاء الحساب.','The driver-account service needs a server update. No account creation request was sent.'),
    };
    setNotice(messages[code]??t('تعذّر إتمام العملية. تحقّق من الاتصال قبل المحاولة مجددًا.','Could not complete the action. Check your connection before retrying.'));
   }finally{setBusy(false)}
