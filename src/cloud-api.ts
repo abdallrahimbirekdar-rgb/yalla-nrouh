@@ -207,10 +207,10 @@ export const cloudIsAdmin=(token:string)=>rpc<boolean>('is_staff_admin',token);
 export const cloudStaffDrivers=(token:string)=>rpc<StaffDriver[]>('admin_pending_drivers',token);
 export const cloudApproveDriver=(token:string,id:string,approved:boolean)=>rpc<boolean>('admin_review_driver',token,{p_driver_id:id,p_approved:approved});
 export type DriverPhoneAction=
- |{action:'create';phone:string;name:string;region:number;category:RideType}
- |{action:'reset';phone:string};
+ |{action:'create';phone:string;password:string;name:string;region:number;category:RideType}
+ |{action:'reset';phone:string;password:string};
 export const cloudAdminPhoneDriver=(token:string,data:DriverPhoneAction)=>
- call<{phone:string;password:string}>('/functions/v1/driver-phone-account','POST',token,data);
+ call<{phone:string}>('/functions/v1/driver-phone-account','POST',token,data);
 // Admin adds only a verified existing Supabase Auth user, not credentials.
 export function cloudAdminAddDriverByEmail(token:string,email:string,region=0,category='classic'):Promise<boolean>{
  const clean=email.trim().toLowerCase();
