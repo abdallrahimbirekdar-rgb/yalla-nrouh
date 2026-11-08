@@ -14,7 +14,7 @@ function endpointBadge(letter:string,background:string){
 export default function MapContent({point,destinationPoint,taxiPoint,passengerPoint,onChange,compact=false,route,readOnly=false,lean=false,loadTimeoutMs=25000,cameraTarget,initialCenter,minMapHeight=compact?260:340}:{point:Coordinate|null;destinationPoint?:Coordinate;taxiPoint?:Coordinate;passengerPoint?:Coordinate;onChange:(point:Coordinate)=>void;compact?:boolean;route?:Coordinate[];readOnly?:boolean;lean?:boolean;loadTimeoutMs?:number;cameraTarget?:CameraTarget;initialCenter?:Coordinate;minMapHeight?:number}){
  const {state}=useApp();const t=useText();const {colors,dark}=useTheme();const host=useRef<HTMLDivElement>(null);
  const map=useRef<GoogleMap|null>(null),api=useRef<GoogleMaps|null>(null),marker=useRef<GoogleMarker|null>(null),line=useRef<GoogleLine|null>(null);
- const userMarker=useRef<GoogleMarker|null>(null),endMarker=useRef<GoogleMarker|null>(null),taxiMarker=useRef<GoogleMarker|null>(null);
+ const userMarker=useRef<GoogleMarker|null>(null),endMarker=useRef<GoogleMarker|null>(null),taxiMarker=useRef<GoogleMarker|null>(null),passengerMarker=useRef<GoogleMarker|null>(null);
  const hasCameraTarget=!!cameraTarget;
  const destinationLat=destinationPoint?.latitude,destinationLng=destinationPoint?.longitude;
  const pickupLat=point?.latitude,pickupLng=point?.longitude;
@@ -43,7 +43,7 @@ export default function MapContent({point,destinationPoint,taxiPoint,passengerPo
    line.current=new maps.Polyline({map:instance,strokeColor:'#2688e8',strokeWeight:5,clickable:false});
    clearTimeout(pending);failed.current=false;setError(false);setReady(true);
   }).catch(()=>{if(!disposed){clearTimeout(pending);failed.current=true;setError(true)}});
-  return()=>{disposed=true;clearTimeout(pending);removeAuthListener();window.removeEventListener('online',online);if(marker.current){api.current?.event.clearInstanceListeners(marker.current);marker.current.map=null}if(endMarker.current)endMarker.current.map=null;endMarker.current=null;if(userMarker.current)userMarker.current.map=null;userMarker.current=null;if(taxiMarker.current)taxiMarker.current.map=null;taxiMarker.current=null;line.current?.setMap(null);if(map.current)api.current?.event.clearInstanceListeners(map.current);map.current=null;marker.current=null;line.current=null;container.replaceChildren()};
+  return()=>{disposed=true;clearTimeout(pending);removeAuthListener();window.removeEventListener('online',online);if(marker.current){api.current?.event.clearInstanceListeners(marker.current);marker.current.map=null}if(endMarker.current)endMarker.current.map=null;endMarker.current=null;if(userMarker.current)userMarker.current.map=null;userMarker.current=null;if(taxiMarker.current)taxiMarker.current.map=null;taxiMarker.current=null;if(passengerMarker.current)passengerMarker.current.map=null;passengerMarker.current=null;line.current?.setMap(null);if(map.current)api.current?.event.clearInstanceListeners(map.current);map.current=null;marker.current=null;line.current=null;container.replaceChildren()};
  },[key,state.language,readOnly,attempt,loadTimeoutMs,t]);
  useEffect(()=>{
   const instance=map.current,pin=marker.current;if(!ready||!instance||!pin)return;
@@ -86,16 +86,16 @@ export default function MapContent({point,destinationPoint,taxiPoint,passengerPo
  useEffect(()=>{
   const instance=map.current,maps=api.current;
   if(!ready||!instance||!maps)return;
-  const tracked=passengerPoint??taxiPoint;
+  const tracked=taxiPoint??passengerPoint;
   if(!tracked){if(taxiMarker.current)taxiMarker.current.map=null;taxiMarker.current=null;return}
-  const taxi=position(tracked),first=!taxiMarker.current;
+  const taxi=position(tracked),first=!taxiMarker.current,onlyPassenger=!!passengerPoint&&!taxiPoint;
   if(!taxiMarker.current){
-   const icon=document.createElement('div');icon.textContent=passengerPoint?'●':'🚕';
-   Object.assign(icon.style,{display:'grid',placeItems:'center',width:'34px',height:'34px',background:passengerPoint?'#15803d':'#102a43',color:'white',border:'2px solid white',borderRadius:'50%',fontSize:'21px'});
-   taxiMarker.current=new maps.marker.AdvancedMarkerElement({map:instance,position:taxi,content:icon,title:passengerPoint?(t('موقع الزبون','Customer location')):(t('موقع التاكسي','Taxi location'))});
+   const icon=document.createElement('div');icon.textContent=onlyPassenger?'●':'🚕';
+   Object.assign(icon.style,{display:'grid',placeItems:'center',width:'34px',height:'34px',background:onlyPassenger?'#15803d':'#102a43',color:'white',border:'2px solid white',borderRadius:'50%',fontSize:'21px'});
+   taxiMarker.current=new maps.marker.AdvancedMarkerElement({map:instance,position:taxi,content:icon,title:onlyPassenger?(t('موقع الزبون','Customer location')):(t('موقع التاكسي','Taxi location'))});
   }else taxiMarker.current.position=taxi;
   if(hasCameraTarget)return;
-  if(passengerPoint){
+  if(onlyPassenger){
    instance.setCenter(taxi);
    if(first)instance.setZoom(18);
    return;
@@ -112,6 +112,22 @@ export default function MapContent({point,destinationPoint,taxiPoint,passengerPo
    }
   }
  },[point,taxiPoint,passengerPoint,hasCameraTarget,ready,state.language,destinationLat,destinationLng,route,t]);
+ // Show the moving customer marker separately from the taxi during pickup.
+ useEffect(()=>{
+  if(!ready||!map.current||!api.current)return;
+  if(!taxiPoint||!passengerPoint){
+   if(passengerMarker.current)passengerMarker.current.map=null;
+   passengerMarker.current=null;return;
+  }
+  if(!passengerMarker.current){
+   const dot=document.createElement('div');dot.textContent='●';
+   Object.assign(dot.style,{display:'grid',placeItems:'center',width:'28px',height:'28px',
+    background:'#15803d',color:'white',border:'2px solid white',borderRadius:'50%',fontSize:'17px'});
+   passengerMarker.current=new api.current.marker.AdvancedMarkerElement({
+    map:map.current,position:position(passengerPoint),content:dot,title:t('موقع الزبون','Customer location'),
+   });
+  }else passengerMarker.current.position=position(passengerPoint);
+ },[ready,taxiPoint,passengerPoint,t]);
  useEffect(()=>{map.current?.setOptions({tilt:0,heading:0,headingInteractionEnabled:!lean,tiltInteractionEnabled:false})},[lean,ready]);
  return <View style={compact?{flex:1,minHeight:minMapHeight}:{gap:10}}>
   {React.createElement('div',{ref:host,role:'region','aria-label':readOnly&&destinationPoint?t('خريطة الرحلة','Ride map'):t('خريطة Google لاختيار الموقع','Google map to choose a location'),style:{height:compact?'100%':minMapHeight,minHeight:minMapHeight,width:'100%',borderRadius:compact?0:16,overflow:'hidden',background:colors.surface}})}
