@@ -1,6 +1,6 @@
 import type {CancellationActor,CancellationReason} from './ride-cancellation';
 import {readRideState,receiveRideState} from './cloud-ride-state.ts';
-import type {TripDraft} from './domain.ts';
+import type {RideType,TripDraft} from './domain.ts';
 import {validTariff,type Tariff} from './meter.ts';
 import {isCoordinate} from './geo.ts';
 import {pickupRegion} from './map/pickup-region.ts';
@@ -227,6 +227,11 @@ export function cloudReviseAdminRule(token:string,expectedId:number,section:stri
 export const cloudIsAdmin=(token:string)=>rpc<boolean>('is_staff_admin',token);
 export const cloudStaffDrivers=(token:string)=>rpc<StaffDriver[]>('admin_pending_drivers',token);
 export const cloudSuspendDriver=(token:string,id:string)=>rpc<boolean>('admin_review_driver',token,{p_driver_id:id,p_approved:false});
+export type DriverPhoneAction=
+ |{action:'create';phone:string;name:string;region:number;category:RideType}
+ |{action:'reset';phone:string};
+export const cloudAdminPhoneDriver=(token:string,data:DriverPhoneAction)=>
+ call<{phone:string;password:string}>('/functions/v1/driver-phone-account','POST',token,data);
 // Admin adds only a verified existing Supabase Auth user, not credentials.
 export function cloudAdminAddDriverByEmail(token:string,email:string,region=0,category='classic'):Promise<boolean>{
  const clean=email.trim().toLowerCase();

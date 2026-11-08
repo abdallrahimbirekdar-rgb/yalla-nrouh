@@ -5,6 +5,7 @@ import {useAuth} from '../auth';
 import {useApp} from '../context';
 import {cloudCurrentToken,cloudFareSettings,cloudUpdateFareSettings,cloudStaffDrivers,cloudAdminAddDriverByEmail,type StaffDriver} from '../cloud-api';
 import AdminRulesGuide from '../admin-rules-guide';
+import AdminDriverPhone from '../admin-driver-phone';
 import AdminDispatch from '../admin-dispatch';
 import AdminVehicleReview from '../admin-vehicle-review';
 import {authErrorMessage} from '../auth-errors';
@@ -74,7 +75,8 @@ export default function Admin(){
     <Button icon="save-outline" title={busy?t('جارٍ الحفظ…','Saving…'):t('حفظ التسعيرة لجميع المستخدمين','Save rates for all users')} onPress={()=>void publish()} disabled={!valid||busy}/>
     {!!updated&&<Label muted>{t('آخر تحديث: ','Last update: ')}{new Date(updated).toLocaleString(state.language)}</Label>}
    </Panel>
-   <Panel><Label large>{t('إضافة حساب سائق للتجربة','Add a test driver account')}</Label>
+   <AdminDriverPhone key={userId} onCreated={()=>void refreshDrivers()}/>
+   <Panel><Label large>{t('ربط حساب سائق موجود بالبريد','Link an existing driver account by email')}</Label>
     <Label muted>{t('أنشئ الحساب من صفحة التسجيل أولًا ثم أكّد بريده الإلكتروني. لا نطلب كلمة المرور في لوحة الإدارة.','Create the account on the sign-up page and verify the email first. Admin never asks for the password.')}</Label>
     <Field label={t('البريد الإلكتروني للسائق','Driver email')} value={newDriverEmail} onChangeText={setNewDriverEmail} keyboardType="email-address" autoCapitalize="none" autoCorrect={false} maxLength={200}/>
     <Label muted>{t('إعداد التجربة: دمشق · كلاسيك. للتجربة اختر انطلاقًا في دمشق وفئة كلاسيك.','Test setup: Damascus · Classic. For a test ride, choose a pickup in Damascus and the Classic category.')}</Label>

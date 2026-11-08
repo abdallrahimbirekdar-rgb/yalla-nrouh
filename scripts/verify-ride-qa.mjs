@@ -47,7 +47,7 @@ try{
  grant usage on schema auth to authenticated;
  create function auth.jwt() returns jsonb language sql stable as $$ select nullif(current_setting('request.jwt.claims',true),'')::jsonb $$;
  create function auth.uid() returns uuid language sql stable as $$ select (auth.jwt()->>'sub')::uuid $$;
- create table auth.users(id uuid primary key,email text);
+ create table auth.users(id uuid primary key,email text,phone text,raw_app_meta_data jsonb);
  create table auth.sessions(id uuid primary key,user_id uuid not null references auth.users on delete cascade,created_at timestamptz);
  create table private.admins(user_id uuid primary key references auth.users on delete cascade);
  create table public.driver_accounts(user_id uuid primary key references auth.users on delete cascade,
@@ -94,6 +94,9 @@ try{
  await verify('verify-play-account-profiles');
  await db.exec(file('play-vehicle-review'));
  await verify('verify-play-vehicle-review');
+
+ await db.exec(file('driver-phone-accounts'));
+ await verify('verify-driver-phone-accounts');
 
  await db.query('insert into auth.users(id) values($1),($2),($3)',[passenger,driver,outsider]);
  await db.query("insert into public.driver_accounts values($1,0,'classic',true,true,now(),now())",[driver]);
