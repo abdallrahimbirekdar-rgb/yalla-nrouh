@@ -5,17 +5,12 @@ import type {CloudRide} from './cloud-api.ts';
  * network snapshot (or the accept-recovery request) completes out of order.
  * Only IDs acknowledged as cancelled by the server are added to confirmedIds.
  */
-export function applyConfirmedCancellations<T extends Pick<CloudRide,'id'|'status'>>(
- rows:T[],confirmedIds:ReadonlySet<string>,
-):T[]{
+export function applyConfirmedCancellations(rows:CloudRide[],confirmedIds:ReadonlySet<string>):CloudRide[]{
  if(confirmedIds.size===0)return rows;
  return rows.map(ride=>confirmedIds.has(ride.id)&&ride.status!=='cancelled'
-  ?{...ride,status:'cancelled' as const}
+  ?{...ride,status:'cancelled'}
   :ride);
 }
-
-export function isUnresolvedRide<T extends Pick<CloudRide,'id'|'status'>>(
- ride:T,confirmedIds:ReadonlySet<string>,
-):boolean{
+export function isUnresolvedRide(ride:Pick<CloudRide,'id'|'status'>,confirmedIds:ReadonlySet<string>):boolean{
  return !confirmedIds.has(ride.id)&&ride.status!=='completed'&&ride.status!=='cancelled';
 }
