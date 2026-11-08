@@ -7,9 +7,7 @@
     "icon": "./assets/app-icon-approved.png",
     "userInterfaceStyle": "automatic",
     "splash": {
-      "image": "./assets/logo-approved.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#edf3fb"
+      "backgroundColor": "#071c39"
     },
     "ios": {
       "supportsTablet": true,
