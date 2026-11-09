@@ -83,6 +83,23 @@ test('a quoted ride submits the opaque quote ID and no user-entered fare',async(
  },async()=>assert.equal(await cloudRequestRide(token,draft,requestId,quoteId),requestId));
 });
 
+test('a pickup note uses the same quoted booking payload and request ID',async()=>{
+ const quoteId='00000000-0000-4000-8000-000000000004';
+ const calls=[];
+ await withFetch(async(url,options)=>{
+   calls.push([url.split('/').at(-1),JSON.parse(options.body)]);
+   return reply(requestId);
+ },async()=>{
+   assert.equal(await cloudRequestRide(token,draft,requestId,quoteId,'  عند الباب الجانبي  '),requestId);
+   assert.equal(await cloudRequestRide(token,draft,requestId,quoteId,'  '),requestId);
+ });
+ assert.equal(calls[0][0],'request_ride_with_pickup_note');
+ assert.equal(calls[1][0],'request_ride_with_fare');
+ assert.deepEqual(calls[0][1],{...calls[1][1],p_pickup_note:'عند الباب الجانبي'});
+ assert.equal(calls[0][1].p_request_id,requestId);
+ assert.equal(calls[0][1].p_quote_id,quoteId);
+});
+
 test('an ambiguous ride submission can be checked and retried with the same request ID',async()=>{
  const owner='00000000-0000-4000-8000-000000000002';
  const ride={id:'00000000-0000-4000-8000-000000000003',passenger_id:owner,status:'requested'};

@@ -1,10 +1,13 @@
-import {restoreState,initialState,categories,regions,type AppState,type TripDraft} from './domain.ts';
+import {restoreState,initialState,categories,regions,pickupNoteMaxLength,type AppState,type TripDraft} from './domain.ts';
 import {isCoordinate} from './geo.ts';
 export const emptyDraft:TripDraft={pickup:'',destination:'',region:0,intercity:false,category:'classic'};
 export function restoreDraft(value:unknown):TripDraft {
  const d=value as TripDraft;
  if(!d||typeof d.pickup!=='string'||typeof d.destination!=='string'||d.pickup.length>200||d.destination.length>200||!Number.isInteger(d.region)||!regions[d.region]||typeof d.intercity!=='boolean'||!categories.some(c=>c.id===d.category)||(d.pickupPoint!==undefined&&!isCoordinate(d.pickupPoint))||(d.destinationPoint!==undefined&&!isCoordinate(d.destinationPoint)))return {...emptyDraft};
- return {...d};
+ const {pickupNote,...rest}=d;
+ if(typeof pickupNote?.owner==='string'&&typeof pickupNote.text==='string'&&pickupNote.text.length<=pickupNoteMaxLength)
+  return {...rest,pickupNote};
+ return rest;
 }
 export function readSaved(raw:string|null):{state:AppState;draft:TripDraft} {
  if(raw===null)return {state:initialState,draft:{...emptyDraft}};

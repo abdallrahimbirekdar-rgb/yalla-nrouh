@@ -486,17 +486,19 @@ export default function Rides(){
   const tracking=pickingUp||atPickup;
   const stage=pickingUp?t('إلى الزبون','To pickup'):atPickup?t('عند الزبون','At pickup'):t('إلى الوجهة','To destination');
   const address=pickingUp&&proposal?.approved?t('نقطة الالتقاء الجديدة المعتمدة','Approved meeting point'):pickingUp||atPickup?ride.pickup:ride.destination;
+  const pickupNote=tracking&&!proposal?.approved&&ride.pickup_note
+   ?<Label muted>{t('ملاحظة الزبون','Passenger note','Hinweis des Fahrgasts')} · {ride.pickup_note}</Label>:null;
   const navButton=(adjacent:boolean,title:string)=><Button secondary icon={adjacent?'map-outline':'navigate-outline'}
    title={title} onPress={()=>atPickup?setSplitRide(ride.id):showExternal(ride,destination,adjacent)}/>;
   const fullScreen=navButton(false,t('فتح OsmAnd','Open OsmAnd'));
   return <View key={ride.id} style={{gap:split?8:12}}>
    <RideStatusCard icon={pickingUp?'navigate-outline':atPickup?'location-outline':'car-outline'} title={stage}
     detail={atPickup?t('ابدأ الرحلة بعد ركوب الزبون. ستُفتح الملاحة إلى الوجهة.','Start once the customer is in the car. Navigation to the destination will open.','Starte die Fahrt, sobald der Fahrgast eingestiegen ist. Die Navigation zum Ziel wird geöffnet.'):undefined}>
-    {(!split||!tracking)&&<Label>{address}</Label>}
+    {(!split||!tracking)&&<><Label>{address}</Label>{pickupNote}</>}
    </RideStatusCard>
    {!!notice&&<View accessibilityRole="alert"><Label>{notice}</Label></View>}
    <CustomerTracking key={ride.id+':'+ride.driver_id} rideId={ride.id} pickup={pickup} proposedPickup={pickingUp&&proposal?.approved?proposal.point:undefined} foreground={foreground} compact={split} duringTrip={!tracking} taxiFix={tracking?driverMapFix:null}/>
-   {split&&tracking&&<Label muted>{address}</Label>}
+   {split&&tracking&&<><Label muted>{address}</Label>{pickupNote}</>}
    {pickingUp&&proposal&&!proposal.approved&&<Panel outlined>
     <Label>{t('الزبون اقترح نقطة التقاء جديدة.','The customer suggested a new meeting point.')}</Label>
     <Button secondary title={t('اعتماد نقطة الالتقاء الجديدة','Approve the new meeting point')} disabled={busy} onPress={()=>void run(async()=>{

@@ -50,7 +50,7 @@ export function PassengerFare({fare,pending=false,compact=false}:{fare:number|nu
  </View>;
 }
 
-export function PassengerStops({pickup,destination,category,compact=false,onEditPickup,onEditDestination}:{pickup:string;destination:string;category?:string;compact?:boolean;onEditPickup?:()=>void;onEditDestination?:()=>void}){
+export function PassengerStops({pickup,destination,category,compact=false,onEditPickup,onEditDestination,pickupExtra}:{pickup:string;destination:string;category?:string;compact?:boolean;onEditPickup?:()=>void;onEditDestination?:()=>void;pickupExtra?:React.ReactNode}){
  const {state}=useApp();
  const {colors}=useTheme();
  const t=useText();
@@ -65,6 +65,7 @@ export function PassengerStops({pickup,destination,category,compact=false,onEdit
    <View style={{flex:1}}>{compact?<Label muted>{t('الانطلاق','Pickup')} · {pickup}</Label>:<><Label muted>{t('الانطلاق','Pickup')}</Label><Label>{pickup}</Label></>}</View>
    {onEditPickup&&edit(t('تعديل نقطة الانطلاق','Change pickup point'),onEditPickup)}
   </View>
+  {pickupExtra}
   <View style={row}>
    <Icon name="location-outline" size={18} color={colors.purple}/>
    <View style={{flex:1}}>{compact?<Label muted>{t('الوجهة','Destination')} · {destination}</Label>:<><Label muted>{t('الوجهة','Destination')}</Label><Label>{destination}</Label></>}</View>

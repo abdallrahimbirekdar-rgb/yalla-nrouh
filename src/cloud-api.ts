@@ -20,7 +20,7 @@ const API_KEY='sb_publishable_0l-T6t_dTDt1OedSTIpLNA_uruCvJ8C';
 export interface CloudRide {
   id:string; passenger_id:string;driver_id:string|null;pickup:string;destination:string;
   category:string;region:number;pickup_lat:number;pickup_lng:number;destination_lat:number;destination_lng:number;
-  estimated_fare?:number|null;
+  estimated_fare?:number|null;pickup_note?:string|null;
   status:'requested'|'accepted'|'arrived'|'riding'|'completed'|'cancelled';
   created_at:string;updated_at:string;search_expired_at?:string|null;
 }
@@ -77,7 +77,7 @@ export async function cloudWhoAmI(token:string):Promise<{id:string;email?:string
   requireToken(token);
   return call('/auth/v1/user','GET',token);
 }
-const rideColumns='id,passenger_id,driver_id,pickup,destination,pickup_lat,pickup_lng,destination_lat,destination_lng,category,region,estimated_fare,status,created_at,updated_at,search_expired_at';
+const rideColumns='id,passenger_id,driver_id,pickup,destination,pickup_lat,pickup_lng,destination_lat,destination_lng,category,region,estimated_fare,pickup_note,status,created_at,updated_at,search_expired_at';
 export const rideSearchLimitMs=180000;
 export const cloudDriverDispatchPing=(token:string,point:{latitude:number;longitude:number;time:number})=>rpc<boolean>('driver_dispatch_ping',token,{
  p_lat:point.latitude,p_lng:point.longitude,p_measured_at:new Date(point.time).toISOString(),
@@ -141,11 +141,14 @@ export async function cloudRideOperation(token:string,kind:'request'|'accept'|'c
 export function cloudMutationUncertain(error:unknown):boolean{
   return !(error instanceof CloudError)||error.status===0||error.status===408||error.status>=500||error.kind==='bad_response';
 }
-export async function cloudRequestRide(token:string,draft:TripDraft,requestId:string,quoteId?:string):Promise<string>{
+export async function cloudRequestRide(token:string,draft:TripDraft,requestId:string,quoteId?:string,pickupNote?:string):Promise<string>{
   if(!isCoordinate(draft.pickupPoint)||!isCoordinate(draft.destinationPoint)||!draft.pickup.trim()||!draft.destination.trim())
     throw new CloudError(400,'select_map_points');
-  const id=await rpc<string>(quoteId?'request_ride_with_fare':'request_ride_once',token,{
+  const note=quoteId?pickupNote?.trim():undefined;
+  const endpoint=note?'request_ride_with_pickup_note':quoteId?'request_ride_with_fare':'request_ride_once';
+  const id=await rpc<string>(endpoint,token,{
     ...(quoteId?{p_quote_id:quoteId}:{}),
+    ...(note?{p_pickup_note:note}:{}),
     p_request_id:requestId,
     p_pickup:draft.pickup.trim(),p_destination:draft.destination.trim(),
     p_pickup_lat:draft.pickupPoint.latitude,p_pickup_lng:draft.pickupPoint.longitude,

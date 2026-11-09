@@ -14,7 +14,8 @@ export const categories: {id: RideType; ar: string; en: string; de: string; desc
 export const regions = [
   ['دمشق','Damascus'],['ريف دمشق','Rif Dimashq'],['حلب','Aleppo'],['حمص','Homs'],['حماة','Hama'],['اللاذقية','Latakia'],['طرطوس','Tartus'],['إدلب','Idlib'],['درعا','Daraa'],['السويداء','As-Suwayda'],['القنيطرة','Quneitra'],['دير الزور','Deir ez-Zor'],['الرقة','Raqqa'],['الحسكة','Al-Hasakah'],
 ];
-export interface TripDraft {pickup:string;destination:string;region:number;intercity:boolean;category:RideType;pickupPoint?:Coordinate;pickupMode?:'current'|'manual';destinationPoint?:Coordinate}
+export interface TripDraft {pickup:string;destination:string;region:number;intercity:boolean;category:RideType;pickupPoint?:Coordinate;pickupMode?:'current'|'manual';destinationPoint?:Coordinate;pickupNote?:{owner:string;text:string}}
+export const pickupNoteMaxLength=120;
 export interface Trip extends TripDraft {id:string;createdAt:string;status:TripStatus;fare:null;pin:string;rating?:number;feedback?:string;cancelReason?:'passenger'|'driver';updatedAt:string;meter?:Meter}
 export interface Preferences {theme:'system'|'light'|'dark';dataSaver:boolean;notifications:boolean;smsNumber:string;permissionsIntroSeen:boolean}
 export const defaultPreferences:Preferences={theme:'system',dataSaver:true,notifications:false,smsNumber:'',permissionsIntroSeen:false};

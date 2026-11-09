@@ -175,7 +175,7 @@ function LocationPicker({pickup,focus,savedView,edit,fromReview}:{pickup:boolean
    Keyboard.dismiss();
    const name=label.trim()||formatCoordinate(selected);
    if(pickup){
-    setDraft(previous=>({...previous,pickup:pickupMode==='current'?t('موقعي الحالي','My current location'):name,pickupPoint:selected,pickupMode}));
+    setDraft(previous=>({...previous,pickup:pickupMode==='current'?t('موقعي الحالي','My current location'):name,pickupPoint:selected,pickupMode,pickupNote:undefined}));
     router.replace('/review');
    }else{
     setDraft(previous=>({...previous,destination:name,destinationPoint:selected}));

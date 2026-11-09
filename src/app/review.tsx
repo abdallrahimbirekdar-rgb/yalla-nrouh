@@ -1,5 +1,5 @@
 import React,{useEffect,useRef,useState} from 'react';
-import {Switch,View} from 'react-native';
+import {Pressable,Switch,View} from 'react-native';
 import {router} from 'expo-router';
 import {useApp} from '../context';
 import {useAuth} from '../auth';
@@ -11,7 +11,7 @@ import {siteCurrentPosition} from '../site-bridge';
 import {pickupPosition,pickupPositionMessage} from '../pickup-position';
 import {PositionError} from '../current-position';
 import {pickupQuoteMatches} from '../pickup-policy';
-import {validateDraft} from '../domain';
+import {pickupNoteMaxLength,validateDraft} from '../domain';
 import {PassengerMap,PassengerStops,RideFooter} from '../passenger-trip-summary';
 import type {FareQuote,RoutePlan} from '../routing';
 import {rememberPassengerRoute} from '../passenger-ride-route';
@@ -19,11 +19,13 @@ import RoutePanel from '../route-panel';
 import RideOptions from '../ride-options';
 import {useRideSharing} from '../ride-live-sharing';
 import {RideStatusCard} from '../ride-status-card';
-import {Button,Label,Page,Panel,useText} from '../ui';
+import {Button,Field,Label,Page,Panel,useText} from '../ui';
 export default function Review(){
  const {draft,state,setDraft,foreground,connection}=useApp();const auth=useAuth();const owner=auth.session?.user.id;const t=useText();const [quoteAttempt,setQuoteAttempt]=useState(0);const [busy,setBusy]=useState(false),[error,setError]=useState(''),[quoted,setQuoted]=useState<{key:string;quote:FareQuote;plan:RoutePlan}|null>(null),[pickupReady,setPickupReady]=useState(false),[locationAttempt,setLocationAttempt]=useState(0);const quoteKey=[draft.pickupPoint?.latitude,draft.pickupPoint?.longitude,draft.destinationPoint?.latitude,draft.destinationPoint?.longitude,owner,quoteAttempt].join('|');const manualPickup=draft.pickupMode==='manual';const invalid=validateDraft(draft)||!draft.pickupPoint||!draft.destinationPoint;
  const sharing=useRideSharing(owner);
  const [sharingOwner,setSharingOwner]=useState<string>();
+ const [noteEditorOwner,setNoteEditorOwner]=useState<string>();
+ const pickupNote=owner&&draft.pickupNote?.owner===owner?draft.pickupNote.text:'';
  const shareOnRequest=!!owner&&sharingOwner===owner;
  const mounted=useRef(false);
  useEffect(()=>{mounted.current=true;return()=>{mounted.current=false}},[]);
@@ -46,7 +48,7 @@ export default function Review(){
    shared=await sharing.start(rideId,'passenger');
   }
   if(!mounted.current||readRideState().owner!==owner)return;
-  setDraft(previous=>({...previous,pickup:'',destination:'',pickupPoint:undefined,pickupMode:undefined,destinationPoint:undefined}));
+  setDraft(previous=>({...previous,pickup:'',destination:'',pickupPoint:undefined,pickupMode:undefined,destinationPoint:undefined,pickupNote:undefined}));
   router.replace({pathname:'/cloud',params:{ride:rideId,...(shareOnRequest&&!shared?{shareUnavailable:'1'}:{})}});
  }
  const recovery=useRideRecovery('request',owner,foreground,busy,ride=>{void openRide(ride.id)});
@@ -69,7 +71,7 @@ export default function Review(){
    if(readRideState().owner!==owner)return;
    const requestId=recovery.id??newRideRequestId();
    recovery.remember(requestId);submitted=true;
-   const rideId=await cloudRequestRide(token,requestDraft,requestId,quoted.quote.id);
+   const rideId=await cloudRequestRide(token,requestDraft,requestId,quoted.quote.id,pickupNote);
    if(readRideState().owner===owner){
     if(requestDraft.pickupPoint&&requestDraft.destinationPoint)
      rememberPassengerRoute(owner,rideId,requestDraft.pickupPoint,requestDraft.destinationPoint,quoted.plan.points);
@@ -91,7 +93,17 @@ export default function Review(){
  function editStop(target:'pickup'|'destination'){
   router.replace({pathname:'/location',params:{target,focus:'1',fromReview:'1'}});
  }
- const stops=<PassengerStops compact pickup={draft.pickup||t('حدد نقطة الانطلاق','Choose pickup')} destination={draft.destination||t('حدد الوجهة','Choose destination')}
+ const noteLabel=t('أضف ملاحظة للسائق','Add a note for the driver','Hinweis für den Fahrer hinzufügen');
+ const pickupExtra=owner&&readyToReview&&(noteEditorOwner===owner||pickupNote
+  ?<Field label={t('ملاحظة للسائق (اختياري)','Note for the driver (optional)','Hinweis für den Fahrer (optional)')}
+    placeholder={t('مثلاً عند الباب الجانبي','For example, by the side door','Zum Beispiel am Seiteneingang')}
+    value={pickupNote} maxLength={pickupNoteMaxLength} editable={canEdit}
+    onChangeText={text=>setDraft(previous=>({...previous,pickupNote:text?{owner,text}:undefined}))}/>
+  :canEdit&&<Pressable accessibilityRole="button" onPress={()=>setNoteEditorOwner(owner)}
+    style={{minHeight:40,justifyContent:'center',paddingHorizontal:4}}>
+    <Label muted>{noteLabel}</Label>
+   </Pressable>);
+ const stops=<PassengerStops pickupExtra={pickupExtra} compact pickup={draft.pickup||t('حدد نقطة الانطلاق','Choose pickup')} destination={draft.destination||t('حدد الوجهة','Choose destination')}
   onEditPickup={canEdit&&draft.destinationPoint?()=>editStop('pickup'):undefined}
   onEditDestination={canEdit?()=>editStop('destination'):undefined}/>;
  const waitingForConfirmation=!!recovery.id&&(busy||recovery.checking);
