@@ -10,6 +10,7 @@ export function useDriverOfferSound(
  enabled:boolean,
  offers:readonly {ride_id:string;expiresOnDevice?:number}[],
  notifications:boolean,
+ remoteAlerts:boolean,
 ){
  const t=useText();
  const nativeAlert=notifications&&isNativeWebView();
@@ -43,7 +44,7 @@ export function useDriverOfferSound(
 
  useEffect(()=>{
   const context=audio.current;
-  if(!enabled||!owner||(!nativeAlert&&(!ready||!context))||offers.length===0||document.visibilityState==='hidden')return;
+  if(remoteAlerts||!enabled||!owner||(!nativeAlert&&(!ready||!context))||offers.length===0||document.visibilityState==='hidden')return;
   const key='yalla-driver-offer-chimes:'+owner;
   let remembered:HeardOffers=heard.current?.owner===owner?heard.current.ids:{};
   try{
@@ -58,14 +59,14 @@ export function useDriverOfferSound(
   try{localStorage.setItem(key,JSON.stringify(updated))}catch{}
   if(nativeAlert){
    const body=t('طلب رحلة جديد. افتح قائمة الطلبات قبل انتهاء المهلة.','New ride request. Check your requests before it expires.','Neue Fahrtanfrage. Prüfe deine Anfragen, bevor sie abläuft.');
-   void notifyLocal(t('يلّا نروح','Yalla Nrouh','Yalla Nrouh'),body).catch(()=>{
+   void notifyLocal(t('يلّا نروح','Yalla Nrouh','Yalla Nrouh'),body,{rideId:ids[0],type:'driver-offer'}).catch(()=>{
     const current=deliveryScope.current;
     const stillAvailable=current.offers.some(offer=>ids.includes(offer.ride_id)&&(offer.expiresOnDevice??0)>performance.now());
     if(current.owner===owner&&current.enabled&&stillAvailable&&audio.current&&document.visibilityState!=='hidden')
      playOfferChime(audio.current);
    });
   }
- },[enabled,owner,offers,ready,nativeAlert,t]);
+ },[enabled,owner,offers,ready,nativeAlert,remoteAlerts,t]);
 
  return {ready,problem,unlock};
 }

@@ -21,6 +21,7 @@ on:
       - 'src/entry.js'
       - 'src/site-shell.tsx'
       - 'src/android-fresh/**'
+      - 'src/ride-push-target.ts'
       - 'src/position-jobs.ts'
       - 'src/foreground-fix.ts'
       - 'src/current-position.ts'
@@ -76,6 +77,17 @@ jobs:
         run: npm run typecheck
       - name: Test booking and network client
         run: npm test
+      - name: Prepare optional Firebase Android configuration
+        env:
+          FIREBASE_ANDROID_CONFIG_BASE64: ${{ secrets.FIREBASE_ANDROID_CONFIG_BASE64 }}
+        run: |
+          if [[ -n "$FIREBASE_ANDROID_CONFIG_BASE64" ]]; then
+            umask 077
+            config="$RUNNER_TEMP/yalla-google-services.json"
+            printf '%s' "$FIREBASE_ANDROID_CONFIG_BASE64" | base64 --decode > "$config"
+            node -e 'const config=require(process.argv[1]); if (!config.client?.some(c=>c.client_info?.android_client_info?.package_name==="com.yallanrouh.demo")) process.exit(1)' "$config"
+            echo "YALLA_FIREBASE_ANDROID_CONFIG=$config" >> "$GITHUB_ENV"
+          fi
       - name: Generate Android project
         run: npx expo prebuild --platform android --no-install
       - name: Check embedded Google Maps configuration
@@ -138,9 +150,13 @@ jobs:
           APP_VERSION=$(node -p "require('./app.json').expo.version")
           APP_CODE=$(node -p "require('./app.json').expo.android.versionCode")
           MAPS_STATUS="Continuous foreground driver GPS, screen stays awake during guidance, and live website updates."
+          PUSH_STATUS="Firebase device configuration absent; local ride alerts remain available."
+          if [[ -n "${YALLA_FIREBASE_ANDROID_CONFIG:-}" ]]; then
+            PUSH_STATUS="Firebase device configuration included; delivery also requires the configured server."
+          fi
           if ! gh release view android-test-unified >/dev/null 2>&1; then
             gh release create android-test-unified --title "Yalla Nrouh Android $APP_VERSION (test)" --notes "Test build only; not a live taxi booking service." --prerelease
           fi
           gh release upload android-test-unified release-apk/yalla-nrouh-test.apk release-apk/yalla-nrouh-test.apk.sha256 --clobber
-          printf 'Android test %s, versionCode %s.\nSource commit: %s\n%s\nBuilt via GitHub Actions after automated checks and APK signature verification.\nTest only; not a live taxi booking service.\n' "$APP_VERSION" "$APP_CODE" "$GITHUB_SHA" "$MAPS_STATUS" > release-notes.txt
+          printf 'Android test %s, versionCode %s.\nSource commit: %s\n%s\n%s\nBuilt via GitHub Actions after automated checks and APK signature verification.\nTest only; not a live taxi booking service.\n' "$APP_VERSION" "$APP_CODE" "$GITHUB_SHA" "$MAPS_STATUS" "$PUSH_STATUS" > release-notes.txt
           gh release edit android-test-unified --title "Yalla Nrouh Android $APP_VERSION (test)" --notes-file release-notes.txt --prerelease

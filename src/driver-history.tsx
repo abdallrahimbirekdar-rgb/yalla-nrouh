@@ -2,6 +2,7 @@ import React,{useEffect,useRef,useState} from 'react';
 import {ActivityIndicator,Modal,Platform,Pressable,ScrollView,Text,View} from 'react-native';
 import {SafeAreaView} from 'react-native-safe-area-context';
 import {cloudCurrentToken,cloudDriverHistory,driverHistoryPageSize,type DriverHistoryEntry,type DriverHistoryKind} from './cloud-api';
+import {CancellationReceipt} from './cancellation-receipt';
 import {useApp} from './context';
 import {categories,regions} from './domain';
 import {formatCoordinate,isCoordinate} from './geo';
@@ -136,6 +137,7 @@ function DriverHistoryList({kind,owner}:{kind:DriverHistoryKind;owner:string}){
     <View style={{borderTopWidth:1,borderColor:colors.line,paddingTop:5}}>
      <Label muted>{t('رقم الطلب','Request ID')} · {String(item.ride_id??item.id).slice(0,8)}</Label>
     </View>
+    {kind==='cancelled'&&typeof item.id==='string'&&<CancellationReceipt rideId={item.id}/>}
    </Panel>;
   })}
   {loading&&<ActivityIndicator color={colors.purple}/>}

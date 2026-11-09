@@ -1,3 +1,4 @@
+import {readRidePushTarget,type RidePushTarget} from '../ride-push-target.ts';
 // Standalone, typed bridge for the rebuilt Android host.
 // Never execute strings received from the website; only parse a small JSON protocol.
 const SITE_ORIGIN='https://abdallrahimbirekdar-rgb.github.io';
@@ -24,7 +25,8 @@ export type WebMessage=
  |{type:'osmand-map-access';id:string}
  |{type:'location-settings';id:string}
  |{type:'alerts-enable';id:string}
- |{type:'notify';id:string;title:string;body:string}
+ |{type:'ride-push-token'|'ride-push-disable';id:string}
+ |{type:'notify';id:string;title:string;body:string;target?:RidePushTarget}
  |{type:'status';safeToReload:boolean;canGoBack:boolean;language?:'ar'|'en';theme?:'system'|'light'|'dark';signedOut?:true}
  |{type:'refresh'}
  |{type:'host-alive';id:string}
@@ -74,8 +76,9 @@ export function readWebMessage(raw:string):WebMessage|null{
   if(v.type==='osmand-map-access'&&idOK(v.id))return {type:v.type,id:v.id};
   if(v.type==='location-settings'&&idOK(v.id))return {type:'location-settings',id:v.id};
   if(v.type==='alerts-enable'&&idOK(v.id))return {type:'alerts-enable',id:v.id};
+  if((v.type==='ride-push-token'||v.type==='ride-push-disable')&&idOK(v.id))return {type:v.type,id:v.id};
   if(v.type==='notify'&&idOK(v.id)&&typeof v.title==='string'&&v.title.length<=200&&typeof v.body==='string'&&v.body.length<=1000)
-   return {type:'notify',id:v.id,title:v.title,body:v.body};
+   return {type:'notify',id:v.id,title:v.title,body:v.body,target:readRidePushTarget(v.target)??undefined};
   if(v.type==='status'&&typeof v.safeToReload==='boolean'&&typeof v.canGoBack==='boolean')
    return {type:'status',safeToReload:v.safeToReload,canGoBack:v.canGoBack,
      ...((v.language==='ar'||v.language==='en')?{language:v.language}:{}),

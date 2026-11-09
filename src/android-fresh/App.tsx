@@ -2,6 +2,8 @@ import React,{useCallback,useEffect,useRef,useState} from 'react';
 import {AppState,BackHandler,Linking,Pressable,Text,View} from 'react-native';
 import {SafeAreaView} from 'react-native-safe-area-context';
 import {WebView,type WebViewMessageEvent} from 'react-native-webview';
+import * as Notifications from 'expo-notifications';
+import {readRidePushTarget,type RidePushTarget} from '../ride-push-target';
 import * as Location from 'expo-location';
 import Constants from 'expo-constants';
 import {requireOptionalNativeModule} from 'expo-modules-core';
@@ -13,6 +15,14 @@ import {acceptableFix,awaitFreshFix,deadlineOr,firstUsableMapFix,GpsTaskPool} fr
 import {SITE,websiteEntryUrl,bootstrapScript,diagnosticScript,eventScript,autoFixScript,externalTarget,positionScript,readWebMessage,trustedSite,trustedWebMessage,
  type WebMessage,type PositionResponse} from './bridge';
 
+const ridePushConfigured=Constants.expoConfig?.extra?.ridePushConfigured===true;
+async function deviceRidePushToken(){
+ if(!(await readLocalAlerts()).granted)return null;
+ await Notifications.setNotificationChannelAsync('ride-offers',{name:'Ride offers',importance:Notifications.AndroidImportance.HIGH,sound:'default'});
+ await Notifications.setNotificationChannelAsync('rides',{name:'Ride updates',importance:Notifications.AndroidImportance.DEFAULT,sound:'default'});
+ const token=await Notifications.getDevicePushTokenAsync();
+ return token.type==='android'&&typeof token.data==='string'?token.data:null;
+}
 let alertPermissionTask:Promise<boolean>|null=null;
 function requestAlertPermission(){
  if(alertPermissionTask)return alertPermissionTask;
@@ -152,6 +162,20 @@ export default function FreshAndroid(){
  const inject=useCallback((script:string)=>{
   if(active.current)web.current?.injectJavaScript(script);
  },[]);
+ const pendingPushTarget=useRef<RidePushTarget|null>(null);
+ const pushTap=useCallback((response:Notifications.NotificationResponse)=>{
+  const target=readRidePushTarget(response.notification.request.content.data);
+  if(!target)return;
+  Notifications.clearLastNotificationResponse();
+  if(pageReady.current)inject(eventScript('yalla:ride-push-tap',target));
+  else pendingPushTarget.current=target;
+ },[inject]);
+ useEffect(()=>{
+  const subscription=Notifications.addNotificationResponseReceivedListener(pushTap);
+  const response=Notifications.getLastNotificationResponse();
+  if(response)pushTap(response);
+  return()=>subscription.remove();
+ },[pushTap]);
  const syncPermission=useCallback(async(stage:string)=>{
   try{
    const state=await engine.status(stage);
@@ -350,6 +374,10 @@ export default function FreshAndroid(){
      pendingEntry.current=null;
     }
     void checkWebUpdate();
+    inject(eventScript('yalla:ride-push-capability',{available:ridePushConfigured}));
+   }
+   if(!message.signedOut&&pendingPushTarget.current){
+    inject(eventScript('yalla:ride-push-tap',pendingPushTarget.current));pendingPushTarget.current=null;
    }
    if(!bootStarted.current){bootStarted.current=true;void boot()}
   }else if(message.type==='bootstrap'){
@@ -427,8 +455,13 @@ export default function FreshAndroid(){
     ()=>inject(eventScript('yalla:native-result',{id:message.id,ok:true})),
     ()=>inject(eventScript('yalla:native-result',{id:message.id,ok:false})),
    );
+  }else if(message.type==='ride-push-token'||message.type==='ride-push-disable'){
+   const operation=!ridePushConfigured?Promise.resolve(null):message.type==='ride-push-token'
+    ?deviceRidePushToken():Notifications.unregisterForNotificationsAsync().then(()=>null);
+   void operation.then(token=>inject(eventScript('yalla:ride-push-result',{id:message.id,token})))
+    .catch(()=>inject(eventScript('yalla:ride-push-result',{id:message.id,token:null})));
   }else if(message.type==='alerts-enable'||message.type==='notify'){
-   const operation=message.type==='alerts-enable'?requestAlertPermission():notifyLocal(message.title,message.body).then(()=>true);
+   const operation=message.type==='alerts-enable'?requestAlertPermission():notifyLocal(message.title,message.body,message.target).then(()=>true);
    void operation.then(ok=>inject(eventScript('yalla:native-result',{id:message.id,ok})))
     .catch(()=>inject(eventScript('yalla:native-result',{id:message.id,ok:false})));
   }else if(message.type==='refresh')refresh();
@@ -448,6 +481,7 @@ export default function FreshAndroid(){
   </View>}
   {!rendererLost&&<WebView key={webSession} ref={web} source={{uri}} style={{flex:1,backgroundColor:background}}
    originWhitelist={['https://abdallrahimbirekdar-rgb.github.io']}
+   injectedJavaScriptBeforeContentLoaded={'window.__YALLA_RIDE_PUSH__='+JSON.stringify(ridePushConfigured)+';true;'}
    javaScriptEnabled domStorageEnabled geolocationEnabled={false}
    cacheEnabled cacheMode="LOAD_DEFAULT" mixedContentMode="never"
    allowFileAccess={false} allowFileAccessFromFileURLs={false} allowUniversalAccessFromFileURLs={false}

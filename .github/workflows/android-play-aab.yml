@@ -50,6 +50,17 @@ jobs:
           curl -fsSLo "$RUNNER_TEMP/bundletool.jar" "https://github.com/google/bundletool/releases/download/$BUNDLETOOL_VERSION/bundletool-all-$BUNDLETOOL_VERSION.jar"
       - run: npm ci
       - run: npm run typecheck && npm run lint && npm test
+      - name: Prepare optional Firebase Android configuration
+        env:
+          FIREBASE_ANDROID_CONFIG_BASE64: ${{ secrets.FIREBASE_ANDROID_CONFIG_BASE64 }}
+        run: |
+          if [[ -n "$FIREBASE_ANDROID_CONFIG_BASE64" ]]; then
+            umask 077
+            config="$RUNNER_TEMP/yalla-google-services.json"
+            printf '%s' "$FIREBASE_ANDROID_CONFIG_BASE64" | base64 --decode > "$config"
+            node -e 'const config=require(process.argv[1]); if (!config.client?.some(c=>c.client_info?.android_client_info?.package_name==="com.yallanrouh.demo")) process.exit(1)' "$config"
+            echo "YALLA_FIREBASE_ANDROID_CONFIG=$config" >> "$GITHUB_ENV"
+          fi
       - run: npx expo prebuild --platform android --no-install
       - name: Build with Play upload key
         env:

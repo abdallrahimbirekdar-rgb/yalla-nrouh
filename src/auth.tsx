@@ -1,3 +1,4 @@
+import {disableRidePush} from './ride-push';
 import {setRideOwner} from './cloud-ride-state';
 import React,{createContext,useCallback,useContext,useEffect,useMemo,useRef,useState} from 'react';
 import {authClient} from './auth-client';
@@ -48,7 +49,7 @@ export function AuthProvider({children}:{children:React.ReactNode}){
    if(error)throw error;accept(data.session);
   },
   signUp:async(email,password)=>{const {data,error}=await authClient().auth.signUp({email:email.trim(),password,options:{emailRedirectTo:SITE}});if(error)throw error;if(data.session)accept(data.session);return Boolean(data.session)},
-  signOut:async(expectedUserId)=>{if(expectedUserId&&current.current?.user.id!==expectedUserId)return;const {error}=await authClient().auth.signOut({scope:'local'});if(error)throw error;setAdmin(false);setRecovery(false);accept(null)},
+  signOut:async(expectedUserId)=>{if(expectedUserId&&current.current?.user.id!==expectedUserId)return;const owner=current.current?.user.id;if(owner)await disableRidePush(owner);if(current.current?.user.id!==owner)return;const {error}=await authClient().auth.signOut({scope:'local'});if(error)throw error;setAdmin(false);setRecovery(false);accept(null)},
   reset:async(email)=>{const {error}=await authClient().auth.resetPasswordForEmail(email.trim(),{redirectTo:SITE});if(error)throw error},
   updatePassword:async(password,currentPassword)=>{const {error}=await authClient().auth.updateUser({password,...(currentPassword?{current_password:currentPassword}:{})});if(error)throw error;setRecovery(false)},
  }),[session,ready,admin,checkingAdmin,driver,rolesReady,recovery,problem,retry,accept]);

@@ -3,6 +3,7 @@ import {ActivityIndicator,Pressable,ScrollView,StyleSheet,Text,View} from 'react
 import {SafeAreaView} from 'react-native-safe-area-context';
 import {router,useFocusEffect,useIsFocused} from 'expo-router';
 import {cloudCurrentToken,cloudMyRides} from '../cloud-api';
+import {RideResumeCard} from '../ride-resume-card';
 import {useRideState} from '../use-ride-state';
 import {readPendingRideOperation} from '../use-ride-recovery';
 import {useApp} from '../context';
@@ -18,6 +19,7 @@ export default function Booking(){
  const auth=useAuth();
  const rideState=useRideState();
  const userId=auth.session?.user.id;
+ const resumable=rideState.owner===userId?rideState.resume:null;
  const pendingRequest=readPendingRideOperation('request',userId);
  const canBook=auth.rolesReady&&(!auth.driver||auth.admin);
  const bookingBlocked=!!auth.session&&!canBook;
@@ -53,11 +55,13 @@ export default function Booking(){
 
  function choose(){
   if(pendingRequest){router.push('/review');return}
+  if(resumable){router.push({pathname:'/cloud',params:{ride:resumable.id}});return}
   if(rideState.active){router.push('/cloud');return}
   router.push({pathname:'/location',params:{target:'destination',focus:'1'}});
  }
  function openPickup(){
   if(pendingRequest){router.push('/review');return}
+  if(resumable){router.push({pathname:'/cloud',params:{ride:resumable.id}});return}
   if(rideState.active){router.push('/cloud');return}
   router.push({pathname:'/location',params:{target:'pickup'}});
  }
@@ -66,6 +70,9 @@ export default function Booking(){
  return <SafeAreaView style={{flex:1,backgroundColor:colors.background}}>
   <View style={styles.frame}>
    <ScrollView contentContainerStyle={styles.scroll}>
+    {!bookingBlocked&&resumable&&<View style={{paddingHorizontal:12}}>
+     <RideResumeCard ride={resumable} verified={rideState.known} onOpen={()=>router.push({pathname:'/cloud',params:{ride:resumable.id}})}/>
+    </View>}
     <View style={styles.mapFrame}><PassengerMapFrame>
      <MapCanvas compact readOnly minMapHeight={mapHeight} cameraTarget={gps.camera} point={gps.camera?.point??null} onChange={()=>{}}/>
      {(gps.busy||gps.failure)&&<View pointerEvents="none" style={[styles.status,{backgroundColor:colors.background}]}><Label muted>{status}</Label></View>}
@@ -83,7 +90,7 @@ export default function Booking(){
       <View style={{flex:1}}><Label muted>{auth.problem?t('تعذر تحديث الجلسة أو صلاحيات الحساب. تحقق من الاتصال وأعد المحاولة.','Could not check the session or account access. Check internet and try again.'):t('جارٍ التحقق من صلاحيات الحساب…','Checking account access…')}</Label></View>
       {!!auth.problem&&<Button secondary title={t('إعادة المحاولة','Try again')} onPress={()=>void auth.retry()}/>}
      </View>}
-     {!bookingBlocked&&(pendingRequest||rideState.active||draft.destinationPoint)&&<Button icon="arrow-forward-outline" title={pendingRequest?t('التحقق من طلب التاكسي','Check taxi request'):rideState.active?t('متابعة رحلتي الحالية','View my current ride'):t('متابعة إلى نقطة الانطلاق','Continue to the pickup point')} onPress={openPickup}/>}
+     {!bookingBlocked&&(pendingRequest||!resumable&&(rideState.active||draft.destinationPoint))&&<Button icon="arrow-forward-outline" title={pendingRequest?t('التحقق من طلب التاكسي','Check taxi request'):rideState.active?t('متابعة رحلتي الحالية','View my current ride'):t('متابعة إلى نقطة الانطلاق','Continue to the pickup point')} onPress={openPickup}/>}
      <View style={[row,styles.shortcuts]}>
       <Shortcut mint icon="bookmark-outline" title={t('العناوين المحفوظة','Saved addresses')} onPress={()=>router.push({pathname:'/location',params:{view:'saved'}})}/>
       <Shortcut icon="time-outline" title={t('الرحلات الأخيرة','Recent rides')} onPress={()=>router.push({pathname:'/cloud',params:{mode:'history'}})}/>

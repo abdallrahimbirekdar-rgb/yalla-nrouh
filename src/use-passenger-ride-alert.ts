@@ -26,6 +26,6 @@ export function usePassengerRideAlert(owner:string|undefined,enabled:boolean,rid
   const body=event.status==='accepted'
    ?t('قبل السائق طلبك وهو في الطريق إليك.','A driver accepted your request and is on the way.','Ein Fahrer hat deine Anfrage angenommen und ist unterwegs.')
    :t('وصل السائق إلى نقطة الالتقاء.','Your driver has arrived at the pickup point.','Dein Fahrer ist am Abholort angekommen.');
-  void notifyLocal(t('يلّا نروح','Yalla Nrouh','Yalla Nrouh'),body).catch(()=>{/* The ride screen still shows the event. */});
+  void notifyLocal(t('يلّا نروح','Yalla Nrouh','Yalla Nrouh'),body,{rideId:ride.id,type:event.status==='accepted'?'passenger-accepted':'passenger-arrived'}).catch(()=>{/* The ride screen still shows the event. */});
  },[owner,enabled,ride,t]);
 }

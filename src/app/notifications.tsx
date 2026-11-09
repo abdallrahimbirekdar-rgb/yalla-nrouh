@@ -1,3 +1,5 @@
+import {useAuth} from '../auth';
+import {ridePushAvailable,useRidePushEnrolled} from '../ride-push';
 import {useRef,useState} from 'react';
 import {Linking,Platform,Text,View} from 'react-native';
 import {enableLocalAlerts,notifyLocal} from '../alerts';
@@ -8,6 +10,8 @@ import {Button,Icon,Label,Page,Panel,useText} from '../ui';
 
 export default function Notifications(){
  const {state,dispatch}=useApp();
+ const auth=useAuth();
+ const backgroundReady=useRidePushEnrolled(auth.session?.user.id);
  const t=useText();
  const {colors,dark}=useTheme();
  const busyRef=useRef(false);
@@ -73,6 +77,10 @@ export default function Notifications(){
     ?t('التنبيهات مفعّلة داخل التطبيق. يعتمد ظهورها على إذن الهاتف.','Alerts are on in the app. Your phone must also allow them.','Meldungen sind in der App aktiv. Dein Handy muss sie ebenfalls erlauben.')
     :t('التنبيهات متوقفة داخل التطبيق.','Alerts are off in the app.','Meldungen sind in der App aus.')}</Label>
     :<Label muted>{t('تنبيهات الجهاز متاحة في تطبيق الهاتف.','Phone alerts are available in the mobile app.','Gerätemeldungen sind in der Handy-App verfügbar.')}</Label>}
+   {available&&enabled&&<Label muted>{backgroundReady
+    ?t('تنبيهات الخلفية مفعّلة لهذا الحساب.','Background alerts are enabled for this account.','Hintergrundmeldungen sind für dieses Konto aktiv.')
+    :ridePushAvailable()?t('تنبيهات الخلفية بانتظار تسجيل الجهاز.','Background alerts are waiting for device registration.','Hintergrundmeldungen warten auf die Geräteregistrierung.')
+    :t('هذه النسخة تعرض التنبيهات أثناء فتح التطبيق.','This build shows alerts while the app is open.','Diese Version zeigt Meldungen bei geöffneter App.')}</Label>}
    {available&&<Button prominent secondary={enabled} icon={enabled?'notifications-off-outline':'notifications-outline'}
     title={busy?t('جارٍ التحقق من الإذن…','Checking permission…','Berechtigung wird geprüft…'):enabled
      ?t('إيقاف تنبيهات الرحلة','Turn off ride alerts','Fahrtmeldungen ausschalten')

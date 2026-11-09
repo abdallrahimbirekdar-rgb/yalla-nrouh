@@ -5,6 +5,7 @@ type Point={latitude:number;longitude:number};
 type Candidate=Point&{id:string};
 type Work={pickup:Point;candidates:Candidate[]};
 type Push={ride_id:string;token:string;remaining_seconds:number};
+type PassengerPush={ride_id:string;stage:'accepted'|'arrived';token:string};
 type FcmAccount={project_id:string;client_email:string;private_key:string};
 
 const uuid=/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i;
@@ -58,20 +59,36 @@ async function fcmAccess(account:FcmAccount){
  cached={token:result.access_token,expires:Date.now()+result.expires_in*1000};
  return cached.token;
 }
+function fcmConfig():FcmAccount|null{
+ const config=Deno.env.get('FCM_SERVICE_ACCOUNT_JSON');
+ if(!config)return null;
+ try{
+  const account=JSON.parse(config) as FcmAccount;
+  return account.project_id&&account.client_email&&account.private_key?account:null;
+ }catch{return null}
+}
+async function sendPush(account:FcmAccount,access:string,token:string,rideId:string,type:string,body:string,ttl:number,channel:string){
+ const response=await fetch('https://fcm.googleapis.com/v1/projects/'+encodeURIComponent(account.project_id)+'/messages:send',{
+  method:'POST',headers:{Authorization:'Bearer '+access,'Content-Type':'application/json'},
+  body:JSON.stringify({message:{token,notification:{title:'يلّا نروح',body},
+   data:{rideId,type},android:{priority:'high',ttl:ttl+'s',notification:{channel_id:channel,tag:'ride-'+rideId}},
+  }}),signal:AbortSignal.timeout(5000),
+ });
+ if(!response.ok)console.warn('ride_push_rejected',response.status);
+}
 async function pushWave(generation:string,account:FcmAccount){
  const access=await fcmAccess(account);
  const offers=await rpc<Push[]>('claim_ride_push',{p_generation:generation});
- await Promise.allSettled(offers.map(async({ride_id,token,remaining_seconds})=>{
-  const response=await fetch('https://fcm.googleapis.com/v1/projects/'+encodeURIComponent(account.project_id)+'/messages:send',{
-   method:'POST',headers:{Authorization:'Bearer '+access,'Content-Type':'application/json'},
-   body:JSON.stringify({message:{token,
-    notification:{title:'يلا نروح',body:'طلب رحلة جديد. افتح التطبيق للتحقق من توفره.'},
-    data:{rideId:ride_id,type:'driver-offer'},
-    android:{priority:'high',ttl:remaining_seconds+'s',notification:{channel_id:'ride-offers',tag:'ride-'+ride_id}},
-   }}),signal:AbortSignal.timeout(5000),
-  });
-  if(!response.ok)console.warn('driver_push_rejected',response.status);
- }));
+ await Promise.allSettled(offers.filter(offer=>offer.remaining_seconds>0).map(({ride_id,token,remaining_seconds})=>
+  sendPush(account,access,token,ride_id,'driver-offer','طلب رحلة جديد. افتح التطبيق للتحقق من توفره.',remaining_seconds,'ride-offers')));
+}
+async function pushPassenger(event:string,account:FcmAccount){
+ const events=await rpc<PassengerPush[]>('claim_passenger_ride_push',{p_event:event});
+ if(!events.length)return;
+ const access=await fcmAccess(account);
+ await Promise.allSettled(events.map(({ride_id,stage,token})=>
+  sendPush(account,access,token,ride_id,stage==='arrived'?'passenger-arrived':'passenger-accepted',
+   stage==='arrived'?'وصل السائق إلى نقطة الالتقاء.':'قبل السائق طلبك وهو في الطريق.',90,'rides')));
 }
 
 async function runDispatch(generation:string,work:Work,started:number){
@@ -80,10 +97,8 @@ async function runDispatch(generation:string,work:Work,started:number){
  await rpc('finish_ride_dispatch',{
   p_generation:generation,p_state:ordered.length?'ranked':work.candidates.length?'fallback':'no_candidates',p_candidates:ordered,
  });
- const config=Deno.env.get('FCM_SERVICE_ACCOUNT_JSON');
- if(!config)return;
- const account=JSON.parse(config) as FcmAccount;
- if(!account.project_id||!account.client_email||!account.private_key)return;
+ const account=fcmConfig();
+ if(!account)return;
  // The database revalidates each wave. Previously claimed devices are skipped.
  for(const delay of [9000,17000,26000,51000]){
   await wait(Math.max(0,started+delay-Date.now()));
@@ -91,12 +106,22 @@ async function runDispatch(generation:string,work:Work,started:number){
  }
 }
 Deno.serve(async request=>{
+ if(request.method==='GET'&&new URL(request.url).searchParams.get('capability')==='ride-push'){
+  const ready=Boolean(fcmConfig());
+  return Response.json({ready},{headers:{'Access-Control-Allow-Origin':'https://abdallrahimbirekdar-rgb.github.io','Cache-Control':'no-store'}});
+ }
  if(request.method!=='POST')return new Response(null,{status:405});
  const started=Date.now();
  try{
   const raw=await request.text();
   if(raw.length>128)return new Response(null,{status:400});
-  const generation=JSON.parse(raw)?.generation;
+  const {event,generation}=JSON.parse(raw)??{};
+  if(typeof event==='string'&&uuid.test(event)){
+   const account=fcmConfig();
+   if(!account)return new Response(null,{status:204});
+   await pushPassenger(event,account);
+   return new Response(null,{status:204});
+  }
   if(typeof generation!=='string'||!uuid.test(generation))return new Response(null,{status:400});
   const work=await rpc<Work|null>('claim_ride_dispatch',{p_generation:generation});
   if(!work)return new Response(null,{status:204});

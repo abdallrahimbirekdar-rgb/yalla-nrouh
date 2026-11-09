@@ -163,7 +163,7 @@ export async function loadSiteState(storage:Pick<Storage,'getItem'|'setItem'>,ke
  return saved;
 }
 
-export function nativeAction(type:'alerts-enable'|'notify'|'location-settings',text?:{title:string;body:string}):Promise<boolean>{
+export function nativeAction(type:'alerts-enable'|'notify'|'location-settings',text?:{title:string;body:string;target?:import('./ride-push-target').RidePushTarget}):Promise<boolean>{
  const host=window as SiteWindow;const bridge=host.ReactNativeWebView;if(!bridge)return Promise.resolve(false);
  const id=Date.now().toString(36)+'-'+Math.random().toString(36).slice(2);
  return new Promise((resolve,reject)=>{

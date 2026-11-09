@@ -1,3 +1,8 @@
+import {useRidePushEnrolled} from '../ride-push';
+import {CancellationReceipt} from '../cancellation-receipt';
+import {RideResumeCard} from '../ride-resume-card';
+import {forgetResumeRide} from '../cloud-ride-state';
+import {useRideState} from '../use-ride-state';
 import RideCancellation,{type CancellationReason} from '../ride-cancellation';
 import React,{useCallback,useEffect,useMemo,useRef,useState} from 'react';
 import {AppState,Pressable,View} from 'react-native';
@@ -28,7 +33,10 @@ import {usePassengerRideAlert} from '../use-passenger-ride-alert';
 import {Button,DriverModeIcon,HelpTip,Icon,Label,Page,Panel,useText,useTheme} from '../ui';
 const live=(r:CloudRide)=>!['completed','cancelled'].includes(r.status);
 export default function Rides(){
- const auth=useAuth();const userId=auth.session?.user.id;const {state,draft,setDraft,foreground,connection}=useApp();const t=useText();const {colors}=useTheme();const params=useLocalSearchParams<{mode?:string;ride?:string;shareUnavailable?:string}>();const driverMode=auth.driver||params.mode==='driver';const historyMode=!driverMode&&params.mode==='history';
+ const auth=useAuth();const userId=auth.session?.user.id;const {state,draft,setDraft,foreground,connection}=useApp();const t=useText();const {colors}=useTheme();const params=useLocalSearchParams<{mode?:string;ride?:string;offer?:string;shareUnavailable?:string}>();const driverMode=auth.driver||params.mode==='driver';const historyMode=!driverMode&&params.mode==='history';
+ const remoteAlerts=useRidePushEnrolled(userId);
+ const persistedRide=useRideState();
+ const resumeCandidate=persistedRide.owner===userId&&!persistedRide.known?persistedRide.resume:null;
  const passengerTitle=historyMode?t('الرحلات السابقة','Past rides'):t('رحلتي الحالية','Current ride');
  const [offerLimit,setOfferLimit]=useState(3);
  const [cancelId,setCancelId]=useState<string|null>(null);
@@ -83,7 +91,7 @@ export default function Rides(){
       setCancelId(previous=>previous===pending?null:previous);
       setCancelError('');
       setCancelConfirmed(true);
-      setNotice(t('تم إلغاء الرحلة بنجاح. يمكنك استقبال طلب جديد.','Ride cancelled. You can accept a new request.'));
+      setNotice('');
      }
      setRides(applyConfirmedCancellations(next,confirmedCancelledIds.current));
     }),
@@ -106,6 +114,9 @@ export default function Rides(){
   confirmedCancelledIds.current.clear();pendingCancellationId.current=null;
   setRides([]);setOffers([]);setDriver(null);setInboxProblem(false);setLoading(true);if(!userId){setLoading(false);return}let active=true;void refresh().catch(()=>{if(active){setNotice(t('تعذر تحميل الرحلات. تحقق من الاتصال وأعد المحاولة.','Could not load rides. Check internet and retry.'));setLoading(false)}});return()=>{active=false}},[refresh,userId,state.language,t]);
  const currentDriverRide=driverMode?rides.find(r=>r.driver_id===userId&&isUnresolvedRide(r,confirmedCancelledIds.current)):undefined;
+ const lastDriverRide=useRef<{owner:string;id:string}|null>(null);
+ if(userId&&(currentDriverRide||driverMode&&resumeCandidate&&resumeCandidate.status!=='requested'))
+  lastDriverRide.current={owner:userId,id:(currentDriverRide??resumeCandidate)!.id};
  // Track the driver's own moving taxi, independently of customer location sharing.
  const [driverMapFix,setDriverMapFix]=useState<{point:{latitude:number;longitude:number};time:number}|null>(null);
  const pickupRideId=driverMode&&currentDriverRide&&['accepted','arrived'].includes(currentDriverRide.status)?currentDriverRide.id:null;
@@ -262,7 +273,7 @@ export default function Rides(){
  const proposalRide=approachingRide?.id??(!driverMode&&currentPassengerRide&&currentPassengerRide.status!=='requested'?currentPassengerRide.id:undefined);
  const proposal=pickupChange(useRideRow('ride_pickup_changes',proposalRide,foreground));
  const passengerRide=driverMode||historyMode?undefined:currentPassengerRide;
- usePassengerRideAlert(userId,foreground&&connection!=='offline'&&state.preferences.notifications,passengerRide);
+ usePassengerRideAlert(userId,foreground&&connection!=='offline'&&state.preferences.notifications&&!remoteAlerts,passengerRide);
  const passengerPickup=passengerRide?(proposal?.approved?proposal.point:{latitude:passengerRide.pickup_lat,longitude:passengerRide.pickup_lng}):undefined;
  const driverSharingControl=(ride?:CloudRide)=><View style={{gap:6}}>
   <Label muted>{t('اسمح مرة واحدة على هذا الجهاز. يشارك التطبيق موقعك تلقائيًا مع زبون الرحلة المعيّنة لك، ويتوقف عند انتهاء الرحلة أو إلغائها.','Allow once on this device. Your location is shared automatically with the customer assigned to your ride and stops when the ride ends or is cancelled.')}</Label>
@@ -344,18 +355,30 @@ export default function Rides(){
   if(ride.status==='arrived')return <Button prominent title={t('ابدأ الرحلة','Start ride','Fahrt starten')}
    disabled={disabled} onPress={()=>startDriverRide(ride)}/>;
   return <Button prominent icon="checkmark-circle-outline" title={t('إنهاء الرحلة','Finish ride','Fahrt beenden')} disabled={disabled}
-   onPress={()=>void run(async token=>{if(await cloudAdvanceRide(token,ride.id,'completed')!=='completed')throw Error('not_allowed')},
-    t('اكتملت الرحلة.','Ride completed.','Die Fahrt ist abgeschlossen.'))}/>;
+   onPress={()=>void run(async token=>{
+    if(await cloudAdvanceRide(token,ride.id,'completed')!=='completed')throw Error('not_allowed');
+    if(!userId||!alive.current||identity.current!==userId||!mode.current)return;
+    historyRead.current++;
+    forgetResumeRide(userId,ride.id);
+    setRides(previous=>previous.map(row=>row.id===ride.id?{...row,status:'completed'}:row));
+   })}/>;
  }
 
- const passengerRides=mine.filter(ride=>historyMode?!live(ride):ride.id===(currentPassengerRide?.id??params.ride));
+ const lastPassengerRide=useRef<{owner:string;id:string}|null>(null);
+ if(userId&&(currentPassengerRide||!driverMode&&resumeCandidate))
+  lastPassengerRide.current={owner:userId,id:(currentPassengerRide??resumeCandidate)!.id};
+ const passengerFocus=params.ride??currentPassengerRide?.id??(lastPassengerRide.current?.owner===userId?lastPassengerRide.current?.id:undefined);
+ const passengerRides=mine.filter(ride=>historyMode?!live(ride):ride.id===passengerFocus);
+ const terminal=rides.find(ride=>!live(ride)&&(driverMode
+  ?ride.driver_id===userId&&ride.id===lastDriverRide.current?.id&&lastDriverRide.current?.owner===userId
+  :!historyMode&&ride.id===passengerFocus&&ride.passenger_id===userId));
  const searchingRide=!driverMode&&!historyMode&&currentPassengerRide?.status==='requested'?currentPassengerRide:undefined;
  const cancellationRide=cancelId&&(driverMode?currentDriverRide:currentPassengerRide);
  function openCancellation(ride:CloudRide){
   pendingCancellationId.current=null;
   setCancelError('');setCancelConfirmed(false);setNotice('');setCancelId(ride.id);
  }
- async function confirmCancellation(reason:CancellationReason){
+ async function confirmCancellation(reason:CancellationReason,detail:string|null){
   if(busy||!userId||!cancellationRide||cancellationRide.id!==cancelId)return;
   const id=cancellationRide.id,owner=userId,actor=driverMode?'driver':'passenger';
   const isCurrent=()=>alive.current&&identity.current===owner&&mode.current===driverMode;
@@ -364,18 +387,19 @@ export default function Rides(){
   try{
    const token=await cloudCurrentToken();
    if(!isCurrent())return;
-   const confirmed=await cloudCancelRideWithReason(token,id,owner,actor,reason);
+   const confirmed=await cloudCancelRideWithReason(token,id,owner,actor,reason,detail);
    if(!isCurrent())return;
    if(confirmed){
     pendingCancellationId.current=null;
     confirmedCancelledIds.current.add(id);
+    forgetResumeRide(owner,id);
     historyRead.current++;
     setRides(previous=>applyConfirmedCancellations(previous,confirmedCancelledIds.current));
     if(recovery.id===id)recovery.clear();
     setCancelId(null);
     setCancelError('');
     setCancelConfirmed(true);
-    setNotice(t('تم إلغاء الرحلة بنجاح. يمكنك استقبال طلب جديد.','Ride cancelled. You can accept a new request.'));
+    setNotice('');
    }else{
     pendingCancellationId.current=null;
     setCancelError(t('لم يعد الإلغاء متاحًا لهذه الرحلة. حدّث حالة الطلب.','This ride can no longer be cancelled. Refresh its status.'));
@@ -397,10 +421,12 @@ export default function Rides(){
  }
  const hiddenOffers=declined?.owner===userId?declined?.ids:undefined;
  const audibleOffers=useMemo(()=>offers.filter(offer=>!hiddenOffers?.includes(offer.ride_id)),[offers,hiddenOffers]);
- const sound=useDriverOfferSound(userId,Boolean(driverMode&&auth.rolesReady&&driver?.approved&&driver.online&&foreground&&!loading&&!busy&&!currentDriverRide&&!recovery.checking&&connection!=='offline'),audibleOffers,state.preferences.notifications);
+ const sound=useDriverOfferSound(userId,Boolean(driverMode&&auth.rolesReady&&driver?.approved&&driver.online&&foreground&&!loading&&!busy&&!currentDriverRide&&!recovery.checking&&connection!=='offline'),audibleOffers,state.preferences.notifications,remoteAlerts);
  const availableOffers=audibleOffers.filter(offer=>(offer.expiresOnDevice??0)>offerClock);
- const visibleOffers=availableOffers.slice(0,offerLimit);
+ const tappedOffer=params.offer?availableOffers.find(offer=>offer.ride_id===params.offer):undefined;
+ const visibleOffers=tappedOffer?[tappedOffer,...availableOffers.filter(offer=>offer!==tappedOffer)].slice(0,offerLimit):availableOffers.slice(0,offerLimit);
  const selectedOffer=visibleOffers.some(offer=>offer.ride_id===focusedOffer)?focusedOffer:visibleOffers[0]?.ride_id;
+ useEffect(()=>setFocusedOffer(params.offer??null),[params.offer]);
  function decline(id:string){
   if(!userId||busy||hiddenOffers?.includes(id))return;
   setDeclined(previous=>({owner:userId,ids:[id,...(previous?.owner===userId?previous.ids:[])]}));
@@ -439,6 +465,7 @@ export default function Rides(){
     {(proposed===ride.id||proposal)&&!proposal?.approved&&<Label muted>{t('الاقتراح بانتظار موافقة السائق.','The proposal is waiting for the driver’s approval.')}</Label>}
    </>}
 
+   {ride.status==='cancelled'&&<CancellationReceipt key={userId+':'+ride.id} rideId={ride.id}/>}
    {historyMode&&<>
     <Label muted>{new Date(ride.created_at).toLocaleString(state.language)}</Label>
     <Button secondary icon="repeat-outline" title={t('استخدام الوجهة مرة أخرى','Use this destination again')} onPress={()=>reuseDestination(ride)} disabled={!!currentPassengerRide}/>
@@ -527,12 +554,15 @@ export default function Rides(){
    detail={t('نعرض آخر حالة معروفة. يتم التحقق من الرحلة عند عودة الاتصال.','Showing the last known status. The ride will be checked when you reconnect.','Der letzte bekannte Status wird angezeigt. Nach dem Wiederverbinden wird die Fahrt geprüft.')}/>}
   {cancellationRide&&cancellationRide.id===cancelId&&cancellationRide.status!=='riding'&&<RideCancellation key={cancelId}
    actor={driverMode?'driver':'passenger'} arrived={cancellationRide.status==='arrived'} busy={busy} error={cancelError}
-   onClose={closeCancellation} onConfirm={reason=>void confirmCancellation(reason)}/>}
-  {cancelConfirmed&&!(driverMode?currentDriverRide:currentPassengerRide)&&<View accessibilityLiveRegion="polite">
-   <Panel><Icon name="checkmark-circle-outline" color={colors.brandAccent}/>
-    <Label>{t('تم إلغاء الرحلة.','The ride was cancelled.','Die Fahrt wurde storniert.')}</Label>
-   </Panel>
-  </View>}
+   onClose={closeCancellation} onConfirm={(reason,detail)=>void confirmCancellation(reason,detail)}/>}
+  {resumeCandidate&&!currentDriverRide&&!currentPassengerRide&&<RideResumeCard ride={resumeCandidate} verified={false}/>}
+  {(terminal||cancelConfirmed)&&!(driverMode?currentDriverRide:currentPassengerRide)&&<RideStatusCard
+   icon={terminal?.status==='completed'?'checkmark-circle-outline':'close-circle-outline'}
+   title={terminal?.status==='completed'?t('اكتملت الرحلة','Ride completed','Fahrt abgeschlossen'):t('تم إلغاء الرحلة','Ride cancelled','Fahrt storniert')}
+   detail={t('تجد تفاصيلها في سجل الرحلات.','You’ll find the details in ride history.','Die Details findest du im Fahrtverlauf.')}>
+   <Button secondary title={t('فتح سجل الرحلات','Open ride history','Fahrtverlauf öffnen')}
+    onPress={()=>driverMode?setHistoryKind(terminal?.status==='completed'?'completed':'cancelled'):router.push({pathname:'/cloud',params:{mode:'history'}})}/>
+  </RideStatusCard>}
   {driverMode&&historyKind&&userId&&<DriverHistory key={userId} kind={historyKind} owner={userId} onSelect={setHistoryKind} onClose={closeHistory}/>}
   {driverMode&&driver?.approved&&!currentDriverRide&&<DriverShift
    online={driver.online} region={driver.region} category={driver.category} target={workTarget}
@@ -554,6 +584,7 @@ export default function Rides(){
       <DriverQueueHeader count={availableOffers.length} disabled={busy} onRefresh={()=>void run(async()=>{})}/>
       {!recovery.checking&&<>
        {inboxProblem&&<Label muted>{t('تعذر تحديث الطلبات. حاول تحديث القائمة.','Could not update requests. Refresh the list to try again.')}</Label>}
+       {!inboxProblem&&params.offer&&!tappedOffer&&<Label muted>{t('الطلب من الإشعار غير متاح حاليًا.','The request from the notification is currently unavailable.','Die Anfrage aus der Benachrichtigung ist derzeit nicht verfügbar.')}</Label>}
        {!inboxProblem&&!visibleOffers.length&&<DriverQueueEmpty/>}
        {visibleOffers.map(offer=><DriverOffer key={offer.ride_id} remainingSeconds={Math.max(0,Math.ceil(((offer.expiresOnDevice??0)-offerClock)/1000))} offer={offer} position={gps.camera?.point} disabled={busy||!!recovery.id&&recovery.id!==offer.ride_id} expanded={selectedOffer===offer.ride_id} onExpand={()=>setFocusedOffer(offer.ride_id)} onDecline={()=>decline(offer.ride_id)} onAccept={()=>void accept(offer)}/>)}
        {availableOffers.length>offerLimit&&<Button secondary title={t('عرض طلبات أخرى','Show more requests')} onPress={()=>setOfferLimit(value=>value+3)}/>}
@@ -575,7 +606,7 @@ export default function Rides(){
    {!loading&&!passengerRides.length&&<Panel><Icon name="time-outline" size={36}/><Label>{historyMode?t('لا توجد رحلات سابقة بعد','You haven’t taken any rides yet'):t('ما في رحلة حالية','No current ride')}</Label></Panel>}
    <Button secondary icon="refresh-outline" title={t('تحديث الرحلات','Refresh rides')} disabled={busy||loading} onPress={()=>void run(async()=>{})}/>
    {!currentPassengerRide&&<Button icon="car-outline" title={t('حجز رحلة جديدة','Book a new ride')} onPress={()=>router.replace('/')}/>}
-   {historyMode&&currentPassengerRide&&<Button title={t('متابعة الرحلة الحالية','Continue current ride')} onPress={()=>router.replace('/cloud')}/>}
+   {(historyMode||!!params.ride&&params.ride!==currentPassengerRide?.id)&&currentPassengerRide&&<Button title={t('متابعة الرحلة الحالية','Continue current ride')} onPress={()=>router.replace('/cloud')}/>}
    {!historyMode&&<Button secondary icon="time-outline" title={t('الرحلات السابقة','Past rides')} onPress={()=>router.push({pathname:'/cloud',params:{mode:'history'}})}/>}
   </>}
   {!driverMode&&<Label muted>{t('نسخة اختبار. لا تتوفر خدمة نقل تجارية مضمونة حتى اكتمال التشغيل واعتماد السائقين.','Test version. A transport service is not guaranteed until setup and driver checks are complete.')}</Label>}

@@ -1,3 +1,4 @@
+import {timedFetch} from './fetch-timeout.ts';
 import type {AdminServiceUsage} from './service-usage.ts';
 import type {CancellationActor,CancellationReason} from './ride-cancellation';
 import {readRideState,receiveRideState} from './cloud-ride-state.ts';
@@ -154,18 +155,34 @@ export async function cloudRequestRide(token:string,draft:TripDraft,requestId:st
   if(typeof id!=='string'||!id)throw new CloudError(500,'bad_response');
   return id;
 }
-export async function cloudCancelRideWithReason(token:string,id:string,owner:string,actor:CancellationActor,reason:CancellationReason){
+export async function cloudCancelRideWithReason(token:string,id:string,owner:string,actor:CancellationActor,reason:CancellationReason,detail?:string|null){
+ const submit=()=>rpc<boolean>('cancel_ride_with_reason',token,{p_ride_id:id,p_actor:actor,p_reason:reason,...(detail!==undefined?{p_detail:detail}:{})});
  try{
-  const confirmed=await rpc<boolean>('cancel_ride_with_reason',token,{p_ride_id:id,p_actor:actor,p_reason:reason});
+  const confirmed=await submit();
   if(typeof confirmed!=='boolean')throw new CloudError(500,'bad_response');
   return confirmed;
  }catch(error){
   if(!cloudMutationUncertain(error))throw error;
+  if(detail!==undefined){
+   const confirmed=await submit().catch(()=>null);
+   if(typeof confirmed==='boolean')return confirmed;
+   throw error;
+  }
   const ride=await cloudRideOperation(token,actor==='driver'?'accept':'cancel',id,owner).catch(()=>null);
   if(ride?.status==='cancelled')return true;
   throw error;
  }
 }
+export const cloudCancellationReceipt=(token:string,id:string)=>rpc<{actor:CancellationActor;reason:CancellationReason;detail:string|null}|null>(
+ 'ride_cancellation_receipt',token,{p_ride_id:id});
+export async function cloudRidePushReady():Promise<boolean>{
+ try{
+  const response=await timedFetch(API_ROOT+'/functions/v1/ride-dispatch?capability=ride-push',{cache:'no-store'},5000);
+  return response.ok&&(await response.json()).ready===true;
+ }catch{return false}
+}
+export const cloudRegisterRidePush=(token:string,device:string,previous:string|null)=>rpc<boolean>('register_ride_push',token,{p_token:device,p_previous:previous});
+export const cloudRemoveRidePush=(token:string,device:string)=>rpc<null>('remove_driver_push',token,{p_token:device});
 export const cloudCancelRide=(token:string,id:string)=>rpc<boolean>('cancel_ride',token,{p_ride_id:id});
 export const cloudReleaseRide=(token:string,id:string)=>rpc<boolean>('release_ride',token,{p_ride_id:id});
 export const cloudRegisterDriver=(token:string,region:number,category:string)=>rpc<boolean>('register_driver',token,{p_region:region,p_category:category});
