@@ -1,6 +1,11 @@
 import type {Coordinate} from '../geo';
 import {loadGoogleMaps,webMapsKey,type LatLng} from './google-web';
 
+export function needsAddressLookup(label:string|undefined){
+ return !label?.trim()||['موقعي الحالي','my current location','mein aktueller standort','نقطة الالتقاء على الخريطة','meeting point on the map','treffpunkt auf der karte'].includes(label.trim().toLowerCase())||
+  /^-?\d+(?:\.\d+)?,\s*-?\d+(?:\.\d+)?$/.test(label.trim());
+}
+
 type GeocodeResult={formatted_address:string;types:string[]};
 type GeocodingLibrary={Geocoder:new()=>{geocode:(request:{location:LatLng;fulfillOnZeroResults:true})=>Promise<{results:GeocodeResult[]}>}};
 

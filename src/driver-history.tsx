@@ -6,7 +6,7 @@ import {CancellationReceipt} from './cancellation-receipt';
 import {useApp} from './context';
 import {categories,regions} from './domain';
 import {formatCoordinate,isCoordinate} from './geo';
-import {createPickupAddressLookup} from './map/pickup-address';
+import {createPickupAddressLookup,needsAddressLookup} from './map/pickup-address';
 import {Button,Icon,Label,Panel,useText,useTheme} from './ui';
 
 const sections=[
@@ -70,7 +70,7 @@ export function DriverHistory({kind,owner,onSelect,onClose}:{kind:DriverHistoryK
 
 function pickupAddressInfo(item:DriverHistoryEntry){
  const label=item.pickup?.trim();
- if(label&&!['موقعي الحالي','my current location','mein aktueller standort','نقطة الالتقاء على الخريطة','meeting point on the map','treffpunkt auf der karte'].includes(label.toLowerCase()))return {label};
+ if(label&&!needsAddressLookup(label))return {label};
  const point={latitude:item.pickup_lat,longitude:item.pickup_lng};
  return isCoordinate(point)?{point}:null;
 }

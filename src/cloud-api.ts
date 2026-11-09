@@ -24,9 +24,9 @@ export interface CloudRide {
   status:'requested'|'accepted'|'arrived'|'riding'|'completed'|'cancelled';
   created_at:string;updated_at:string;search_expired_at?:string|null;
 }
-export interface DriverVehicleDetails {display_name?:string|null;vehicle_color?:string|null;vehicle_plate?:string|null;category?:string}
+export interface DriverVehicleDetails {display_name?:string|null;vehicle_color?:string|null;vehicle_plate?:string|null;vehicle_model?:string|null;category?:string}
 export interface CloudDriver {user_id:string;region:number;category:string;approved:boolean;online:boolean;last_seen_at:string|null}
-export interface RidePreview {ride_id:string;region:number;category:string;created_at:string;pickup_lat_approx:number;pickup_lng_approx:number;estimated_fare?:number|null;remaining_ms?:number;expiresOnDevice?:number}
+export interface RidePreview {ride_id:string;region:number;category:string;created_at:string;pickup_lat_approx:number;pickup_lng_approx:number;estimated_fare?:number|null;trip_direct_meters?:number;remaining_ms?:number;expiresOnDevice?:number}
 export interface StaffDriver {user_id:string;region:number;category:string;approved:boolean;online:boolean;created_at:string}
 export class CloudError extends Error {
   readonly status:number;
@@ -120,14 +120,15 @@ export async function cloudMyDriver(token:string):Promise<CloudDriver|null>{
 }
 export async function cloudMyDriverVehicleDetails(token:string){
  requireToken(token);
- const rows=await call<DriverVehicleDetails[]>('/rest/v1/driver_accounts?select=display_name,vehicle_color,vehicle_plate&approved=eq.true&limit=1','GET',token);
+ const rows=await call<DriverVehicleDetails[]>('/rest/v1/driver_accounts?select=display_name,vehicle_color,vehicle_plate,vehicle_model&approved=eq.true&limit=1','GET',token);
  return rows[0]??null;
 }
-export const cloudSaveDriverVehicleDetails=(token:string,details:DriverVehicleDetails)=>rpc<boolean>('save_driver_vehicle_details',token,{
+export const cloudSaveDriverVehicleDetails=(token:string,details:DriverVehicleDetails)=>rpc<boolean>('save_vehicle_profile',token,{
  p_name:details.display_name?.trim()||null,p_color:details.vehicle_color?.trim()||null,p_plate:details.vehicle_plate?.trim()||null,
+ p_model:details.vehicle_model?.trim()||null,p_change_photo:false,p_photo:null,
 });
 export async function cloudRideDriverVehicleDetails(token:string,rideId:string){
- const rows=await rpc<DriverVehicleDetails[]>('ride_driver_vehicle_details',token,{p_ride:rideId});
+ const rows=await rpc<DriverVehicleDetails[]>('vehicle_profile?select=display_name,vehicle_color,vehicle_plate,vehicle_model,category',token,{p_ride:rideId});
  return rows[0]??null;
 }
 export async function cloudRideOperation(token:string,kind:'request'|'accept'|'cancel',id:string,owner:string):Promise<CloudRide|null>{
@@ -194,7 +195,7 @@ export const cloudHeartbeat=(token:string)=>rpc<boolean>('driver_heartbeat',toke
 export const cloudDeclineDriverOffer=(token:string,id:string)=>rpc<null>('decline_driver_offer',token,{p_ride_id:id});
 export async function cloudOpenRides(token:string):Promise<RidePreview[]>{
  const started=performance.now();
- const offers=await rpc<RidePreview[]>('open_ride_timed_previews',token);
+ const offers=await rpc<RidePreview[]>('open_ride_estimated_previews',token);
  // The server provides time remaining. Measure locally with a monotonic clock
  // and count the request transit time against the offer, even on skewed phones.
  return offers.map(offer=>({...offer,expiresOnDevice:started+Math.max(0,Math.min(rideSearchLimitMs,offer.remaining_ms??0))}));

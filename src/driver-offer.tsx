@@ -6,13 +6,15 @@ import {ServiceError} from './api';
 import {routeScheduler} from './route-scheduler';
 import {offerRouteCache} from './offer-route-cache';
 import {distanceMeters,navigationProgress} from './navigation-progress';
-import type {Coordinate} from './geo';
+import {isCoordinate,type Coordinate} from './geo';
 import {priceForRoute} from './meter';
 import {categories,regions} from './domain';
 import {useApp} from './context';
 import {useAuth} from './auth';
 import MapCanvas from './map/MapCanvas';
 import {Button,Icon,Label,Panel,useText,useTheme} from './ui';
+const roughMinutes=(meters:number)=>Math.max(1,Math.ceil(meters*60/25000));
+
 export default function DriverOffer({offer,remainingSeconds,position,disabled,expanded,onExpand,onDecline,onAccept}:{offer:RidePreview;remainingSeconds:number;position?:Coordinate;disabled:boolean;expanded:boolean;onExpand:()=>void;onDecline:()=>void;onAccept:()=>void}){
  const {state}=useApp();const auth=useAuth();const t=useText();const {colors}=useTheme();
  const [plan,setPlan]=useState<RoutePlan|null>(null),[busy,setBusy]=useState(true),[error,setError]=useState(''),[attempt,setAttempt]=useState(0);
@@ -40,7 +42,7 @@ export default function DriverOffer({offer,remainingSeconds,position,disabled,ex
     : tripOnly();
    setPickupPoint(from);
    const next=await pending;
-   if(live){offerRouteCache.set(key,next);setPlan(next.trip);setPickupPlan(next.pickup)}
+   if(live){offerRouteCache.set(key,next);setPlan(next.trip);if(next.pickup)setPickupPlan(next.pickup)}
   })().catch(e=>{if(live)setError((e as {code?:string;kind?:string}).code??(e as {kind?:string}).kind??'network')}).finally(()=>{if(live)setBusy(false)});
   return()=>{live=false;controller.abort()};
  },[id,owner,state.language,attempt,quotedFare,expanded]);
@@ -53,8 +55,15 @@ export default function DriverOffer({offer,remainingSeconds,position,disabled,ex
  },[originLat,originLng,pickupLat,pickupLng,state.language,pickupAttempt,pickupPlan,plan,owner,id,quotedFare,busy,expanded,t]);
  const fare=quotedFare??(plan?priceForRoute(plan.meters,plan.seconds/60,plan.tariff??null):null);
  const approach=pickupPlan&&position?navigationProgress(pickupPlan,position):null;
- const away=pickupPlan?(approach&&approach.offRouteMeters<=100?approach.remainingMeters:pickupPlan.meters):null;
- const eta=pickupPlan?(approach&&approach.offRouteMeters<=100?approach.remainingSeconds:pickupPlan.seconds):null;
+ const approximatePickup={latitude:offer.pickup_lat_approx,longitude:offer.pickup_lng_approx};
+ const pickupDistance=pickupPlan?(approach&&approach.offRouteMeters<=100?approach.remainingMeters:pickupPlan.meters)
+  :position&&isCoordinate(approximatePickup)?distanceMeters(position,approximatePickup):null;
+ const pickupMinutes=pickupPlan?Math.ceil((approach&&approach.offRouteMeters<=100?approach.remainingSeconds:pickupPlan.seconds)/60)
+  :pickupDistance===null?null:roughMinutes(pickupDistance);
+ const tripDistance=plan?.meters??offer.trip_direct_meters;
+ const tripMinutes=plan?Math.max(1,Math.ceil(plan.seconds/60)):tripDistance===undefined?null:roughMinutes(tripDistance);
+ const distanceAndMinutes=(meters:number,minutes:number|null)=>(meters/1000).toFixed(1)+' '+t('كم','km','km')+
+  (minutes===null?'':' · '+minutes+' '+t('دقيقة','min','Min.'));
  const row={flexDirection:state.language==='ar'?'row-reverse' as const:'row' as const,gap:8};
  const metric={flex:1,minWidth:0,paddingHorizontal:10,paddingVertical:7,borderRadius:12,backgroundColor:colors.soft};
  const urgent=remainingSeconds<=30;
@@ -68,22 +77,29 @@ export default function DriverOffer({offer,remainingSeconds,position,disabled,ex
   </View>
   <View style={row}>
    <View style={{...metric,backgroundColor:colors.selected}}><Label>{t('الأجرة التقديرية','Estimated fare')}</Label><Label display>{fare===null?'—':fare.toLocaleString('en-US')}</Label>{fare!==null&&<Label>{t('ل.س','SYP')}</Label>}</View>
-   <View style={metric}><Label>{t('للزبون','To pickup')}</Label><Label display>{away===null?'—':(away/1000).toFixed(1)}</Label><Label>{away!==null?t('كم','km')+(eta===null?'':' · '+Math.ceil(eta/60)+' '+t('د','min')):expanded&&pickupBusy?t('جارٍ الحساب','Calculating'):t('مسافة القيادة','Driving distance')}</Label></View>
+   <View style={metric}><Label>{t('للزبون','To pickup')}</Label>
+    <Label>{pickupDistance===null?'—':distanceAndMinutes(pickupDistance,pickupMinutes)}</Label>
+    {pickupDistance!==null&&!pickupPlan&&<Label muted>{t('تقريب أولي','Rough estimate','Grobe Schätzung')}</Label>}
+   </View>
   </View>
+  {tripDistance!==undefined&&<Label>
+   {t('رحلة الزبون','Passenger trip','Fahrt des Fahrgasts')} · {distanceAndMinutes(tripDistance,tripMinutes)} · {plan
+    ?'Google Maps':t('تقريب أولي','Rough estimate','Grobe Schätzung')}
+  </Label>}
   <View style={row}>
    <View style={{flex:1.25}}><Button prominent tone="positive" icon="checkmark-circle-outline" title={t('قبول','Accept')} disabled={disabled||error==='ride_unavailable'} onPress={onAccept}/></View>
    <View style={{flex:1}}><Button prominent secondary icon="close-circle-outline" title={t('رفض','Decline')} disabled={disabled} onPress={onDecline}/></View>
   </View>
   {!expanded&&<Button secondary icon="location-outline" title={t('عرض مكان الزبون','Show pickup location')} onPress={onExpand}/>}
   {expanded&&<>
-  {plan&&<Label>{t('رحلة الزبون','Passenger trip')} · {(plan.meters/1000).toFixed(1)} {t('كم','km')} · {Math.ceil(plan.seconds/60)} {t('دقيقة','min')}</Label>}
   {pickupPoint&&<>
    <View style={{...row,alignItems:'center'}}><Icon name="location-outline" size={19}/><Label>{t('مكان الزبون','Pickup location')}</Label></View>
    <View style={{height:175,borderRadius:14,overflow:'hidden'}}><MapCanvas compact readOnly minMapHeight={175} point={pickupPoint} route={plan?.points} onChange={()=>{}}/></View>
    {plan&&<Label muted>{t('أ: مكان الزبون · ب: الوجهة','A: pickup · B: destination')} · Google Maps</Label>}
   </>}
-  <Label muted>{!position?t('حدّث موقعك لحساب طريق الوصول إلى الراكب.','Update your location to calculate the driving route to pickup.'):t('المسافتان حسب طريق القيادة في Google. الأجرة تخص رحلة الراكب ولا تشمل وصولك إليه.','Both distances use Google driving routes. The fare covers the passenger trip and excludes your drive to pickup.')}</Label>{!!pickupError&&<><Label muted>{pickupError}</Label><Button secondary title={t('إعادة حساب طريق الانطلاق','Retry driving route to pickup')} onPress={()=>setPickupAttempt(value=>value+1)}/></>}
+  <Label muted>{!position?t('حدّث موقعك لحساب طريق الوصول إلى الراكب.','Update your location to calculate the driving route to pickup.'):t('يظهر تقدير أولي حتى يجهز طريق القيادة. الأجرة تخص رحلة الراكب.','A rough estimate is shown while driving directions load. The fare covers the passenger trip.','Bis die Fahrtroute bereit ist, siehst du eine grobe Schätzung. Der Preis gilt für die Fahrt des Fahrgasts.')}</Label>{!!pickupError&&<><Label muted>{pickupError}</Label><Button secondary title={t('إعادة حساب طريق الانطلاق','Retry driving route to pickup')} onPress={()=>setPickupAttempt(value=>value+1)}/></>}
   {busy&&<View style={{alignItems:'center',gap:8,padding:16}}><ActivityIndicator color={colors.purple}/><Label muted>{t('جارٍ تحميل تفاصيل الطريق…','Loading route details…')}</Label></View>}
+  {pickupBusy&&pickupDistance===null&&<Label muted>{t('جارٍ حساب طريق الوصول…','Calculating the route to pickup…','Route zur Abholung wird berechnet …')}</Label>}
   {!!error&&<><Label muted>{error==='ride_unavailable'?t('هذا الطلب لم يعد متاحًا. حدّث الطلبات.','This request is no longer available. Refresh requests.'):error==='busy'?t('بلغت خدمة الخرائط حد المحاولات. يمكنك إعادة حساب الملخص لاحقًا.','The route limit was reached. Try the summary again later.'):t('تعذر حساب الملخص الآن. أعد المحاولة.','Could not load the summary. Try again.')}</Label><Button secondary title={t('إعادة حساب الملخص','Retry summary')} onPress={()=>setAttempt(value=>value+1)}/></>}
   </>}
  </Panel>;
