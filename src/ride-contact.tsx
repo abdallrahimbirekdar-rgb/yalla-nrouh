@@ -3,6 +3,7 @@ import {Linking,View} from 'react-native';
 import {router,useFocusEffect} from 'expo-router';
 import {cloudCurrentToken,cloudRideContactPhone,type CloudRide} from './cloud-api';
 import {useApp} from './context';
+import {nativeAction,siteSupportsRideDial} from './site-bridge';
 import {Button,Label,useText} from './ui';
 
 export function ComplaintButton({rideId,onOpen}:{rideId:string;onOpen?:()=>void}){
@@ -38,7 +39,9 @@ export function RideCallButton({rideId,driver}:{rideId:string;driver:boolean}){
     setMessage(t('رقم الطرف الآخر غير متاح لهذه الرحلة.','The other party’s number is unavailable for this ride.','Die Telefonnummer der anderen Person ist für diese Fahrt nicht verfügbar.'));
     return;
    }
-   await Linking.openURL('tel:'+phone);
+   if(siteSupportsRideDial()){
+    if(!await nativeAction('ride-dial',{phone}))throw Error('dial_unavailable');
+   }else await Linking.openURL('tel:'+phone);
   }catch{
    if(focused.current)setMessage(t('تعذّر فتح الاتصال. تحقّق من الإنترنت وأعد المحاولة.','Could not open the call. Check your connection and try again.','Anruf konnte nicht geöffnet werden. Prüfe die Verbindung und versuche es erneut.'));
   }finally{

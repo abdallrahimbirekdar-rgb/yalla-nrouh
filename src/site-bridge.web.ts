@@ -2,7 +2,7 @@ import {isCoordinate,type Coordinate} from './geo.ts';
 import {announceWebPosition,getWebPosition,recentMeasuredWebPosition,refineWebPosition,webLocationGranted} from './web-position.ts';
 import {PositionError} from './current-position.ts';
 import type {Fix} from './meter.ts';
-export type SiteWindow=Window&{ReactNativeWebView?:{postMessage:(message:string)=>void};__YALLA_NATIVE_LOCATION_GRANTED__?:boolean;__YALLA_NATIVE_AUTOFIX__?:{point:Coordinate;time:number;accuracy?:number}};
+export type SiteWindow=Window&{ReactNativeWebView?:{postMessage:(message:string)=>void};__YALLA_NATIVE_LOCATION_GRANTED__?:boolean;__YALLA_RIDE_DIAL__?:boolean;__YALLA_NATIVE_AUTOFIX__?:{point:Coordinate;time:number;accuracy?:number}};
 // The website owns its local data. Never block a launch or save while trying
 // to import older APK data; the owner chose to start without that migration.
 // Keep the native handshake only for optional foreground location status.
@@ -163,7 +163,12 @@ export async function loadSiteState(storage:Pick<Storage,'getItem'|'setItem'>,ke
  return saved;
 }
 
-export function nativeAction(type:'alerts-enable'|'notify'|'location-settings',text?:{title:string;body:string;target?:import('./ride-push-target').RidePushTarget}):Promise<boolean>{
+export function siteSupportsRideDial(){
+ return typeof window!=='undefined'&&(window as SiteWindow).__YALLA_RIDE_DIAL__===true;
+}
+
+export function nativeAction(type:'alerts-enable'|'notify'|'location-settings'|'ride-dial',payload?:
+ {title:string;body:string;target?:import('./ride-push-target').RidePushTarget}|{phone:string}):Promise<boolean>{
  const host=window as SiteWindow;const bridge=host.ReactNativeWebView;if(!bridge)return Promise.resolve(false);
  const id=Date.now().toString(36)+'-'+Math.random().toString(36).slice(2);
  return new Promise((resolve,reject)=>{
@@ -171,6 +176,6 @@ export function nativeAction(type:'alerts-enable'|'notify'|'location-settings',t
   const timer=setTimeout(()=>{cleanup();reject(Error('Native action timed out'))},30000);
   const cleanup=()=>{clearTimeout(timer);host.removeEventListener('yalla:native-result',finish)};
   host.addEventListener('yalla:native-result',finish);
-  try{bridge.postMessage(JSON.stringify({type,id,...text}))}catch(error){cleanup();reject(error)}
+  try{bridge.postMessage(JSON.stringify({type,id,...payload}))}catch(error){cleanup();reject(error)}
  });
 }

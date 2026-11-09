@@ -449,6 +449,11 @@ export default function FreshAndroid(){
    void screenModule!.openVoiceSetup().then(opened=>{if(!opened)showVoiceHelp()}).catch(showVoiceHelp);
   }else if(message.type==='driver-speech-stop'){
    stopDriverSpeech();
+  }else if(message.type==='ride-dial'){
+   void Linking.openURL('tel:'+message.phone).then(
+    ()=>inject(eventScript('yalla:native-result',{id:message.id,ok:true})),
+    ()=>inject(eventScript('yalla:native-result',{id:message.id,ok:false})),
+   );
   }else if(message.type==='location-settings'){
    // Opening system settings must never wait for a GPS fix.
    void Linking.openSettings().then(
@@ -481,7 +486,7 @@ export default function FreshAndroid(){
   </View>}
   {!rendererLost&&<WebView key={webSession} ref={web} source={{uri}} style={{flex:1,backgroundColor:background}}
    originWhitelist={['https://abdallrahimbirekdar-rgb.github.io']}
-   injectedJavaScriptBeforeContentLoaded={'window.__YALLA_RIDE_PUSH__='+JSON.stringify(ridePushConfigured)+';true;'}
+   injectedJavaScriptBeforeContentLoaded={'window.__YALLA_RIDE_PUSH__='+JSON.stringify(ridePushConfigured)+';window.__YALLA_RIDE_DIAL__=true;true;'}
    javaScriptEnabled domStorageEnabled geolocationEnabled={false}
    cacheEnabled cacheMode="LOAD_DEFAULT" mixedContentMode="never"
    allowFileAccess={false} allowFileAccessFromFileURLs={false} allowUniversalAccessFromFileURLs={false}

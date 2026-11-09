@@ -23,6 +23,13 @@ test('trusted website only; no JavaScript URL injection',()=>{
  assert.deepEqual(readWebMessage('{"type":"driver-speech-stop"}'),{type:'driver-speech-stop'});
  assert.deepEqual(readWebMessage('{"type":"driver-voice-setup"}'),{type:'driver-voice-setup'});
 });
+test('ride dial bridge only accepts canonical Syrian mobile numbers',()=>{
+ const dial={type:'ride-dial',id:'dial-1',phone:'+963900000001'};
+ assert.deepEqual(readWebMessage(JSON.stringify(dial)),dial);
+ for(const phone of ['+963900000001;ext=1','tel:+963900000001','+4912345678','+963900000001\n','javascript:alert(1)']){
+  assert.equal(readWebMessage(JSON.stringify({...dial,phone})),null);
+ }
+});
 test('Android launches reuse the document cache after a successful manual refresh',()=>{
  const entry=websiteEntryUrl();
  assert.equal(entry,websiteEntryUrl(null));

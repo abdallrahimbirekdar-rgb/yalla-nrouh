@@ -22,4 +22,5 @@ export async function siteCurrentPosition(askPermission:boolean):Promise<Coordin
 }
 
 // Only the website sends typed native bridge actions.
-export async function nativeAction(_type:'alerts-enable'|'notify'|'location-settings',_text?:{title:string;body:string}):Promise<boolean>{return false}
+export function siteSupportsRideDial(){return false}
+export async function nativeAction(_type:'alerts-enable'|'notify'|'location-settings'|'ride-dial',_payload?:{title:string;body:string}|{phone:string}):Promise<boolean>{return false}

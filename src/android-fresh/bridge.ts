@@ -24,6 +24,7 @@ export type WebMessage=
  |{type:'osmand-passenger-stop'}
  |{type:'osmand-map-access';id:string}
  |{type:'location-settings';id:string}
+ |{type:'ride-dial';id:string;phone:string}
  |{type:'alerts-enable';id:string}
  |{type:'ride-push-token'|'ride-push-disable';id:string}
  |{type:'notify';id:string;title:string;body:string;target?:RidePushTarget}
@@ -74,6 +75,8 @@ export function readWebMessage(raw:string):WebMessage|null{
     ...(v.type==='ride-osmand'&&uuid(v.rideId)&&tokenOK(v.accessToken)?{passenger:{rideId:v.rideId,accessToken:v.accessToken}}:{})};
   if(v.type==='osmand-passenger-stop')return {type:v.type};
   if(v.type==='osmand-map-access'&&idOK(v.id))return {type:v.type,id:v.id};
+  if(v.type==='ride-dial'&&idOK(v.id)&&typeof v.phone==='string'&&/^\+9639[0-9]{8}$/.test(v.phone))
+   return {type:v.type,id:v.id,phone:v.phone};
   if(v.type==='location-settings'&&idOK(v.id))return {type:'location-settings',id:v.id};
   if(v.type==='alerts-enable'&&idOK(v.id))return {type:'alerts-enable',id:v.id};
   if((v.type==='ride-push-token'||v.type==='ride-push-disable')&&idOK(v.id))return {type:v.type,id:v.id};
