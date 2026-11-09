@@ -1,7 +1,6 @@
 import React,{useEffect,useState} from 'react';
 import {ActivityIndicator,Platform,View} from 'react-native';
-import {cloudCurrentToken,cloudRideDriverVehicleDetails,rideSearchLimitMs,type DriverVehicleDetails} from './cloud-api';
-import {categories} from './domain';
+import {rideSearchLimitMs} from './cloud-api';
 import {usePickupEta} from './use-pickup-eta';
 import {authClient} from './auth-client';
 import {useApp} from './context';
@@ -69,17 +68,9 @@ export function RideSearchTimer({startedAt,onExpired}:{startedAt:string;onExpire
  </View>;
 }
 
-export function PassengerTaxiMap({rideId,pickup,status,category}:{rideId:string;pickup:Coordinate;status:string;category:string}){
+export function PassengerTaxiMap({rideId,pickup,status}:{rideId:string;pickup:Coordinate;status:string}){
  const {foreground,connection,state}=useApp();const t=useText();
  const approaching=status==='accepted';
- const [vehicle,setVehicle]=useState<DriverVehicleDetails|null>(null);
- useEffect(()=>{
-  if(!foreground||connection==='offline')return;
-  let active=true;
-  void cloudCurrentToken().then(token=>active?cloudRideDriverVehicleDetails(token,rideId):null)
-   .then(details=>{if(active)setVehicle(details)}).catch(()=>{/* The live map can still be shown. */});
-  return()=>{active=false};
- },[rideId,foreground,connection]);
  const [fix,setFix]=useState<{point:Coordinate;time:number}|null>(null);
  const [now,setNow]=useState(Date.now);
  useEffect(()=>{
@@ -138,7 +129,6 @@ export function PassengerTaxiMap({rideId,pickup,status,category}:{rideId:string;
  const stale=age>=freshForMs/1000;
  const taxi=age<180?fix?.point:undefined;
  const eta=usePickupEta(!stale?fix:null,pickup,approaching&&foreground&&connection!=='offline',state.language);
- const vehicleCategory=categories.find(item=>item.id===(vehicle?.category??category))?.[state.language];
  const format=new Intl.NumberFormat(state.language);
  const etaText=!fix||stale||connection==='offline'
   ?t('وقت الوصول بانتظار موقع أحدث.','Arrival time needs a newer location.','Für die Ankunftszeit wird ein neuer Standort benötigt.')
@@ -169,9 +159,5 @@ export function PassengerTaxiMap({rideId,pickup,status,category}:{rideId:string;
    {fix&&(stale||connection==='offline')&&<Label muted>{taxi?t('العلامة على الخريطة تعرض آخر موقع معروف.','The map marker shows the last known location.','Die Karte zeigt den zuletzt bekannten Standort.'):t('ننتظر موقعًا أحدث لعرض السيارة على الخريطة.','Waiting for a newer location to show the taxi on the map.','Das Taxi erscheint wieder, sobald ein neuer Standort vorliegt.')}</Label>}
   </RideStatusCard>
   <PassengerMap point={pickup} route={approachRoute} taxiPoint={taxi}/>
-  {(vehicle?.display_name||vehicleCategory||vehicle?.vehicle_color||vehicle?.vehicle_plate)&&<View style={{gap:2,paddingHorizontal:4}}>
-   {vehicle?.display_name&&<Label muted>{t('السائق','Driver')} · {vehicle.display_name}</Label>}
-   {(vehicleCategory||vehicle?.vehicle_color||vehicle?.vehicle_plate)&&<Label muted>{t('السيارة','Vehicle')} · {[vehicleCategory,vehicle?.vehicle_color,vehicle?.vehicle_plate&&t('لوحة ','Plate ')+vehicle.vehicle_plate].filter(Boolean).join(' · ')}</Label>}
-  </View>}
  </>;
 }

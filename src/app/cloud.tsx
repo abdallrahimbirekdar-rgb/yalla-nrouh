@@ -21,6 +21,7 @@ import {DriverQueueEmpty,DriverQueueHeader,DriverShift} from '../driver-dashboar
 import {DriverHistory,DriverHistoryBar} from '../driver-history';
 import {useDriverOfferSound} from '../use-driver-offer-sound';
 import {useCurrentPosition} from '../use-current-position';
+import {PassengerRideSafety} from '../passenger-ride-safety';
 import {PassengerTaxiMap,RideSearchTimer,useShareTaxiPosition} from '../taxi-tracking';
 import {CustomerTracking,openOsmAnd,osmandNavigationSupported,pickupChange,stopOsmAndPassenger,useRideRow,useRideSharing} from '../ride-live-sharing';
 import {authClient} from '../auth-client';
@@ -451,9 +452,11 @@ export default function Rides(){
  }
  const renderRide=(ride:CloudRide)=><React.Fragment key={ride.id}>
   {live(ride)&&ride.driver_id&&(ride.status==='accepted'||ride.status==='arrived')&&
-   <PassengerTaxiMap key={ride.id+':'+ride.driver_id} rideId={ride.id} pickup={passengerPickup??{latitude:ride.pickup_lat,longitude:ride.pickup_lng}} status={ride.status} category={ride.category}/>}
+   <PassengerTaxiMap key={ride.id+':'+ride.driver_id} rideId={ride.id} pickup={passengerPickup??{latitude:ride.pickup_lat,longitude:ride.pickup_lng}} status={ride.status}/>}
   {ride.status==='riding'&&<RideStatusCard icon="navigate-outline" title={t('الرحلة جارية','Ride in progress','Fahrt läuft')}
    detail={t('أنت الآن في الطريق إلى وجهتك.','You’re on the way to your destination.','Du bist auf dem Weg zu deinem Ziel.')}/>}
+  {ride.driver_id&&(ride.status==='accepted'||ride.status==='arrived'||ride.status==='riding')&&
+   <PassengerRideSafety key={userId+':'+ride.id+':'+ride.driver_id} ride={ride} stage={status(ride.status)}/>}
   <Panel outlined={live(ride)}>
    {(!live(ride)||ride.status!=='riding'&&!ride.driver_id&&ride.id!==searchingRide?.id)&&<View style={{alignSelf:'flex-start',borderRadius:20,paddingHorizontal:12,paddingVertical:4,backgroundColor:colors.selected}}><Label muted>{ride.search_expired_at?t('انتهى البحث بدون سائق','Search expired without a driver'):status(ride.status)}</Label></View>}
    {typeof ride.estimated_fare==='number'&&<PassengerFare compact={live(ride)} fare={ride.estimated_fare}/>}
