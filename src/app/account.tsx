@@ -2,11 +2,12 @@ import React,{useEffect,useState} from 'react';
 import {ActivityIndicator,Pressable,View} from 'react-native';
 import {router,useLocalSearchParams} from 'expo-router';
 import {syrianMobile} from '../syrian-phone';
+import {AccountLinks} from '../account-links';
 import AccountProfile from '../account-profile';
 import {useAuth} from '../auth';
 import {authErrorMessage} from '../auth-errors';
 import {useApp} from '../context';
-import {Button,Field,Icon,Label,Page,Panel,useText} from '../ui';
+import {Button,Field,Label,Page,Panel,useText} from '../ui';
 export default function Account(){
  const auth=useAuth();const {state}=useApp();const t=useText();const {next}=useLocalSearchParams<{next?:string}>();
  const [mode,setMode]=useState<'login'|'driver'|'signup'|'reset'>('login'),[email,setEmail]=useState(''),[password,setPassword]=useState(''),[repeat,setRepeat]=useState(''),[visible,setVisible]=useState(false),[busy,setBusy]=useState(false),[notice,setNotice]=useState('');
@@ -40,13 +41,31 @@ export default function Account(){
   }catch(error){setNotice(authErrorMessage(error,state.language))}
   finally{setBusy(false)}
  }
- return <Page title={auth.recovery?t('كلمة مرور جديدة','New password'):auth.session?t('حسابي','My account'):t('تسجيل الدخول','Sign in')}>
-  <View style={{alignItems:'center'}}><Label muted>{t('حساب واحد للموقع والتطبيق','One account for the website and app')}</Label></View>
+ const signOut=()=>{setBusy(true);void auth.signOut().catch(error=>setNotice(authErrorMessage(error,state.language))).finally(()=>setBusy(false))};
+ const privacy={title:t('سياسة الخصوصية','Privacy policy','Datenschutzerklärung'),icon:'shield-outline' as const,onPress:()=>router.push('/privacy')};
+ const signedIn=!!auth.session&&!auth.recovery;
+ return <Page simpleHeader compact title={auth.recovery?t('كلمة مرور جديدة','New password'):auth.session?t('حسابي','My account'):t('تسجيل الدخول','Sign in')}>
   {!auth.ready||auth.session&&!auth.rolesReady?<ActivityIndicator/>:auth.session&&!auth.recovery?<>
-   <Panel><Icon name="person-circle-outline" size={44}/><Label>{auth.session.user.email||(auth.session.user.phone?syrianMobile(auth.session.user.phone):null)}</Label><Label muted>{auth.admin?t('حساب الإدارة','Administrator'):auth.driver?t('حساب سائق معتمد','Approved driver'):t('تم تسجيل الدخول','Signed in')}</Label></Panel>
-   <AccountProfile key={auth.session.user.id} userId={auth.session.user.id}/>
-   {auth.driver&&<Button secondary icon="car-outline" title={t('بيانات السائق والسيارة','Driver and vehicle details')} onPress={()=>router.push({pathname:'/settings',params:{mode:'driver'}})}/>}
-   <Button secondary icon="trash-outline" title={t('حذف الحساب','Delete account','Konto löschen')} onPress={()=>router.push('/delete-account')}/>
+   <AccountProfile key={auth.session.user.id} userId={auth.session.user.id}
+    identity={auth.session.user.email||(auth.session.user.phone?syrianMobile(auth.session.user.phone)||auth.session.user.phone:'')}
+    role={auth.admin?t('حساب الإدارة','Administrator','Administratorkonto'):auth.driver?t('حساب سائق معتمد','Approved driver','Zugelassener Fahrer'):t('حساب الراكب','Passenger account','Fahrgastkonto')}/>
+   {!auth.driver&&<Button icon="car-outline" title={t('حجز رحلة','Book a ride','Fahrt buchen')} onPress={()=>router.replace('/')}/>}
+   <AccountLinks title={t('الإعدادات العامة','General','Allgemein')} items={[
+    ...(!auth.driver?([
+     {title:t('رحلاتي','My rides','Meine Fahrten'),icon:'list-outline',onPress:()=>router.push('/cloud')},
+     {title:t('أماكني المحفوظة','My saved places','Meine gespeicherten Orte'),icon:'bookmark-outline',onPress:()=>router.push({pathname:'/location',params:{view:'saved'}})},
+    ] as const):[]),
+    {title:t('الإشعارات','Notifications','Benachrichtigungen'),icon:'notifications-outline',onPress:()=>router.push('/notifications')},
+    {title:auth.driver?t('لوحة السائق','Driver dashboard','Fahrerbereich'):t('وضع السائق','Driver mode','Fahrermodus'),icon:'car-sport-outline',onPress:()=>router.push({pathname:'/cloud',params:{mode:'driver'}})},
+    ...(auth.admin?[{title:t('لوحة الإدارة','Administration','Verwaltung'),icon:'shield-checkmark-outline' as const,onPress:()=>router.push('/admin')}]:[]),
+   ]}/>
+   <AccountLinks title={t('إعدادات الحساب','Account settings','Kontoeinstellungen')} items={[
+    {title:auth.driver?t('إعدادات السائق والسيارة','Driver and vehicle settings','Fahrer- und Fahrzeugeinstellungen'):t('اللغة والمظهر والأذونات','Language, theme and permissions','Sprache, Design und Berechtigungen'),
+     icon:'options-outline',onPress:()=>router.push(auth.driver?{pathname:'/settings',params:{mode:'driver'}}:'/settings')},
+    privacy,
+    {title:t('تسجيل الخروج من هذا الجهاز','Sign out on this device','Auf diesem Gerät abmelden'),icon:'log-out-outline',onPress:signOut,disabled:busy},
+    {title:t('حذف الحساب','Delete account','Konto löschen'),icon:'trash-outline',danger:true,onPress:()=>router.push('/delete-account')},
+   ]}/>
    {auth.session.user.phone&&!auth.session.user.email&&<Panel>
     <Button secondary title={t('تغيير كلمة المرور','Change password')} onPress={()=>{setChangingPassword(!changingPassword);setCurrentPassword('');setPassword('');setRepeat('');setNotice('')}} disabled={busy}/>
     {changingPassword&&<>
@@ -56,14 +75,6 @@ export default function Account(){
      <Button title={t('حفظ كلمة المرور','Save password')} disabled={busy||!currentPassword||password.length<8||password!==repeat} onPress={()=>void changeDriverPassword()}/>
     </>}
    </Panel>}
-   {auth.admin&&<Button icon="shield-checkmark-outline" title={t('لوحة الإدارة','Administration')} onPress={()=>router.push('/admin')}/>}
-   {!auth.driver&&<>
-   <Button icon="car-outline" title={t('حجز رحلة','Book a ride')} onPress={()=>router.replace('/')}/>
-   <Button secondary icon="time-outline" title={t('رحلاتي','My rides')} onPress={()=>router.push('/cloud')}/>
-   <Button secondary icon="bookmark-outline" title={t('أماكني المحفوظة','My saved places')} onPress={()=>router.push({pathname:'/location',params:{view:'saved'}})}/>
-   </>}
-   <Button secondary icon="car-sport-outline" title={t('وضع السائق','Driver mode')} onPress={()=>router.push({pathname:'/cloud',params:{mode:'driver'}})}/>
-   <Button secondary title={t('تسجيل الخروج من هذا الجهاز','Sign out on this device')} disabled={busy} onPress={()=>{setBusy(true);void auth.signOut().catch(error=>setNotice(authErrorMessage(error,state.language))).finally(()=>setBusy(false))}}/>
   </>:<Panel>
    {!auth.recovery&&<View style={{flexDirection:state.language==='ar'?'row-reverse':'row',gap:10}}><View style={{flex:1}}><Button secondary={mode!=='login'} title={t('تسجيل الدخول','Sign in')} onPress={()=>{setMode('login');setNotice('')}}/></View><View style={{flex:1}}><Button secondary={mode!=='signup'} title={t('حساب جديد','New account')} onPress={()=>{setMode('signup');setNotice('')}}/></View></View>}
    {!auth.recovery&&<Button secondary={!driverLogin} title={t('دخول السائق برقم الموبايل','Driver login by mobile number','Fahrer-Login per Mobilnummer')} onPress={()=>{setMode('driver');setNotice('');setPassword('')}}/>}
@@ -77,7 +88,7 @@ export default function Account(){
    {mode==='login'&&!auth.recovery&&<Button secondary title={t('نسيت كلمة المرور؟','Forgot password?')} onPress={()=>{setMode('reset');setNotice('')}}/>}
    <Label muted>{t('تبقى الجلسة محفوظة على هذا الجهاز حتى تسجّل الخروج. لا نحفظ كلمة المرور.','You stay signed in on this device until you sign out. Your password is not saved.')}</Label>
   </Panel>}
-  <Button secondary icon="shield-outline" title={t('سياسة الخصوصية','Privacy policy','Datenschutzerklärung')} onPress={()=>router.push('/privacy')}/>
+  {!signedIn&&<Button secondary icon={privacy.icon} title={privacy.title} onPress={privacy.onPress}/>}
   {!!notice&&<View accessibilityRole="alert"><Label>{notice}</Label></View>}
   {!!auth.problem&&<Panel><Label>{t('تعذر تحديث الجلسة أو صلاحيات الحساب. تحقق من الاتصال وأعد المحاولة.','Could not check the session or account access. Check internet and try again.')}</Label><Button secondary title={t('إعادة المحاولة','Try again')} onPress={()=>void auth.retry()}/></Panel>}
  </Page>;

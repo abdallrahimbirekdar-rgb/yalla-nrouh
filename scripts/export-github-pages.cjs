@@ -9,7 +9,8 @@ const html=readFileSync('dist-pages/index.html','utf8')
  .replace(/(<meta name="viewport" content="[^"]+)"/,'$1, interactive-widget=resizes-content"')
  .replace('</head>',nativeHead+'</head>');
 writeFileSync('dist-pages/version.json',JSON.stringify({version:revision}));
-const recovery=readFileSync('scripts/startup-recovery.html','utf8');
+const recovery=readFileSync('scripts/startup-recovery.html','utf8')
+ .replace('__YALLA_STARTUP_PIN__','data:image/webp;base64,'+readFileSync('assets/brand-web-pin.webp').toString('base64'));
 writeFileSync('dist-pages/index.html',html.replace('</body>',recovery+'</body>'));
 copyFileSync('dist-pages/index.html','dist-pages/404.html');
 writeFileSync('dist-pages/.nojekyll','');

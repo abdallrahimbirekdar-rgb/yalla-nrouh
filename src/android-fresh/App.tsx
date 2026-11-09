@@ -5,13 +5,23 @@ import {WebView,type WebViewMessageEvent} from 'react-native-webview';
 import * as Location from 'expo-location';
 import Constants from 'expo-constants';
 import {requireOptionalNativeModule} from 'expo-modules-core';
-import {localAlertsGranted,readLocalAlerts,requestLocalAlerts,notifyLocal} from '../alerts';
+import {readLocalAlerts,requestLocalAlerts,notifyLocal} from '../alerts';
 import Storage from 'expo-sqlite/kv-store';
 import {setupPermission} from './permission-setup';
 import LaunchScreen from './LaunchScreen';
 import {acceptableFix,awaitFreshFix,deadlineOr,firstUsableMapFix,GpsTaskPool} from './gps';
 import {SITE,websiteEntryUrl,bootstrapScript,diagnosticScript,eventScript,autoFixScript,externalTarget,positionScript,readWebMessage,trustedSite,trustedWebMessage,
  type WebMessage,type PositionResponse} from './bridge';
+
+let alertPermissionTask:Promise<boolean>|null=null;
+function requestAlertPermission(){
+ if(alertPermissionTask)return alertPermissionTask;
+ alertPermissionTask=(async()=>{
+  const permission=await readLocalAlerts();
+  return permission.granted||(permission.canAskAgain&&(await requestLocalAlerts()).granted);
+ })().finally(()=>{alertPermissionTask=null});
+ return alertPermissionTask;
+}
 
 // Fresh native app: it owns ONLY Android foreground location and the live website.
 // No legacy SQLite hydration, native router screen, cached GPS controller or
@@ -153,9 +163,6 @@ export default function FreshAndroid(){
   try{const permission=await engine.permission(true);
    inject(eventScript('yalla:native-location-permission',{granted:permission.granted}));
   }catch{/* The website still offers manual pickup. */}
-  if(active.current&&AppState.currentState!=='background'){
-   await setupPermission(Storage,'android-permission-notifications-v1',readLocalAlerts,requestLocalAlerts).catch(()=>{});
-  }
  },[engine,inject]);
  const setScreenAwake=useCallback((awake:boolean)=>{
    if(screenAwake.current===awake)return;
@@ -371,7 +378,7 @@ export default function FreshAndroid(){
    const start=async()=>{
     if(!supportsSharing||sharing.current||AppState.currentState==='background')return false;
     const permission=await engine.permission(true);
-    if(!permission.granted||permission.android?.accuracy==='coarse'||!await Location.hasServicesEnabledAsync()||!await localAlertsGranted())return false;
+    if(!permission.granted||permission.android?.accuracy==='coarse'||!await Location.hasServicesEnabledAsync()||!await requestAlertPermission())return false;
     if(sharing.current||String(AppState.currentState)==='background')return false;
     sharing.current=message.rideId;
     for(const task of runs.current.values())task.controller.abort();
@@ -421,7 +428,7 @@ export default function FreshAndroid(){
     ()=>inject(eventScript('yalla:native-result',{id:message.id,ok:false})),
    );
   }else if(message.type==='alerts-enable'||message.type==='notify'){
-   const operation=message.type==='alerts-enable'?localAlertsGranted():notifyLocal(message.title,message.body).then(()=>true);
+   const operation=message.type==='alerts-enable'?requestAlertPermission():notifyLocal(message.title,message.body).then(()=>true);
    void operation.then(ok=>inject(eventScript('yalla:native-result',{id:message.id,ok})))
     .catch(()=>inject(eventScript('yalla:native-result',{id:message.id,ok:false})));
   }else if(message.type==='refresh')refresh();
@@ -471,7 +478,9 @@ export default function FreshAndroid(){
     clearReadyTimer();setLoading(false);setFailed(true);
     }}}
    />}
-  {loading&&!failed&&<LaunchScreen loadingLabel={text('جارٍ تحميل التطبيق','App is loading')}/>}
+  {loading&&!failed&&<LaunchScreen
+   loadingLabel={text('لحظات ونكون جاهزين…','Ready in a moment…')}
+   detail={text('جارٍ تجهيز واجهة التطبيق','Preparing the app')}/>}
   {failed&&<View style={{position:'absolute',left:0,right:0,top:0,bottom:0,padding:24,
    backgroundColor:background,justifyContent:'center',gap:16}}>
    <Text style={{fontSize:18,color:foreground,textAlign:'center'}}>

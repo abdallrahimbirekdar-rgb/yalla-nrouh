@@ -16,7 +16,7 @@ function DriverRoute(){
  const auth=useAuth();
  const path=usePathname();
  useEffect(()=>{
-  if(auth.rolesReady&&auth.driver&&!auth.admin&&!['/cloud','/account','/settings','/privacy','/delete-account'].includes(path))
+  if(auth.rolesReady&&auth.driver&&!auth.admin&&!['/cloud','/account','/settings','/notifications','/privacy','/delete-account'].includes(path))
    router.replace({pathname:'/cloud',params:{mode:'driver'}});
  },[auth.rolesReady,auth.driver,auth.admin,path]);
  return null;
@@ -77,7 +77,7 @@ function Screens(){
   </View>
   <DriverRoute/>
   <SiteShellSync/>
-  {!['/privacy','/delete-account','/account'].includes(path)&&<PermissionsIntro/>}
+  {!['/privacy','/delete-account','/account','/notifications'].includes(path)&&<PermissionsIntro/>}
  </>;
 }
 export default function Layout(){

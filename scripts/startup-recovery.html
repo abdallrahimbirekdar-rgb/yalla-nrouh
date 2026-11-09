@@ -1,25 +1,69 @@
-<style>body{margin:0}#yn-startup{position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;background:#edf3fb;color:#082648;font:16px/1.9 Arial,sans-serif;padding:24px;text-align:center}#yn-startup button{padding:12px 22px;border:0;border-radius:12px;background:#082648;color:#fff;font-size:16px;cursor:pointer;margin-top:12px}</style>
-<div id="yn-startup" dir="rtl" role="status"><div><strong id="yn-startup-brand">يلّا نروح</strong><p id="yn-startup-message">جارٍ فتح التطبيق…</p><button id="yn-startup-retry" style="display:none" onclick="window.location.reload()">إعادة المحاولة</button></div></div>
+<style>
+body{margin:0}
+#yn-startup{position:fixed;inset:0;z-index:9999;display:grid;place-items:center;overflow:auto;background:linear-gradient(160deg,#071c39,#104784);color:#082648;font:16px/1.65 Arial,sans-serif;padding:18px;text-align:center}
+#yn-startup .yn-frame{width:min(100%,390px)}
+#yn-startup .yn-map{display:block;width:min(100%,300px);height:min(40vh,255px);margin:0 auto}
+#yn-startup .yn-card{background:#edf3fb;border-radius:24px;padding:14px 18px 18px}
+#yn-startup-brand{font-size:24px}
+#yn-startup-message{font-size:17px;font-weight:700;margin:5px 0}
+#yn-startup-detail{font-size:14px;color:#385570;margin:0}
+#yn-startup-dots{display:flex;gap:6px;justify-content:center;margin-top:12px}
+#yn-startup-dots i{width:7px;height:7px;border-radius:50%;background:#0053b9;animation:yn-pulse 1.2s infinite alternate}
+#yn-startup-dots i:nth-child(2){animation-delay:.2s}
+#yn-startup-dots i:nth-child(3){animation-delay:.4s}
+#yn-startup [hidden]{display:none}
+#yn-startup button{min-height:44px;padding:8px 22px;border:0;border-radius:12px;background:#082648;color:#fff;font-size:16px;cursor:pointer;margin-top:12px}
+@keyframes yn-pulse{from{opacity:.4}to{opacity:1}}
+@media(prefers-reduced-motion:reduce){#yn-startup-dots i{animation:none}}
+</style>
+<div id="yn-startup" dir="rtl">
+ <div class="yn-frame">
+  <svg class="yn-map" viewBox="0 0 300 244" aria-hidden="true" focusable="false">
+   <circle cx="150" cy="122" r="106" fill="#0a2b52" stroke="#255482"/>
+   <circle cx="150" cy="122" r="82" fill="#0e3766" stroke="#31678e"/>
+   <circle cx="150" cy="122" r="58" fill="#124476" stroke="#438dbd"/>
+   <path d="M52 84L242 173M75 181L231 64M66 107L218 184M108 34L206 211" fill="none" stroke="#34638c"/>
+   <path d="M49 184c47 0 56-42 101-62s73-16 99-62" fill="none" stroke="#53efdb" stroke-width="2"/>
+   <circle cx="49" cy="184" r="4" fill="#53efdb"/><circle cx="249" cy="60" r="4" fill="#53efdb"/>
+   <circle cx="150" cy="122" r="40" fill="#082648" stroke="#53efdb"/>
+   <image href="__YALLA_STARTUP_PIN__" x="114" y="86" width="72" height="72"/>
+  </svg>
+  <div class="yn-card">
+   <strong id="yn-startup-brand">يلّا نروح</strong>
+   <div role="status">
+    <p id="yn-startup-message">لحظات ونكون جاهزين…</p>
+    <p id="yn-startup-detail">جارٍ تجهيز واجهة التطبيق</p>
+   </div>
+   <div id="yn-startup-dots" aria-hidden="true"><i></i><i></i><i></i></div>
+   <button type="button" id="yn-startup-retry" hidden onclick="window.location.reload()">إعادة المحاولة</button>
+  </div>
+ </div>
+</div>
 <script>
 (function(){
  var root=document.getElementById('root'),box=document.getElementById('yn-startup');
  if(!root||!box)return;
  var lang=document.documentElement.lang;
- var text={
-  ar:['يلّا نروح','جارٍ فتح التطبيق…','إعادة المحاولة','تأخر فتح التطبيق. تحقق من اتصال الإنترنت ثم أعد المحاولة. بياناتك المحفوظة تبقى على الجهاز.'],
-  de:['Yalla Nrouh','App wird geöffnet …','Erneut versuchen','Die App braucht länger zum Starten. Prüfe die Internetverbindung und versuche es erneut. Deine gespeicherten Daten bleiben auf dem Gerät.'],
-  en:['Yalla Nrouh','Opening the app…','Try again','The app is taking longer to open. Check your internet connection and try again. Your saved data stays on this device.']
- }[lang]||null;
- var message=document.getElementById('yn-startup-message'),retry=document.getElementById('yn-startup-retry');
+ var messages={
+  ar:['يلّا نروح','لحظات ونكون جاهزين…','جارٍ تجهيز واجهة التطبيق','إعادة المحاولة','تأخر فتح التطبيق. تحقق من اتصال الإنترنت ثم أعد المحاولة. بياناتك المحفوظة تبقى على الجهاز.'],
+  de:['Yalla Nrouh','Gleich geht’s los …','Die App wird vorbereitet','Erneut versuchen','Die App braucht länger zum Starten. Prüfe die Internetverbindung und versuche es erneut. Deine gespeicherten Daten bleiben auf dem Gerät.'],
+  en:['Yalla Nrouh','Ready in a moment…','Preparing the app','Try again','The app is taking longer to open. Check your internet connection and try again. Your saved data stays on this device.']
+ };
+ var text=messages[lang]||messages.ar;
+ var message=document.getElementById('yn-startup-message'),detail=document.getElementById('yn-startup-detail');
+ var retry=document.getElementById('yn-startup-retry'),dots=document.getElementById('yn-startup-dots');
  if(text){
   box.dir=lang==='ar'?'rtl':'ltr';
   document.getElementById('yn-startup-brand').textContent=text[0];
   message.textContent=text[1];
-  retry.textContent=text[2];
+  detail.textContent=text[2];
+  retry.textContent=text[3];
  }
  var timer=setTimeout(function(){
-  if(text)message.textContent=text[3];
-  retry.style.display='inline-block';
+  message.textContent=text[4];
+  detail.hidden=true;
+  dots.hidden=true;
+  retry.hidden=false;
  },12000);
  function dismiss(){if(root.children.length){clearTimeout(timer);box.remove();observer.disconnect();}}
  var observer=new MutationObserver(dismiss);
