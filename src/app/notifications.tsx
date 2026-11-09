@@ -68,7 +68,7 @@ export default function Notifications(){
    <Text accessibilityRole="header" style={{textAlign:'center',color:colors.ink,fontSize:22,fontWeight:'700'}}>
     {t('تنبيهات الرحلة على جهازك','Ride alerts on your phone','Fahrtmeldungen auf deinem Handy')}
    </Text>
-   <Label>{t('تحكّم في التنبيهات المحلية ليلّا نروح وجرّب وصول إشعار على هاتفك. تحديثات الطلبات الحية تظهر داخل صفحة الرحلة.','Manage Yalla Nrouh’s local alerts and try a test notification on your phone. Live booking updates appear on the ride screen.','Verwalte lokale Meldungen von Yalla Nrouh und teste sie auf deinem Handy. Aktuelle Buchungsinfos siehst du in der Fahrtansicht.')}</Label>
+   <Label>{t('عندما يكون التطبيق مفتوحًا، يمكن للهاتف تنبيهك عند قبول رحلتك أو وصول السائق. وإذا كنت في الدوام كسائق، ينبهك التطبيق عند ظهور طلب جديد.','While the app is open, your phone can notify you when your ride is accepted or your driver arrives. On-duty drivers can also get a notification when a new offer appears.','Bei geöffneter App kann dein Handy melden, wenn deine Fahrt angenommen wird oder der Fahrer ankommt. Fahrer im Dienst können eine Meldung bei neuen Anfragen erhalten.')}</Label>
    {available?<Label muted>{enabled
     ?t('التنبيهات مفعّلة داخل التطبيق. يعتمد ظهورها على إذن الهاتف.','Alerts are on in the app. Your phone must also allow them.','Meldungen sind in der App aktiv. Dein Handy muss sie ebenfalls erlauben.')
     :t('التنبيهات متوقفة داخل التطبيق.','Alerts are off in the app.','Meldungen sind in der App aus.')}</Label>

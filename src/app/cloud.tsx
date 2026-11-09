@@ -23,6 +23,8 @@ import {useRideRecovery} from '../use-ride-recovery';
 import {claimDriverSharingAttempt,readDriverSharingConsent,saveDriverSharingConsent} from '../driver-sharing-consent';
 import {createRefreshQueue} from '../refresh-queue';
 import {applyConfirmedCancellations,isUnresolvedRide} from '../ride-cancellation-state';
+import {RideStatusCard} from '../ride-status-card';
+import {usePassengerRideAlert} from '../use-passenger-ride-alert';
 import {Button,DriverModeIcon,HelpTip,Icon,Label,Page,Panel,useText,useTheme} from '../ui';
 const live=(r:CloudRide)=>!['completed','cancelled'].includes(r.status);
 export default function Rides(){
@@ -260,6 +262,7 @@ export default function Rides(){
  const proposalRide=approachingRide?.id??(!driverMode&&currentPassengerRide&&currentPassengerRide.status!=='requested'?currentPassengerRide.id:undefined);
  const proposal=pickupChange(useRideRow('ride_pickup_changes',proposalRide,foreground));
  const passengerRide=driverMode||historyMode?undefined:currentPassengerRide;
+ usePassengerRideAlert(userId,foreground&&connection!=='offline'&&state.preferences.notifications,passengerRide);
  const passengerPickup=passengerRide?(proposal?.approved?proposal.point:{latitude:passengerRide.pickup_lat,longitude:passengerRide.pickup_lng}):undefined;
  const driverSharingControl=(ride?:CloudRide)=><View style={{gap:6}}>
   <Label muted>{t('اسمح مرة واحدة على هذا الجهاز. يشارك التطبيق موقعك تلقائيًا مع زبون الرحلة المعيّنة لك، ويتوقف عند انتهاء الرحلة أو إلغائها.','Allow once on this device. Your location is shared automatically with the customer assigned to your ride and stops when the ride ends or is cancelled.')}</Label>
@@ -334,12 +337,15 @@ export default function Rides(){
   });
  }
  function driverRideAction(ride:CloudRide){
-  if(ride.status==='accepted')return <Button prominent icon="location-outline" title={t('وصلت إلى الزبون','I arrived at pickup')} disabled={busy}
+  const disabled=busy||connection==='offline';
+  if(busy)return <Button prominent title={t('جارٍ تحديث حالة الرحلة…','Updating ride status…','Fahrtstatus wird aktualisiert …')} disabled onPress={()=>{}}/>;
+  if(ride.status==='accepted')return <Button prominent icon="location-outline" title={t('وصلت إلى الزبون','I arrived at pickup','Am Abholort angekommen')} disabled={disabled}
    onPress={()=>void run(async token=>{if(await cloudAdvanceRide(token,ride.id,'arrived')!=='arrived')throw Error('not_allowed')})}/>;
-  if(ride.status==='arrived')return <Button prominent title={t('بدء الرحلة وفتح OsmAnd','Start ride and open OsmAnd')}
-   disabled={busy} onPress={()=>startDriverRide(ride)}/>;
-  return <Button prominent icon="checkmark-circle-outline" title={t('إنهاء الرحلة','Finish ride')} disabled={busy}
-   onPress={()=>void run(async token=>{if(await cloudAdvanceRide(token,ride.id,'completed')!=='completed')throw Error('not_allowed')})}/>;
+  if(ride.status==='arrived')return <Button prominent title={t('ابدأ الرحلة','Start ride','Fahrt starten')}
+   disabled={disabled} onPress={()=>startDriverRide(ride)}/>;
+  return <Button prominent icon="checkmark-circle-outline" title={t('إنهاء الرحلة','Finish ride','Fahrt beenden')} disabled={disabled}
+   onPress={()=>void run(async token=>{if(await cloudAdvanceRide(token,ride.id,'completed')!=='completed')throw Error('not_allowed')},
+    t('اكتملت الرحلة.','Ride completed.','Die Fahrt ist abgeschlossen.'))}/>;
  }
 
  const passengerRides=mine.filter(ride=>historyMode?!live(ride):ride.id===(currentPassengerRide?.id??params.ride));
@@ -391,7 +397,7 @@ export default function Rides(){
  }
  const hiddenOffers=declined?.owner===userId?declined?.ids:undefined;
  const audibleOffers=useMemo(()=>offers.filter(offer=>!hiddenOffers?.includes(offer.ride_id)),[offers,hiddenOffers]);
- const sound=useDriverOfferSound(userId,Boolean(driverMode&&auth.rolesReady&&driver?.approved&&driver.online&&foreground&&!loading&&!busy&&!currentDriverRide&&!recovery.checking),audibleOffers);
+ const sound=useDriverOfferSound(userId,Boolean(driverMode&&auth.rolesReady&&driver?.approved&&driver.online&&foreground&&!loading&&!busy&&!currentDriverRide&&!recovery.checking&&connection!=='offline'),audibleOffers,state.preferences.notifications);
  const availableOffers=audibleOffers.filter(offer=>(offer.expiresOnDevice??0)>offerClock);
  const visibleOffers=availableOffers.slice(0,offerLimit);
  const selectedOffer=visibleOffers.some(offer=>offer.ride_id===focusedOffer)?focusedOffer:visibleOffers[0]?.ride_id;
@@ -420,8 +426,10 @@ export default function Rides(){
  const renderRide=(ride:CloudRide)=><React.Fragment key={ride.id}>
   {live(ride)&&ride.driver_id&&(ride.status==='accepted'||ride.status==='arrived')&&
    <PassengerTaxiMap key={ride.id+':'+ride.driver_id} rideId={ride.id} pickup={passengerPickup??{latitude:ride.pickup_lat,longitude:ride.pickup_lng}} status={ride.status} category={ride.category}/>}
+  {ride.status==='riding'&&<RideStatusCard icon="navigate-outline" title={t('الرحلة جارية','Ride in progress','Fahrt läuft')}
+   detail={t('أنت الآن في الطريق إلى وجهتك.','You’re on the way to your destination.','Du bist auf dem Weg zu deinem Ziel.')}/>}
   <Panel outlined={live(ride)}>
-   {(!live(ride)||ride.status==='riding'||!ride.driver_id&&ride.id!==searchingRide?.id)&&<View style={{alignSelf:'flex-start',borderRadius:20,paddingHorizontal:12,paddingVertical:4,backgroundColor:colors.selected}}><Label muted>{ride.search_expired_at?t('انتهى البحث بدون سائق','Search expired without a driver'):status(ride.status)}</Label></View>}
+   {(!live(ride)||ride.status!=='riding'&&!ride.driver_id&&ride.id!==searchingRide?.id)&&<View style={{alignSelf:'flex-start',borderRadius:20,paddingHorizontal:12,paddingVertical:4,backgroundColor:colors.selected}}><Label muted>{ride.search_expired_at?t('انتهى البحث بدون سائق','Search expired without a driver'):status(ride.status)}</Label></View>}
    {typeof ride.estimated_fare==='number'&&<PassengerFare compact={live(ride)} fare={ride.estimated_fare}/>}
    <PassengerStops compact={live(ride)} pickup={ride.pickup} destination={ride.destination} category={ride.category}/>
    {live(ride)&&sharePassenger(ride)}
@@ -452,11 +460,10 @@ export default function Rides(){
    title={title} onPress={()=>atPickup?setSplitRide(ride.id):showExternal(ride,destination,adjacent)}/>;
   const fullScreen=navButton(false,t('فتح OsmAnd','Open OsmAnd'));
   return <View key={ride.id} style={{gap:split?8:12}}>
-   <View style={{gap:2}}>
-    {split?<Label>{stage}</Label>:<Label large>{stage}</Label>}
+   <RideStatusCard icon={pickingUp?'navigate-outline':atPickup?'location-outline':'car-outline'} title={stage}
+    detail={atPickup?t('ابدأ الرحلة بعد ركوب الزبون. ستُفتح الملاحة إلى الوجهة.','Start once the customer is in the car. Navigation to the destination will open.','Starte die Fahrt, sobald der Fahrgast eingestiegen ist. Die Navigation zum Ziel wird geöffnet.'):undefined}>
     {(!split||!tracking)&&<Label>{address}</Label>}
-    {atPickup&&<Label muted>{t('ابدأ الرحلة بعد ركوب الزبون.','Start the ride once the customer is in the car.')}</Label>}
-   </View>
+   </RideStatusCard>
    {!!notice&&<View accessibilityRole="alert"><Label>{notice}</Label></View>}
    <CustomerTracking key={ride.id+':'+ride.driver_id} rideId={ride.id} pickup={pickup} proposedPickup={pickingUp&&proposal?.approved?proposal.point:undefined} foreground={foreground} compact={split} duringTrip={!tracking} taxiFix={tracking?driverMapFix:null}/>
    {split&&tracking&&<Label muted>{address}</Label>}
@@ -515,6 +522,9 @@ export default function Rides(){
   <Label>{t('جارٍ تحميل حالة الطلب…','Loading request status…')}</Label>
  </RideFooter>:undefined;
  return <Page title={title} titleIcon={titleIcon} compact={driverMode||!historyMode} showBrand={driverMode} onSettings={driverMode?openDriverSettings:undefined} header={splitHeader} footer={footer}>
+  {connection==='offline'&&!(passengerRide?.driver_id&&['accepted','arrived'].includes(passengerRide.status))&&<RideStatusCard icon="cloud-offline-outline" warning
+   title={t('الاتصال بالإنترنت مقطوع','No internet connection','Keine Internetverbindung')}
+   detail={t('نعرض آخر حالة معروفة. يتم التحقق من الرحلة عند عودة الاتصال.','Showing the last known status. The ride will be checked when you reconnect.','Der letzte bekannte Status wird angezeigt. Nach dem Wiederverbinden wird die Fahrt geprüft.')}/>}
   {cancellationRide&&cancellationRide.id===cancelId&&cancellationRide.status!=='riding'&&<RideCancellation key={cancelId}
    actor={driverMode?'driver':'passenger'} arrived={cancellationRide.status==='arrived'} busy={busy} error={cancelError}
    onClose={closeCancellation} onConfirm={reason=>void confirmCancellation(reason)}/>}

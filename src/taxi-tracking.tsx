@@ -10,7 +10,8 @@ import {PassengerMap} from './passenger-trip-summary';
 import {navigationPosition} from './navigation-position';
 import {distanceMeters} from './navigation-progress';
 import {positionDeadline} from './position-deadline';
-import {Icon,Label,useText,useTheme} from './ui';
+import {RideStatusCard} from './ride-status-card';
+import {Label,useText,useTheme} from './ui';
 
 const foregroundTab=()=>Platform.OS==='web'&&document.visibilityState!=='hidden';
 const freshForMs=30000;
@@ -69,8 +70,8 @@ export function RideSearchTimer({startedAt,onExpired}:{startedAt:string;onExpire
 }
 
 export function PassengerTaxiMap({rideId,pickup,status,category}:{rideId:string;pickup:Coordinate;status:string;category:string}){
- const {foreground,connection,state}=useApp();const t=useText();const {colors}=useTheme();
- const riding=status==='riding',approaching=status==='accepted';
+ const {foreground,connection,state}=useApp();const t=useText();
+ const approaching=status==='accepted';
  const [vehicle,setVehicle]=useState<DriverVehicleDetails|null>(null);
  useEffect(()=>{
   if(!foreground||connection==='offline')return;
@@ -140,12 +141,12 @@ export function PassengerTaxiMap({rideId,pickup,status,category}:{rideId:string;
  const vehicleCategory=categories.find(item=>item.id===(vehicle?.category??category))?.[state.language];
  const format=new Intl.NumberFormat(state.language);
  const etaText=!fix||stale||connection==='offline'
-  ?t('بانتظار تحديث موقع السيارة لحساب وقت الوصول.','Waiting for a location update to estimate arrival.')
+  ?t('وقت الوصول بانتظار موقع أحدث.','Arrival time needs a newer location.','Für die Ankunftszeit wird ein neuer Standort benötigt.')
   :eta.minutes!==null
    ?t('الوصول خلال نحو '+format.format(eta.minutes)+' دقيقة','Arriving in about '+format.format(eta.minutes)+' min')
    :eta.pending?t('جارٍ حساب وقت الوصول…','Estimating arrival…')
     :t('وقت الوصول غير متاح الآن. تابع السيارة على الخريطة.','Arrival time is unavailable. Follow the taxi on the map.');
- const approachingTaxi=approaching&&!stale&&taxi;
+ const approachingTaxi=approaching&&!stale&&connection!=='offline'&&taxi;
  // Draw only the path from the moving taxi to the customer's pickup point.
  // Prefer the remaining street route; a direct line is a temporary fallback.
  const approachRoute=approachingTaxi?(eta.route&&eta.route.length>1?eta.route:[taxi!,pickup]):undefined;
@@ -155,18 +156,22 @@ export function PassengerTaxiMap({rideId,pickup,status,category}:{rideId:string;
   :format.format(remainingMeters)+' '+t('م','m');
  const number=format.format(age);
  return <>
-  <PassengerMap point={pickup} route={approachRoute} taxiPoint={taxi}/>
-  <View style={{backgroundColor:colors.selected,borderRadius:12,paddingHorizontal:12,paddingVertical:8,gap:3}}>
-   <View style={{flexDirection:state.language==='ar'?'row-reverse':'row',alignItems:'center',gap:8}}>
-    <Icon name="car-outline" color={colors.purple}/>
-    <View style={{flex:1}}><Label>{approaching?t('التاكسي في الطريق','Your taxi is on the way'):riding?t('الرحلة جارية','Ride in progress'):t('وصل التاكسي','Your taxi has arrived')}</Label></View>
-   </View>
+  <RideStatusCard icon={approaching?'car-outline':'checkmark-circle-outline'} warning={stale||connection==='offline'}
+   title={approaching?t('التاكسي في الطريق إليك','Your taxi is on the way','Dein Taxi ist unterwegs'):t('وصل التاكسي إلى نقطة الالتقاء','Your taxi has arrived at pickup','Dein Taxi ist am Abholort')}>
    {approaching&&<Label>{etaText}</Label>}
-   {approaching&&distanceLabel&&<Label>{eta.meters===null?t('المسافة المباشرة تقريبًا: ','Approximate direct distance: '):t('المسافة المتبقية: ','Distance remaining: ')}{distanceLabel}</Label>}
-   <Label muted>{fix?t('آخر تحديث للموقع قبل '+number+' ثانية','Location updated '+number+' s ago'):t('بانتظار أول تحديث لموقع التاكسي…','Waiting for the taxi’s first location update…')}</Label>
-   {fix&&stale&&<Label muted>{age<180?t('نعرض آخر موقع معروف للتاكسي.','Showing the last known taxi location.'):t('موقع التاكسي غير محدّث.','The taxi location is no longer current.')}</Label>}
+   {approaching&&distanceLabel&&<Label>{eta.meters===null?t('المسافة المباشرة تقريبًا ','Approximate direct distance '):t('المسافة المتبقية ','Distance remaining ')}{distanceLabel}</Label>}
+   <Label muted>{connection==='offline'
+    ?t('انقطع الاتصال. نحدّث الموقع عند عودة الإنترنت.','Connection lost. The location will update when you reconnect.','Verbindung unterbrochen. Der Standort wird nach dem Wiederverbinden aktualisiert.')
+    :!fix?t('بانتظار أول تحديث لموقع التاكسي…','Waiting for the taxi’s first location update…','Warten auf den ersten Taxistandort …')
+    :stale?t('آخر تحديث للموقع قبل '+number+' ثانية','Location updated '+number+' s ago','Standort vor '+number+' Sek. aktualisiert')
+    :t('موقع التاكسي يتحدّث الآن','Taxi location is updating','Taxistandort wird aktualisiert')}</Label>
+   {fix&&connection==='offline'&&<Label muted>{t('آخر تحديث للموقع قبل '+number+' ثانية','Location updated '+number+' s ago','Standort vor '+number+' Sek. aktualisiert')}</Label>}
+   {fix&&(stale||connection==='offline')&&<Label muted>{taxi?t('العلامة على الخريطة تعرض آخر موقع معروف.','The map marker shows the last known location.','Die Karte zeigt den zuletzt bekannten Standort.'):t('ننتظر موقعًا أحدث لعرض السيارة على الخريطة.','Waiting for a newer location to show the taxi on the map.','Das Taxi erscheint wieder, sobald ein neuer Standort vorliegt.')}</Label>}
+  </RideStatusCard>
+  <PassengerMap point={pickup} route={approachRoute} taxiPoint={taxi}/>
+  {(vehicle?.display_name||vehicleCategory||vehicle?.vehicle_color||vehicle?.vehicle_plate)&&<View style={{gap:2,paddingHorizontal:4}}>
    {vehicle?.display_name&&<Label muted>{t('السائق','Driver')} · {vehicle.display_name}</Label>}
    {(vehicleCategory||vehicle?.vehicle_color||vehicle?.vehicle_plate)&&<Label muted>{t('السيارة','Vehicle')} · {[vehicleCategory,vehicle?.vehicle_color,vehicle?.vehicle_plate&&t('لوحة ','Plate ')+vehicle.vehicle_plate].filter(Boolean).join(' · ')}</Label>}
-  </View>
+  </View>}
  </>;
 }

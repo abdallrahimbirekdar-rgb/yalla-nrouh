@@ -1,12 +1,20 @@
 import {useCallback,useEffect,useRef,useState} from 'react';
 import {Platform} from 'react-native';
+import {notifyLocal} from './alerts';
+import {isNativeWebView} from './site-bridge';
+import {useText} from './ui';
 import {pendingOfferChimes,playOfferChime,rememberOfferChimes,type HeardOffers} from './driver-offer-chime';
 
 export function useDriverOfferSound(
  owner:string|undefined,
  enabled:boolean,
  offers:readonly {ride_id:string;expiresOnDevice?:number}[],
+ notifications:boolean,
 ){
+ const t=useText();
+ const nativeAlert=notifications&&isNativeWebView();
+ const deliveryScope=useRef({owner,enabled,offers});
+ deliveryScope.current={owner,enabled,offers};
  const [ready,setReady]=useState(false),[problem,setProblem]=useState(false);
  const audio=useRef<AudioContext|null>(null);
  const heard=useRef<{owner:string;ids:HeardOffers}|null>(null);
@@ -35,7 +43,7 @@ export function useDriverOfferSound(
 
  useEffect(()=>{
   const context=audio.current;
-  if(!enabled||!owner||!ready||!context||offers.length===0||document.visibilityState==='hidden')return;
+  if(!enabled||!owner||(!nativeAlert&&(!ready||!context))||offers.length===0||document.visibilityState==='hidden')return;
   const key='yalla-driver-offer-chimes:'+owner;
   let remembered:HeardOffers=heard.current?.owner===owner?heard.current.ids:{};
   try{
@@ -44,11 +52,20 @@ export function useDriverOfferSound(
   }catch{}
   const now=Date.now();
   const ids=pendingOfferChimes(offers,remembered,performance.now(),now);
-  if(ids.length===0||!playOfferChime(context))return;
+  if(ids.length===0||!nativeAlert&&(!context||!playOfferChime(context)))return;
   const updated=rememberOfferChimes(remembered,ids,now);
   heard.current={owner,ids:updated};
   try{localStorage.setItem(key,JSON.stringify(updated))}catch{}
- },[enabled,owner,offers,ready]);
+  if(nativeAlert){
+   const body=t('طلب رحلة جديد. افتح قائمة الطلبات قبل انتهاء المهلة.','New ride request. Check your requests before it expires.','Neue Fahrtanfrage. Prüfe deine Anfragen, bevor sie abläuft.');
+   void notifyLocal(t('يلّا نروح','Yalla Nrouh','Yalla Nrouh'),body).catch(()=>{
+    const current=deliveryScope.current;
+    const stillAvailable=current.offers.some(offer=>ids.includes(offer.ride_id)&&(offer.expiresOnDevice??0)>performance.now());
+    if(current.owner===owner&&current.enabled&&stillAvailable&&audio.current&&document.visibilityState!=='hidden')
+     playOfferChime(audio.current);
+   });
+  }
+ },[enabled,owner,offers,ready,nativeAlert,t]);
 
  return {ready,problem,unlock};
 }
