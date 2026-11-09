@@ -2,7 +2,7 @@ import type {Coordinate} from '../geo';
 import {loadGoogleMaps,webMapsKey,type LatLng} from './google-web';
 
 export function needsAddressLookup(label:string|undefined){
- return !label?.trim()||['موقعي الحالي','my current location','mein aktueller standort','نقطة الالتقاء على الخريطة','meeting point on the map','treffpunkt auf der karte'].includes(label.trim().toLowerCase())||
+ return !label?.trim()||['موقعي الحالي','my current location','mein aktueller standort','نقطة الالتقاء على الخريطة','meeting point on the map','treffpunkt auf der karte','نقطة على الخريطة','point on the map','punkt auf der karte'].includes(label.trim().toLowerCase())||
   /^-?\d+(?:\.\d+)?,\s*-?\d+(?:\.\d+)?$/.test(label.trim());
 }
 
