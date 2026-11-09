@@ -287,3 +287,19 @@ export async function cloudDriverRidePreview(token:string,id:string):Promise<Dri
  if(!row||row.ride_id!==id||!isCoordinate({latitude:row.pickup_lat,longitude:row.pickup_lng})||!isCoordinate({latitude:row.destination_lat,longitude:row.destination_lng}))throw new CloudError(404,'ride_unavailable');
  return row;
 }
+
+export type ComplaintCategory='behavior'|'fare'|'vehicle'|'app'|'other';
+export type RideComplaint={id:string;reporter_id:string;ride_id:string|null;category:ComplaintCategory;detail:string;created_at:string;reviewed_at:string|null};
+export const complaintPageSize=20;
+export const cloudRideContactPhone=(token:string,rideId:string)=>rpc<string|null>('ride_contact_phone',token,{p_ride_id:rideId});
+export const cloudSubmitComplaint=(token:string,requestId:string,rideId:string|null,category:ComplaintCategory,detail:string)=>
+ rpc<string>('submit_ride_complaint',token,{p_request_id:requestId,p_ride_id:rideId,p_category:category,p_detail:detail});
+export const cloudReviewComplaint=(token:string,id:string)=>rpc<boolean>('review_ride_complaint',token,{p_complaint_id:id});
+
+export function cloudComplaints(token:string,owner:string|undefined,offset:number){
+ requireToken(token);
+ const filter=owner?'&reporter_id=eq.'+encodeURIComponent(owner):'';
+ const order=owner?'created_at.desc,id.asc':'reviewed_at.asc.nullsfirst,created_at.desc,id.asc';
+ return call<RideComplaint[]>('/rest/v1/ride_complaints?select=id,reporter_id,ride_id,category,detail,created_at,reviewed_at'
+  +filter+'&order='+order+'&limit='+complaintPageSize+'&offset='+offset,'GET',token);
+}

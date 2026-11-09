@@ -16,7 +16,7 @@ function DriverRoute(){
  const auth=useAuth();
  const path=usePathname();
  useEffect(()=>{
-  if(auth.rolesReady&&auth.driver&&!auth.admin&&!['/cloud','/account','/settings','/notifications','/privacy','/delete-account'].includes(path))
+  if(auth.rolesReady&&auth.driver&&!auth.admin&&!['/cloud','/account','/settings','/notifications','/privacy','/delete-account','/complaints'].includes(path))
    router.replace({pathname:'/cloud',params:{mode:'driver'}});
  },[auth.rolesReady,auth.driver,auth.admin,path]);
  return null;

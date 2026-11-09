@@ -3,6 +3,7 @@ import {ActivityIndicator,Modal,Platform,Pressable,ScrollView,Text,View} from 'r
 import {SafeAreaView} from 'react-native-safe-area-context';
 import {cloudCurrentToken,cloudDriverHistory,driverHistoryPageSize,type DriverHistoryEntry,type DriverHistoryKind} from './cloud-api';
 import {CancellationReceipt} from './cancellation-receipt';
+import {ComplaintButton} from './ride-contact';
 import {useApp} from './context';
 import {categories,regions} from './domain';
 import {formatCoordinate,isCoordinate} from './geo';
@@ -63,7 +64,7 @@ export function DriverHistory({kind,owner,onSelect,onClose}:{kind:DriverHistoryK
      <DriverHistoryBar selected={kind} onOpen={onSelect}/>
     </View>
    </View>
-   <DriverHistoryList key={owner+kind} kind={kind} owner={owner}/>
+   <DriverHistoryList key={owner+kind} kind={kind} owner={owner} onClose={onClose}/>
   </SafeAreaView>
  </Modal>;
 }
@@ -75,7 +76,7 @@ function pickupAddressInfo(item:DriverHistoryEntry){
  return isCoordinate(point)?{point}:null;
 }
 
-function DriverHistoryList({kind,owner}:{kind:DriverHistoryKind;owner:string}){
+function DriverHistoryList({kind,owner,onClose}:{kind:DriverHistoryKind;owner:string;onClose:()=>void}){
  const {state}=useApp();const {colors}=useTheme();const t=useText();
  const [entries,setEntries]=useState<DriverHistoryEntry[]>([]),[offset,setOffset]=useState(0),[attempt,setAttempt]=useState(0);
  const [loading,setLoading]=useState(true),[problem,setProblem]=useState(false),[more,setMore]=useState(false);
@@ -118,6 +119,7 @@ function DriverHistoryList({kind,owner}:{kind:DriverHistoryKind;owner:string}){
   {kind==='released'&&<Label muted>{t('طلبات قبلتها وأُعيدت للبحث عن سائق آخر قبل إتمام الرحلة.','Requests you accepted that returned to the search for another driver before completion.')}</Label>}
   {entries.map(item=>{
    const timestamp=item.released_at??item.updated_at;
+   const complaintRideId=item.ride_id??(typeof item.id==='string'?item.id:null);
    const date=timestamp?new Date(timestamp):null;
    const pickup=pickupAddressInfo(item);
    const coords=pickup?.point?formatCoordinate(pickup.point):null;
@@ -138,6 +140,7 @@ function DriverHistoryList({kind,owner}:{kind:DriverHistoryKind;owner:string}){
      <Label muted>{t('رقم الطلب','Request ID')} · {String(item.ride_id??item.id).slice(0,8)}</Label>
     </View>
     {kind==='cancelled'&&typeof item.id==='string'&&<CancellationReceipt rideId={item.id}/>}
+    {complaintRideId&&<ComplaintButton rideId={complaintRideId} onOpen={onClose}/>}
    </Panel>;
   })}
   {loading&&<ActivityIndicator color={colors.purple}/>}

@@ -20,9 +20,9 @@
         "Konto und Profil"
       ],
       "body": [
-        "نستخدم بريدك الإلكتروني ومعرّف حسابك لتسجيل الدخول وإدارة الحساب. إذا أنشأت الإدارة حساب سائق، تستخدم رقم موبايله السوري بدل البريد لتسجيل الدخول واستعادة الوصول عن طريق الإدارة. اسمك ورقم هاتفك في الملف الشخصي اختياريان وخاصان بحسابك. يمكنك تعديلهما أو إفراغهما في أي وقت. يستطيع السائق حفظ اسم للعرض وفئة السيارة ولونها ولوحتها. تظهر بيانات التعرّف على السيارة للسائق وللزبون المعيّن أثناء الرحلة.",
-        "We use your email and account ID to sign you in and manage your account. If admin creates a driver account, we use the driver’s Syrian mobile number for sign-in and account recovery through admin. Your optional profile name and phone number are private and can be edited or cleared. Drivers can provide a display name, vehicle class, color and plate. The driver and the assigned passenger can see vehicle identification details during the ride.",
-        "E-Mail-Adresse und Konto-ID dienen der Anmeldung und Kontoverwaltung. Bei von der Verwaltung erstellten Fahrerkonten dient die syrische Mobilnummer der Anmeldung und der Wiederherstellung des Zugangs über die Verwaltung. Dein freiwillig hinterlegter Name und deine Telefonnummer sind privat und können geändert oder geleert werden. Fahrer können Anzeigename, Fahrzeugklasse, Farbe und Kennzeichen hinterlegen. Diese Angaben sind während der Fahrt für Fahrer und zugeordnete Fahrgäste sichtbar."
+        "نستخدم بريدك الإلكتروني ومعرّف حسابك لتسجيل الدخول وإدارة الحساب. إذا أنشأت الإدارة حساب سائق، تستخدم رقم موبايله السوري بدل البريد لتسجيل الدخول واستعادة الوصول عن طريق الإدارة. اسمك ورقم هاتفك في الملف الشخصي اختياريان. بعد قبول الرحلة، يمكن للطرف الآخر فتح تطبيق الهاتف للاتصال برقمك خلال الرحلة النشطة. يمكنك تعديلهما أو إفراغهما في أي وقت. يستطيع السائق حفظ اسم للعرض وفئة السيارة ولونها ولوحتها. تظهر بيانات التعرّف على السيارة للسائق وللزبون المعيّن أثناء الرحلة.",
+        "We use your email and account ID to sign you in and manage your account. If admin creates a driver account, we use the driver’s Syrian mobile number for sign-in and account recovery through admin. Your profile name and phone number are optional and can be edited or cleared. After acceptance, the other party can open the phone app to call your number during the active ride. Drivers can provide a display name, vehicle class, color and plate. The driver and the assigned passenger can see vehicle identification details during the ride.",
+        "E-Mail-Adresse und Konto-ID dienen der Anmeldung und Kontoverwaltung. Bei von der Verwaltung erstellten Fahrerkonten dient die syrische Mobilnummer der Anmeldung und der Wiederherstellung des Zugangs über die Verwaltung. Dein freiwillig hinterlegter Name und deine Telefonnummer sind freiwillig und können geändert oder geleert werden. Nach Annahme kann die andere Person während der laufenden Fahrt die Telefon-App öffnen, um deine Nummer anzurufen. Fahrer können Anzeigename, Fahrzeugklasse, Farbe und Kennzeichen hinterlegen. Diese Angaben sind während der Fahrt für Fahrer und zugeordnete Fahrgäste sichtbar."
       ]
     },
     {
@@ -35,6 +35,18 @@
         "نستخدم عناوين الانطلاق والوصول وإحداثياتهما والأماكن المحفوظة لتجهيز الطلب وعرض المسار وتقدير الأجرة. عند إضافة ملاحظة للالتقاء، نحفظها مع الطلب وتظهر للسائق المعيّن بعد القبول. عند تفعيل إذن الموقع يمكن للتطبيق قراءة موقع الجهاز. نستخدم موقع السائق أثناء التوفّر لتوزيع الطلبات، ويستطيع طرفا الرحلة رؤية تحديثات الموقع بحسب المرحلة وإعدادات المشاركة. على أندرويد يمكن أن تستمر مشاركة الموقع أثناء رحلة نشطة عند تفعيلها، حتى عند تصغير التطبيق أو فتح الملاحة، مع إشعار يسمح بإيقافها. يمكن سحب إذن الموقع من إعدادات الجهاز.",
         "We use pickup and drop-off addresses and coordinates, and saved places, to prepare bookings, show routes and estimate fares. If you add a pickup note, we save it with the booking and show it to the assigned driver after acceptance. The app can read your device location if permission is granted. Available drivers’ locations help match rides. During a ride, the parties can see location updates based on ride stage and sharing settings. On Android, enabled sharing for an active ride may continue when the app is minimized or navigation opens, with a notification that lets you stop it. Location permission can be withdrawn in device settings.",
         "Abhol- und Zieladressen, Koordinaten und gespeicherte Orte dienen der Buchung, Routenanzeige und Preisberechnung. Einen optionalen Abholhinweis speichern wir mit der Buchung. Der zugewiesene Fahrer sieht ihn nach der Annahme. Mit Standortberechtigung kann die App den Gerätestandort lesen. Der Standort verfügbarer Fahrer hilft bei der Vermittlung. Standortupdates sind je nach Fahrtphase und Freigabe für die Beteiligten sichtbar. Auf Android kann eine aktivierte Freigabe während einer Fahrt auch bei minimierter App oder geöffneter Navigation weiterlaufen. Eine Benachrichtigung ermöglicht das Beenden. Die Berechtigung kannst du in den Geräteeinstellungen entziehen."
+      ]
+    },
+    {
+      "heading": [
+        "الشكاوى",
+        "Complaints",
+        "Beschwerden"
+      ],
+      "body": [
+        "نحفظ الشكوى مع حساب صاحبها ورقم الرحلة عند ربطها برحلة. يستطيع صاحب الشكوى والإدارة الاطلاع عليها. تستخدم الإدارة مضمونها للتحقيق ومراجعة البلاغ. تُحذف الشكاوى التي أرسلتها عند حذف حسابك.",
+        "We store your complaint with your account and, when linked, the ride ID. You and the team can view it. The team uses the content to investigate and review the report. Complaints you submitted are deleted when you delete your account.",
+        "Wir speichern Beschwerden zusammen mit deinem Konto und gegebenenfalls der Fahrt-ID. Du und das Team können sie einsehen. Das Team nutzt den Inhalt zur Prüfung der Meldung. Wenn du dein Konto löschst, werden deine eingereichten Beschwerden gelöscht."
       ]
     },
     {

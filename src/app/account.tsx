@@ -17,7 +17,7 @@ export default function Account(){
  const driverLogin=mode==='driver';
  const loginMode=mode==='login'||driverLogin;
  const driverPhoneValid=syrianMobile(driverPhone);
- const allowedNext=next==='delete-account'?'/delete-account':next==='admin'?'/admin':next==='review'?'/review':next==='destination'||next==='saved'?'/location':null;
+ const allowedNext=next==='delete-account'?'/delete-account':next==='admin'?'/admin':next==='review'?'/review':next==='complaints'?'/complaints':next==='destination'||next==='saved'?'/location':null;
  useEffect(()=>{if(auth.recovery)setNotice('')},[auth.recovery]);
  useEffect(()=>{setChangingPassword(false);setCurrentPassword('');setPassword('');setRepeat('')},[accountId]);
  async function submit(){

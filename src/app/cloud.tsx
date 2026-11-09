@@ -17,6 +17,7 @@ import RideOptions from '../ride-options';
 import {isCoordinate} from '../geo';
 import {PassengerFare,PassengerStops,RideFooter} from '../passenger-trip-summary';
 import DriverOffer from '../driver-offer';
+import {canCallRide,ComplaintButton,RideCallButton} from '../ride-contact';
 import {DriverQueueEmpty,DriverQueueHeader,DriverShift} from '../driver-dashboard';
 import {DriverHistory,DriverHistoryBar} from '../driver-history';
 import {useDriverOfferSound} from '../use-driver-offer-sound';
@@ -461,6 +462,7 @@ export default function Rides(){
    {(!live(ride)||ride.status!=='riding'&&!ride.driver_id&&ride.id!==searchingRide?.id)&&<View style={{alignSelf:'flex-start',borderRadius:20,paddingHorizontal:12,paddingVertical:4,backgroundColor:colors.selected}}><Label muted>{ride.search_expired_at?t('انتهى البحث بدون سائق','Search expired without a driver'):status(ride.status)}</Label></View>}
    {typeof ride.estimated_fare==='number'&&<PassengerFare compact={live(ride)} fare={ride.estimated_fare}/>}
    <PassengerStops compact={live(ride)} pickup={ride.pickup} destination={ride.destination} category={ride.category}/>
+   {canCallRide(ride)&&<RideCallButton key={userId+':'+ride.id+':'+ride.driver_id} rideId={ride.id} driver={false}/>}
    {live(ride)&&sharePassenger(ride)}
    {trackingBackend&&ride.status==='accepted'&&<>
     {proposal?.approved?<Label>{t('وافق السائق على نقطة الالتقاء الجديدة.','The driver approved the new meeting point.')}</Label>
@@ -469,6 +471,7 @@ export default function Rides(){
    </>}
 
    {ride.status==='cancelled'&&<CancellationReceipt key={userId+':'+ride.id} rideId={ride.id}/>}
+   <ComplaintButton rideId={ride.id}/>
    {historyMode&&<>
     <Label muted>{new Date(ride.created_at).toLocaleString(state.language)}</Label>
     <Button secondary icon="repeat-outline" title={t('استخدام الوجهة مرة أخرى','Use this destination again')} onPress={()=>reuseDestination(ride)} disabled={!!currentPassengerRide}/>
@@ -496,6 +499,7 @@ export default function Rides(){
     detail={atPickup?t('ابدأ الرحلة بعد ركوب الزبون. ستُفتح الملاحة إلى الوجهة.','Start once the customer is in the car. Navigation to the destination will open.','Starte die Fahrt, sobald der Fahrgast eingestiegen ist. Die Navigation zum Ziel wird geöffnet.'):undefined}>
     {(!split||!tracking)&&<><Label>{address}</Label>{pickupNote}</>}
    </RideStatusCard>
+   {canCallRide(ride)&&<RideCallButton key={userId+':'+ride.id+':'+ride.driver_id} rideId={ride.id} driver/>}
    {!!notice&&<View accessibilityRole="alert"><Label>{notice}</Label></View>}
    <CustomerTracking key={ride.id+':'+ride.driver_id} rideId={ride.id} pickup={pickup} proposedPickup={pickingUp&&proposal?.approved?proposal.point:undefined} foreground={foreground} compact={split} duringTrip={!tracking} taxiFix={tracking?driverMapFix:null}/>
    {split&&tracking&&<><Label muted>{address}</Label>{pickupNote}</>}
@@ -522,6 +526,7 @@ export default function Rides(){
    </HelpTip>
    <HelpTip title={t('خيارات الرحلة','Ride options')}>
     {navigationSettings}
+    <ComplaintButton rideId={ride.id}/>
     {split&&!atPickup&&fullScreen}
     {ride.status!=='riding'&&<Button secondary title={t('إعادة الطلب للبحث عن سائق','Release request to other drivers')} disabled={busy} onPress={()=>void run(async token=>{if(!await cloudReleaseRide(token,ride.id))throw Error('not_allowed')})}/>}
     <Button secondary icon="refresh-outline" title={t('تحديث حالة الرحلة','Refresh ride status')} disabled={busy} onPress={()=>void run(async()=>{})}/>

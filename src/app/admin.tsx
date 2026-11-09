@@ -7,6 +7,7 @@ import {cloudCurrentToken,cloudFareSettings,cloudUpdateFareSettings,cloudStaffDr
 import AdminRulesGuide from '../admin-rules-guide';
 import AdminDriverPhone from '../admin-driver-phone';
 import AdminDispatch from '../admin-dispatch';
+import {ComplaintList} from '../complaints';
 import ServiceUsage from '../admin-service-usage';
 import {authErrorMessage} from '../auth-errors';
 import {parseAmount,priceForRoute,type Tariff} from '../meter';
@@ -61,6 +62,7 @@ export default function Admin(){
   monitor:t('متابعة الرحلات والطلبات','Ride and dispatch monitor'),
   services:t('الخدمات وحدود الاستخدام','Services and usage'),
   guide:t('دليل الإدارة','Administration guide'),
+  complaints:t('الشكاوى','Complaints','Beschwerden'),
  };
  const activeSection=section&&sectionTitles[section]?section:'home';
  const isDriverSubpage=activeSection==='driver-create'||activeSection==='driver-email';
@@ -89,6 +91,7 @@ export default function Admin(){
    <View style={{flexDirection:state.language==='ar'?'row-reverse':'row',flexWrap:'wrap',gap:12}}>
     <AdminSectionCard icon="people-outline" title={t('السائقون','Drivers')} subtitle={t('الحسابات، إضافة سائق، الاعتماد والتعليق','Accounts, new drivers, approvals and suspension')} detail={loaded?pendingDrivers>0?t('بانتظار المراجعة: ','Pending: ')+pendingDrivers:t('جميع الطلبات مراجعة','No pending approvals'):undefined} onPress={()=>showSection('drivers')}/>
     <AdminSectionCard icon="car-sport-outline" title={t('الرحلات والطلبات','Rides and requests')} subtitle={t('متابعة الطلبات وأداء توزيع الرحلات','Track rides and dispatch performance')} onPress={()=>showSection('monitor')}/>
+    <AdminSectionCard icon="flag-outline" title={t('الشكاوى','Complaints','Beschwerden')} subtitle={t('مراجعة بلاغات الركاب والسائقين','Review passenger and driver reports','Meldungen von Fahrgästen und Fahrern prüfen')} onPress={()=>showSection('complaints')}/>
     <AdminSectionCard icon="cash-outline" title={t('التسعيرة','Pricing')} subtitle={t('فتح العداد، سعر الكيلومتر والدقيقة والذروة','Base fare, distance, time and peak rate')} onPress={()=>showSection('pricing')}/>
     <AdminSectionCard icon="server-outline" title={t('الخدمات والاستخدام','Services and usage')} subtitle={t('الخدمات وحدود الخطة ومعلومات الاستهلاك','Services, plan limits and usage information')} onPress={()=>showSection('services')}/>
     <AdminSectionCard icon="book-outline" title={t('دليل الإدارة','Admin guide')} subtitle={t('قواعد عمل التطبيق وسجل التعديلات','App rules and their revision history')} onPress={()=>showSection('guide')}/>
@@ -146,6 +149,7 @@ export default function Admin(){
     {!!updated&&<Label muted>{t('آخر تحديث: ','Last update: ')}{new Date(updated).toLocaleString(state.language)}</Label>}
    </Panel>)}
    {activeSection==='monitor'&&<AdminDispatch key={userId}/>}
+   {activeSection==='complaints'&&<ComplaintList key={userId}/>}
    {activeSection==='services'&&<ServiceUsage key={userId}/>}
    {activeSection==='guide'&&<AdminRulesGuide key={userId}/>}
   </>}

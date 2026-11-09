@@ -66,7 +66,7 @@ export default function AccountProfile({userId,identity,role}:{userId:string;ide
   </View>
   {expanded&&<Panel>
   <Label large>{t('معلوماتي الشخصية','My personal information','Meine persönlichen Daten')}</Label>
-  <Label muted>{t('يمكنك حفظ اسمك ورقم هاتفك أو إفراغهما وحفظ التغييرات. هذه الحقول اختيارية وخاصة بحسابك.','You can save, edit or clear your name and phone. These optional fields are private to your account.','Name und Telefonnummer sind freiwillig und nur für dein Konto sichtbar.')}</Label>
+  <Label muted>{t('يمكنك حفظ اسمك ورقم هاتفك أو إفراغهما وحفظ التغييرات. هذه الحقول اختيارية. رقم الهاتف يُستخدم للاتصال العادي بين طرفي الرحلة النشطة بعد قبولها.','You can save, edit or clear your name and phone. These fields are optional. Your number enables regular phone calls between the two parties after accepting an active ride.','Name und Telefonnummer sind freiwillig. Die Nummer ermöglicht normale Telefonanrufe zwischen beiden Beteiligten nach Annahme einer laufenden Fahrt.')}</Label>
   {loading?<ActivityIndicator/>:status==='load'?<>
    <Label>{t('تعذّر تحميل معلوماتك.','Could not load your details.')}</Label>
    <Button secondary title={t('إعادة المحاولة','Try again')} onPress={()=>{setStatus(null);setLoading(true);setAttempt(value=>value+1)}}/>
