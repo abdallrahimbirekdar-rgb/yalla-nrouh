@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import {driverLoginEmail,validDriverPassword} from '../src/driver-credentials.ts';
 import {syrianMobile} from '../src/syrian-phone.ts';
 import {driverPhoneAccount} from '../backend/driver-phone-account/index.ts';
 
@@ -41,25 +42,17 @@ test('non-admin cannot reach the Auth Admin API',async()=>{
  },async()=>assert.equal((await driverPhoneAccount(request(form,'regular-user'))).status,403));
  assert.equal(calls,1);
 });
-test('phone provider disabled leaves account creation untouched',async()=>{
- await withBackend(async url=>{
-  if(url.endsWith('/rpc/is_staff_admin'))return reply(true);
-  assert.match(url,/\/auth\/v1\/settings$/);return reply({external:{phone:false}});
- },async()=>{
-  const response=await driverPhoneAccount(request(form));
-  assert.equal(response.status,503);assert.deepEqual(await response.json(),{code:'phone_provider_disabled'});
- });
-});
 test('admin chooses a driver password, which is never returned to client',async()=>{
  let created;
  await withBackend(async(url,init)=>{
   if(url.endsWith('/rpc/is_staff_admin'))return reply(true);
-  if(url.endsWith('/settings'))return reply({external:{phone:true}});
   assert.match(url,/\/admin\/users$/);assert.equal(init.method,'POST');
   assert.equal(init.headers.Authorization,'Bearer server-test-key');
   created=JSON.parse(init.body);
-  assert.deepEqual(Object.keys(created).sort(),['app_metadata','password','phone','phone_confirm']);
+  assert.deepEqual(Object.keys(created).sort(),['app_metadata','email','email_confirm','password','phone','phone_confirm']);
   assert.equal(created.phone_confirm,true);
+  assert.equal(created.email,driverLoginEmail(phone));
+  assert.equal(created.email_confirm,true);
   assert.deepEqual(created.app_metadata.yalla_driver_phone,{name:'Test driver',region:1,category:'classic'});
   return reply({id:'new-user'});
  },async()=>{
@@ -75,7 +68,6 @@ test('reset updates only the driver account returned by the protected lookup',as
  const id='21000000-0000-4000-8000-000000000001';
  await withBackend(async(url,init)=>{
   if(url.endsWith('/rpc/is_staff_admin'))return reply(true);
-  if(url.endsWith('/settings'))return reply({external:{phone:true}});
   if(url.endsWith('/rpc/admin_phone_driver_id')){
    assert.deepEqual(JSON.parse(init.body),{p_phone:phone});return reply(id);
   }
@@ -86,7 +78,7 @@ test('reset updates only the driver account returned by the protected lookup',as
 });
 
 test('rejects weak or missing chosen passwords before touching Auth Admin API',async()=>{
- for(const bad of [undefined,'short1','12345678901','noNumbersHere','a'.repeat(73)]){
+ for(const bad of [undefined,'short1','a'.repeat(73),'س'.repeat(37),'password\n']){
   let adminCalls=0;
   await withBackend(async(url)=>{
    if(url.endsWith('/rpc/is_staff_admin'))return reply(true);
@@ -105,7 +97,21 @@ test('supports a safe feature check without creating an account',async()=>{
  await withBackend(async(url)=>{calls++;assert.match(url,/\/rpc\/is_staff_admin$/);return reply(true)},async()=>{
   const response=await driverPhoneAccount(request({action:'capabilities'}));
   assert.equal(response.status,200);
-  assert.deepEqual(await response.json(),{mode:'admin_selected_password_v1'});
+  assert.deepEqual(await response.json(),{mode:'admin_phone_username_v2'});
  });
  assert.equal(calls,1);
+});
+
+test('phone usernames use an internal identifier and allow admin-selected words',()=>{
+ assert.equal(driverLoginEmail(phone),'driver-963944555666@drivers.yalla-nrouh.invalid');
+ for(const value of ['mydriverword','كلمةمرورطويلة','12345678'])assert.equal(validDriverPassword(value),true);
+});
+
+test('duplicate phone or reserved identifier returns a clear error',async()=>{
+ for(const code of ['phone_exists','email_exists','user_already_exists']){
+  await withBackend(async url=>url.endsWith('/rpc/is_staff_admin')?reply(true):reply({code:422,error_code:code},422),async()=>{
+   const response=await driverPhoneAccount(request(form));
+   assert.equal(response.status,409);assert.deepEqual(await response.json(),{code:'phone_driver_exists'});
+  });
+ }
 });

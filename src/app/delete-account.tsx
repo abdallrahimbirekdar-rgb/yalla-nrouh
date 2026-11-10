@@ -14,7 +14,7 @@ export default function DeleteAccount(){
  const [notice,setNotice]=useState(''),[deleted,setDeleted]=useState(false);
  const email=auth.session?.user.email;
  const phone=auth.session?.user.phone?syrianMobile(auth.session.user.phone):null;
- const identifier=email||phone;
+ const identifier=auth.session?.user.app_metadata?.yalla_driver_phone?phone||email:email||phone;
  async function remove(){
   const userId=auth.session?.user.id;
   if(!userId||!identifier||!confirm||!password||busy)return;

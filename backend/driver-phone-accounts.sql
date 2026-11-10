@@ -2,7 +2,7 @@ begin;
 
 -- Retain old profile rows, but require a Syrian mobile number on new writes.
 alter table public.account_profiles add constraint account_profiles_syrian_mobile
- check (phone='' or phone ~ '^\+9639[0-9]{8}$') not valid;
+ check (phone='' or phone ~ '^[+]9639[0-9]{8}$') not valid;
 
 -- The Auth Admin API writes app_metadata. Public signup can only set user_metadata.
 -- Register the driver in the same transaction as the new Auth account.
@@ -15,7 +15,9 @@ declare
  area smallint := (data->>'region')::smallint;
  vehicle_class text := data->>'category';
 begin
- if new.email is not null and new.email<>'' or phone_number is null or phone_number !~ '^\+9639[0-9]{8}$'
+ if tg_op='UPDATE' and jsonb_typeof(old.raw_app_meta_data->'yalla_driver_phone')='object' then return new; end if;
+ if (coalesce(new.email,'')<>'' and new.email<>
+     'driver-'||ltrim(new.phone,'+')||'@drivers.yalla-nrouh.invalid') or phone_number is null or phone_number !~ '^[+]9639[0-9]{8}$'
   or driver_name is null or length(driver_name)>80 or area is null or area not between 0 and 13
   or vehicle_class is null or vehicle_class not in ('classic','comfort','yellow','vip','ladies-classic','ladies-comfort') then
   raise exception 'invalid_phone_driver';
@@ -27,7 +29,7 @@ begin
 end;
 $$;
 revoke all on function ride_request_private.register_admin_phone_driver() from public,anon,authenticated;
-create trigger register_admin_phone_driver after insert on auth.users
+create trigger register_admin_phone_driver after insert or update of raw_app_meta_data on auth.users
  for each row when (jsonb_typeof(new.raw_app_meta_data->'yalla_driver_phone')='object')
  execute function ride_request_private.register_admin_phone_driver();
 

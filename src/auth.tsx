@@ -3,6 +3,7 @@ import {setRideOwner} from './cloud-ride-state';
 import React,{createContext,useCallback,useContext,useEffect,useMemo,useRef,useState} from 'react';
 import {authClient} from './auth-client';
 import {syrianMobile} from './syrian-phone';
+import {driverLoginEmail} from './driver-credentials';
 import {Platform} from 'react-native';
 import {type Session} from '@supabase/supabase-js';
 import {cloudIsAdmin,cloudMyDriver,cloudSetSessionBridge,CloudError} from './cloud-api';
@@ -45,7 +46,7 @@ export function AuthProvider({children}:{children:React.ReactNode}){
    const email=identifier.trim();
    const phone=email.includes('@')?null:syrianMobile(identifier);
    if(!phone&&!email.includes('@'))throw new CloudError(400,'invalid_syrian_phone');
-   const {data,error}=await authClient().auth.signInWithPassword(phone?{phone,password}:{email,password});
+   const {data,error}=await authClient().auth.signInWithPassword({email:phone?driverLoginEmail(phone):email,password});
    if(error)throw error;accept(data.session);
   },
   signUp:async(email,password)=>{const {data,error}=await authClient().auth.signUp({email:email.trim(),password,options:{emailRedirectTo:SITE}});if(error)throw error;if(data.session)accept(data.session);return Boolean(data.session)},

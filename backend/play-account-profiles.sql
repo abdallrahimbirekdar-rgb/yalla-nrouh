@@ -3,7 +3,7 @@ begin;
 create table public.account_profiles (
  user_id uuid primary key references auth.users(id) on delete cascade default auth.uid(),
  full_name text not null default '' check (char_length(full_name)<=80),
- phone text not null default '' check (phone='' or phone ~ '^\+?[0-9]{7,15}$')
+ phone text not null default '' check (phone='' or phone ~ '^[+]?[0-9]{7,15}$')
 );
 alter table public.account_profiles enable row level security;
 revoke all on public.account_profiles from public,anon,authenticated;

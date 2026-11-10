@@ -47,7 +47,8 @@ export default function Account(){
  return <Page simpleHeader compact title={auth.recovery?t('كلمة مرور جديدة','New password'):auth.session?t('حسابي','My account'):t('تسجيل الدخول','Sign in')}>
   {!auth.ready||auth.session&&!auth.rolesReady?<ActivityIndicator/>:auth.session&&!auth.recovery?<>
    <AccountProfile key={auth.session.user.id} userId={auth.session.user.id}
-    identity={auth.session.user.email||(auth.session.user.phone?syrianMobile(auth.session.user.phone)||auth.session.user.phone:'')}
+    identity={auth.session.user.app_metadata?.yalla_driver_phone&&auth.session.user.phone
+     ?syrianMobile(auth.session.user.phone)||auth.session.user.phone:auth.session.user.email||auth.session.user.phone||''}
     role={auth.admin?t('حساب الإدارة','Administrator','Administratorkonto'):auth.driver?t('حساب سائق معتمد','Approved driver','Zugelassener Fahrer'):t('حساب الراكب','Passenger account','Fahrgastkonto')}/>
    {!auth.driver&&<Button icon="car-outline" title={t('حجز رحلة','Book a ride','Fahrt buchen')} onPress={()=>router.replace('/')}/>}
    <AccountLinks title={t('الإعدادات العامة','General','Allgemein')} items={[
@@ -66,7 +67,7 @@ export default function Account(){
     {title:t('تسجيل الخروج من هذا الجهاز','Sign out on this device','Auf diesem Gerät abmelden'),icon:'log-out-outline',onPress:signOut,disabled:busy},
     {title:t('حذف الحساب','Delete account','Konto löschen'),icon:'trash-outline',danger:true,onPress:()=>router.push('/delete-account')},
    ]}/>
-   {auth.session.user.phone&&!auth.session.user.email&&<Panel>
+   {auth.session.user.phone&&(!auth.session.user.email||auth.session.user.app_metadata?.yalla_driver_phone)&&<Panel>
     <Button secondary title={t('تغيير كلمة المرور','Change password')} onPress={()=>{setChangingPassword(!changingPassword);setCurrentPassword('');setPassword('');setRepeat('');setNotice('')}} disabled={busy}/>
     {changingPassword&&<>
      <Field label={t('كلمة المرور الحالية','Current password')} value={currentPassword} onChangeText={setCurrentPassword} secureTextEntry autoComplete="current-password"/>

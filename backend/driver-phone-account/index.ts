@@ -1,3 +1,4 @@
+import {driverLoginEmail,validDriverPassword} from '../../src/driver-credentials.ts';
 declare const Deno:{env:{get:(key:string)=>string|undefined};serve:(handler:(request:Request)=>Promise<Response>)=>void};
 const origin='https://abdallrahimbirekdar-rgb.github.io';
 const headers={
@@ -29,19 +30,16 @@ export async function driverPhoneAccount(request:Request){
   if(!staff.ok||await staff.json()!==true)return reply(403,{code:'not_admin'});
 
   const body=await request.json().catch(()=>null);
-  if(body?.action==='capabilities')return reply(200,{mode:'admin_selected_password_v1'});
+  if(body?.action==='capabilities')return reply(200,{mode:'admin_phone_username_v2'});
   if(!body||typeof body.phone!=='string'||!syrian.test(body.phone)||!['create','reset'].includes(body.action))
    return reply(400,{code:'invalid_phone_driver'});
   const phone:string=body.phone;
   const password=body.password;
-  if(typeof password!=='string'||password.length<10||password.length>72||!/[A-Za-z]/.test(password)||!/[0-9]/.test(password)||/[\x00-\x1f\x7f]/.test(password))
+  if(!validDriverPassword(password))
    return reply(400,{code:'invalid_driver_password'});
   const name=typeof body.name==='string'?body.name.trim():'';
   if(body.action==='create'&&(!name||name.length>80||!Number.isInteger(body.region)||body.region<0||body.region>13||!categories.has(body.category)))
    return reply(400,{code:'invalid_phone_driver'});
-  const settings=await requestApi('/auth/v1/settings',{headers:{apikey:publicKey}});
-  if(!settings.ok||(await settings.json()).external?.phone!==true)return reply(503,{code:'phone_provider_disabled'});
-
   let path='/auth/v1/admin/users';
   if(body.action==='reset'){
    const find=await requestApi('/rest/v1/rpc/admin_phone_driver_id',{
@@ -56,13 +54,15 @@ export async function driverPhoneAccount(request:Request){
    method:body.action==='create'?'POST':'PUT',
    headers:{apikey:secret,Authorization:'Bearer '+secret,'Content-Type':'application/json'},
    body:JSON.stringify(body.action==='create'
-    ?{phone,password,phone_confirm:true,app_metadata:{yalla_driver_phone:{name,region:body.region,category:body.category}}}
+    ?{email:driverLoginEmail(phone),email_confirm:true,phone,password,phone_confirm:true,app_metadata:{yalla_driver_phone:{name,region:body.region,category:body.category}}}
     :{password}),
   });
   if(!result.ok){
    const error=await result.json().catch(()=>null);
-   if(result.status===409||error?.error_code==='phone_exists'||error?.error_code==='user_already_exists')
+   const code=error?.error_code??error?.code;
+   if(result.status===409||['phone_exists','email_exists','user_already_exists'].includes(code))
     return reply(409,{code:'phone_driver_exists'});
+   if(code==='weak_password')return reply(400,{code:'invalid_driver_password'});
    return reply(503,{code:'phone_driver_unavailable'});
   }
   return reply(200,{phone});
