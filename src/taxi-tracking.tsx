@@ -4,6 +4,7 @@ import {rideSearchLimitMs} from './cloud-api';
 import {usePickupEta} from './use-pickup-eta';
 import {authClient} from './auth-client';
 import {useApp} from './context';
+import {PositionError} from './current-position';
 import {isCoordinate,type Coordinate} from './geo';
 import {PassengerMap} from './passenger-trip-summary';
 import {navigationPosition} from './navigation-position';
@@ -15,10 +16,17 @@ import {Label,useText,useTheme} from './ui';
 const foregroundTab=()=>Platform.OS==='web'&&document.visibilityState!=='hidden';
 const freshForMs=30000;
 
+type TaxiUploadStatus='waiting'|'permission'|'sharing';
+
 export function useShareTaxiPosition(rideId:string|undefined,foreground:boolean){
+ const [upload,setUpload]=useState<{rideId:string;status:TaxiUploadStatus}|null>(null);
  useEffect(()=>{
   if(!rideId||!foreground||Platform.OS!=='web')return;
-  let active=true,lastSent=0,running=false;
+  const id=rideId;
+  let active=true,lastSent=0,lastAttempt=0,running=false;
+  const report=(status:TaxiUploadStatus)=>{
+   if(active)setUpload(previous=>previous?.rideId===id&&previous.status===status?previous:{rideId:id,status});
+  };
   let timer:ReturnType<typeof setTimeout>;
   let request:AbortController|undefined;
   async function update(){
@@ -29,21 +37,47 @@ export function useShareTaxiPosition(rideId:string|undefined,foreground:boolean)
    try{
     if(!foregroundTab())return;
     const fix=await positionDeadline(signal=>navigationPosition(false,signal),controller,18000);
-    if(!active||!foregroundTab()||controller.signal.aborted||fix.time<=lastSent)return;
-    const {data,error}=await authClient().rpc('share_taxi_position',{
-     p_ride_id:rideId,p_latitude:fix.latitude,p_longitude:fix.longitude,p_measured_at:new Date(fix.time).toISOString(),
-    }).abortSignal(controller.signal);
-    if(!error&&data===true)lastSent=fix.time;
-   }catch{
-    // GPS and connectivity can recover while the driver remains on this ride.
+    if(!active||!foregroundTab()||controller.signal.aborted)return;
+    if(fix.time<=lastSent){
+     if(Date.now()-lastSent>=freshForMs)report('waiting');
+     return;
+    }
+    lastAttempt=Date.now();
+    const uploadTimeout=setTimeout(()=>controller.abort(),8000);
+    try{
+     const {data,error}=await authClient().rpc('share_taxi_position',{
+      p_ride_id:id,p_latitude:fix.latitude,p_longitude:fix.longitude,p_measured_at:new Date(fix.time).toISOString(),
+     }).abortSignal(controller.signal);
+     if(!error&&data===true){lastSent=fix.time;report('sharing')}
+     else if(Date.now()-lastSent>=freshForMs)report('waiting');
+    }finally{clearTimeout(uploadTimeout)}
+   }catch(error){
+    if(error instanceof PositionError&&error.code==='permission')report('permission');
+    else if(Date.now()-lastSent>=freshForMs)report('waiting');
    }finally{
     running=false;
     if(active)timer=setTimeout(()=>void update(),8000);
    }
   }
+  report('waiting');
+  const retry=()=>{
+   if(running||Date.now()-lastAttempt<8000)return;
+   clearTimeout(timer);
+   void update();
+  };
+  const resume=()=>{if(foregroundTab())retry()};
+  window.addEventListener('online',retry);
+  window.addEventListener('yalla:location-ready',retry);
+  document.addEventListener('visibilitychange',resume);
   void update();
-  return()=>{active=false;clearTimeout(timer);request?.abort()};
+  return()=>{
+   active=false;clearTimeout(timer);request?.abort();
+   window.removeEventListener('online',retry);
+   window.removeEventListener('yalla:location-ready',retry);
+   document.removeEventListener('visibilitychange',resume);
+  };
  },[rideId,foreground]);
+ return rideId&&foreground?(upload?.rideId===rideId?upload.status:'waiting'):null;
 }
 
 export function RideSearchTimer({startedAt,onExpired}:{startedAt:string;onExpired:()=>void}){

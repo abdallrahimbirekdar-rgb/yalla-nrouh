@@ -21,3 +21,12 @@ export function claimDriverSharingAttempt(storage:ConsentStorage,owner:string,ri
  // cannot silently restart sharing for this ride.
  return saveDriverSharingConsent(storage,owner,{allowed:true,attemptedRide:rideId});
 }
+
+
+export function shouldShareDriverInForeground(
+ consent:DriverSharingConsent,rideId:string,backgroundAvailable:boolean,backgroundStartFailed:boolean,
+):boolean{
+ if(!consent.allowed)return false;
+ // A recorded attempt might have ended with an explicit Android notification stop.
+ return backgroundStartFailed||(!backgroundAvailable&&consent.attemptedRide!==rideId);
+}

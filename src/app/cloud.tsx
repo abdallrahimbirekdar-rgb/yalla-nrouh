@@ -27,7 +27,7 @@ import {PassengerTaxiMap,RideSearchTimer,useShareTaxiPosition} from '../taxi-tra
 import {CustomerTracking,openOsmAnd,osmandNavigationSupported,pickupChange,stopOsmAndPassenger,useRideRow,useRideSharing} from '../ride-live-sharing';
 import {authClient} from '../auth-client';
 import {useRideRecovery} from '../use-ride-recovery';
-import {claimDriverSharingAttempt,readDriverSharingConsent,saveDriverSharingConsent} from '../driver-sharing-consent';
+import {claimDriverSharingAttempt,readDriverSharingConsent,saveDriverSharingConsent,shouldShareDriverInForeground} from '../driver-sharing-consent';
 import {createRefreshQueue} from '../refresh-queue';
 import {applyConfirmedCancellations,isUnresolvedRide} from '../ride-cancellation-state';
 import {RideStatusCard} from '../ride-status-card';
@@ -188,25 +188,36 @@ export default function Rides(){
  },[userId,foreground,mayShare,connection]);
  const driverRideId=currentDriverRide?.id;
  const {capability:sharingCapability,activeRide:sharingRide,busy:sharingBusy,start:startSharing}=sharing;
+ const [backgroundFailure,setBackgroundFailure]=useState<{owner:string;rideId:string}|null>(null);
  const automaticStart=useRef<{rideId:string;task:Promise<boolean>}|null>(null);
  const startDriverSharing=useCallback((rideId:string,manual=false)=>{
   if(!userId||typeof localStorage==='undefined'||!driverConsent||!sharingCapability||
      !trackingBackend||!foreground||connection==='offline'||sharingRide||sharingBusy)return;
   if(automaticStart.current||!claimDriverSharingAttempt(localStorage,userId,rideId)&&!manual)return;
+  setBackgroundFailure(null);
   const task=startSharing(rideId,'driver');
   automaticStart.current={rideId,task};
-  void task.finally(()=>{if(automaticStart.current?.task===task)automaticStart.current=null});
+  void task.then(started=>{
+   if(!started&&alive.current&&identity.current===userId)setBackgroundFailure({owner:userId,rideId});
+  }).finally(()=>{if(automaticStart.current?.task===task)automaticStart.current=null});
  },[userId,driverConsent,sharingCapability,trackingBackend,foreground,connection,sharingRide,sharingBusy,startSharing]);
  useEffect(()=>{
   if(driverRideId)startDriverSharing(driverRideId);
  },[driverRideId,startDriverSharing]);
- useShareTaxiPosition(driverConsent&&(sharingCapability===false||!trackingBackend)?driverRideId:undefined,foreground);
+ const backgroundStartFailed=!!backgroundFailure&&backgroundFailure.owner===userId&&backgroundFailure.rideId===driverRideId;
+ const foregroundRideId=driverRideId&&userId&&driverConsent&&!sharingRide&&
+  shouldShareDriverInForeground(readDriverSharingConsent(localStorage,userId),driverRideId,
+   sharingCapability!==false&&trackingBackend,backgroundStartFailed)
+  ?driverRideId:undefined;
+ const foregroundUpload=useShareTaxiPosition(foregroundRideId,foreground&&connection!=='offline');
 
  function setDriverSharingConsent(allowed:boolean){
   if(!userId||typeof localStorage==='undefined')return;
   const saved=saveDriverSharingConsent(localStorage,userId,{allowed});
   setConsentError(!saved);
   if(saved||!allowed)setConsentChoice({owner:userId,allowed});
+  if(allowed&&saved&&sharingCapability===false&&gps.failure==='permission')void gps.locate();
+  if(!allowed)setBackgroundFailure(null);
   if(!allowed&&sharingRide&&sharingRide===driverRideId)void sharing.stop(sharingRide);
  }
  const [compactRide,setCompactRide]=useState<string|null>(()=>{
@@ -288,7 +299,12 @@ export default function Rides(){
    disabled={sharing.busy} onPress={()=>sharing.activeRide===ride.id?void sharing.stop(ride.id):startDriverSharing(ride.id,true)}/>}
   {driverConsent&&sharing.capability&&<Label muted>{t('على أندرويد تستمر المشاركة أثناء الملاحة وتقدر توقفها من الإشعار.','On Android, sharing continues during navigation. You can stop it from the notification.')}</Label>}
   {consentError&&<Label muted>{t('تعذّر حفظ اختيارك على هذا الجهاز.','Could not save your choice on this device.')}</Label>}
-  {ride&&sharing.problem&&<Label muted>{t('تعذّرت المشاركة. تحقق من الاتصال وإذن الموقع الدقيق والإشعارات، ثم حاول مجددًا.','Could not share. Check your connection, precise location and notification permissions, then try again.')}</Label>}
+  {ride&&backgroundStartFailed&&<Label muted>{t('تعذّرت المشاركة بالخلفية. أبقِ يلّا نروح مفتوحًا لتحديث موقعك.','Background sharing could not start. Keep Yalla Nrouh open to update your location.','Die Standortfreigabe im Hintergrund konnte nicht starten. Lass Yalla Nrouh geöffnet.')}</Label>}
+  {ride&&sharing.problem&&!backgroundStartFailed&&<Label muted>{t('تعذّر تغيير حالة المشاركة. حاول مجددًا.','Could not change location sharing. Try again.','Die Standortfreigabe konnte nicht geändert werden. Versuche es erneut.')}</Label>}
+  {ride&&foregroundUpload==='waiting'&&<Label muted>{t('جارٍ انتظار موقع حديث لإرساله للزبون.','Waiting for a current location to send to the customer.','Warten auf einen aktuellen Standort für den Fahrgast.')}</Label>}
+  {ride&&foregroundUpload==='permission'&&<Button secondary icon="locate-outline"
+   title={t('السماح بالوصول إلى موقع الجهاز','Allow access to device location','Zugriff auf den Gerätestandort erlauben')}
+   disabled={gps.busy} onPress={()=>void gps.locate()}/>}
  </View>;
  const sharePassenger=(ride:CloudRide)=>sharing.capability&&trackingBackend&&<View style={{gap:6}}>
   <Label muted>{t('بموافقتك يرى السائق المعيّن موقعك أثناء الانتظار والرحلة، حتى لو كان التطبيق في الخلفية.','With your consent, the assigned driver can see your location while you wait and ride, including in the background.')}</Label>
@@ -499,6 +515,10 @@ export default function Rides(){
     detail={atPickup?t('ابدأ الرحلة بعد ركوب الزبون. ستُفتح الملاحة إلى الوجهة.','Start once the customer is in the car. Navigation to the destination will open.','Starte die Fahrt, sobald der Fahrgast eingestiegen ist. Die Navigation zum Ziel wird geöffnet.'):undefined}>
     {(!split||!tracking)&&<><Label>{address}</Label>{pickupNote}</>}
    </RideStatusCard>
+   {(!driverConsent||backgroundStartFailed||foregroundUpload==='permission')&&<Panel outlined>
+    <Label>{t('مشاركة موقعي مع الزبون','Share my location with the customer')}</Label>
+    {driverSharingControl(ride)}
+   </Panel>}
    {canCallRide(ride)&&<RideCallButton key={userId+':'+ride.id+':'+ride.driver_id} rideId={ride.id} driver/>}
    {!!notice&&<View accessibilityRole="alert"><Label>{notice}</Label></View>}
    <CustomerTracking key={ride.id+':'+ride.driver_id} rideId={ride.id} pickup={pickup} proposedPickup={pickingUp&&proposal?.approved?proposal.point:undefined} foreground={foreground} compact={split} duringTrip={!tracking} taxiFix={tracking?driverMapFix:null}/>
@@ -519,11 +539,11 @@ export default function Rides(){
     </View>}
    </View>}
    {!split&&atPickup&&navButton(true,t('عرض الرحلة بشكل مختصر','Show compact ride view'))}
-   <HelpTip title={sharing.activeRide===ride.id
+   {driverConsent&&!backgroundStartFailed&&foregroundUpload!=='permission'&&<HelpTip title={sharing.activeRide===ride.id||foregroundUpload==='sharing'
     ?t('موقعك قيد المشاركة','You are sharing your location')
     :t('مشاركة موقعي مع الزبون','Share my location with the customer')}>
     {driverSharingControl(ride)}
-   </HelpTip>
+   </HelpTip>}
    <HelpTip title={t('خيارات الرحلة','Ride options')}>
     {navigationSettings}
     <ComplaintButton rideId={ride.id}/>
